@@ -8,9 +8,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 
-@WebSocketGateway({
-  cors: { origin: '*' },
-})
+@WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -19,29 +17,32 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private readonly chatService: ChatService) {}
 
-  handleConnection(client: Socket) {
-    // Attribuer un nom aléatoire au nouvel utilisateur
+  async handleConnection(client: Socket) {
+    // Nom aléatoire et création/récupération utilisateur
     const name = this.randomNames[Math.floor(Math.random() * this.randomNames.length)];
-    this.chatService.assignUsername(client.id, name);
-    console.log(`Client connecté : ${client.id} → ${name}`);
+    const user = await this.chatService.getOrCreateUser(name);
+
+    client.data.user = user;
+
+    // Envoyer l'historique des messages avec noms
+    const messages = await this.chatService.getAllMessages();
+    client.emit('loadMessages', messages);
+
+    console.log(`Client connecté: ${client.id} -> ${user.name}`);
   }
 
   handleDisconnect(client: Socket) {
-    console.log(`Client déconnecté : ${client.id}`);
+    console.log(`Client déconnecté: ${client.id}`);
   }
 
   @SubscribeMessage('sendMessage')
-  handleMessage(client: Socket, message: string) {
-    const username = this.chatService.getUsername(client.id);
+  async handleMessage(client: Socket, message: string) {
+    const user = client.data.user;
 
-    const messageWithUsername = {
-      username,
-      message,
-    };
+    // Sauvegarder message dans la DB
+    await this.chatService.saveMessage(user, message);
 
-    console.log(`${username} dit : ${message}`);
-
-    // Envoyer le message à tous les clients
-    this.server.emit('receiveMessage', messageWithUsername);
+    // Diffuser message à tous les clients
+    this.server.emit('receiveMessage', { username: user.name, message });
   }
 }
