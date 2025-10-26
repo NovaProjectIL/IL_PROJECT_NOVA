@@ -1,0 +1,105 @@
+/* 🎨 Chat global container */
+.chat-container {
+  max-width: 600px;
+  margin: 50px auto;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  height: 80vh;
+  overflow: hidden;
+}
+
+/* 🧭 Header */
+.chat-header {
+  background-color: #0d6efd;
+  color: white;
+  padding: 15px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 💬 Message list zone */
+.chat-messages {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+  background-color: #f8f9fa;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 📦 Message bubble */
+.message {
+  padding: 10px 15px;
+  border-radius: 18px;
+  max-width: 75%;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+/* ✅ Messages envoyés (moi) */
+.message.me {
+  align-self: flex-end;
+  background-color: #0d6efd;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+/* 💬 Messages reçus (autres) */
+.message.other {
+  align-self: flex-start;
+  background-color: #e9ecef;
+  color: #212529;
+  border-bottom-left-radius: 4px;
+}
+
+/* 🕓 Nom + heure */
+.message-info {
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin-bottom: 2px;
+}
+
+/* 🧍‍♂️ Nom d’utilisateur */
+.username {
+  font-weight: 600;
+}
+
+/* 🕐 Heure du message */
+.time {
+  font-style: italic;
+  margin-left: 6px;
+}
+
+/* ✍️ Input area */
+.chat-input {
+  display: flex;
+  padding: 12px;
+  border-top: 1px solid #dee2e6;
+  background-color: white;
+}
+
+.chat-input input {
+  flex: 1;
+  border: 1px solid #ced4da;
+  border-radius: 20px;
+  padding: 10px 15px;
+  outline: none;
+  font-size: 1rem;
+  transition: 0.2s;
+}
+
+.chat-input input:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+.chat-input button {
+  margin-left: 10px;
+  border-radius: 20px;
+  padding: 0 20px;
+}
