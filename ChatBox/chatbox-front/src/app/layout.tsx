@@ -1,12 +1,9 @@
-// src/app/layout.tsx
-import 'bootstrap/dist/css/bootstrap.min.css';
-import './globals.css';
-import type { Metadata } from 'next';
-import { ReactNode } from 'react';
+import "../styles/globals.css";
+import type { ReactNode } from "react";
 
-export const metadata: Metadata = {
-  title: 'ChatBox Frontend',
-  description: 'Projet de chat en temps réel avec Next.js et Bootstrap',
+export const metadata = {
+  title: "Chat Frontend",
+  description: "Chat app powered by NestJS + Next.js",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
