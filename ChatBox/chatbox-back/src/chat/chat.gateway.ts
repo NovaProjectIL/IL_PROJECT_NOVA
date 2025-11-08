@@ -18,13 +18,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(private readonly chatService: ChatService) {}
 
   async handleConnection(client: Socket) {
-    // Nom aléatoire et création/récupération utilisateur
     const name = this.randomNames[Math.floor(Math.random() * this.randomNames.length)];
     const user = await this.chatService.getOrCreateUser(name);
 
     client.data.user = user;
 
-    // Envoyer l'historique des messages avec noms
     const messages = await this.chatService.getAllMessages();
     client.emit('loadMessages', messages);
 
@@ -35,14 +33,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(`Client déconnecté: ${client.id}`);
   }
 
+  // ✅ Gère maintenant texte + GIF
   @SubscribeMessage('sendMessage')
-  async handleMessage(client: Socket, message: string) {
+  async handleMessage(client: Socket, payload: { message?: string; gifUrl?: string }) {
     const user = client.data.user;
 
-    // Sauvegarder message dans la DB
-    await this.chatService.saveMessage(user, message);
+    // Sauvegarder message (texte ou gif)
+    await this.chatService.saveMessage(user, payload.message, payload.gifUrl);
 
-    // Diffuser message à tous les clients
-    this.server.emit('receiveMessage', { username: user.name, message });
+    // Diffuser à tous les clients
+    this.server.emit('receiveMessage', {
+      username: user.name,
+      message: payload.message,
+      gifUrl: payload.gifUrl,
+    });
   }
 }

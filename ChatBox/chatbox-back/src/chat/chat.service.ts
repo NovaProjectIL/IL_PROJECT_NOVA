@@ -11,7 +11,6 @@ export class ChatService {
     @InjectRepository(Message) private messageRepo: Repository<Message>,
   ) {}
 
-  // Créer ou récupérer un utilisateur par nom
   async getOrCreateUser(name: string): Promise<User> {
     let user = await this.userRepo.findOne({ where: { name } });
     if (!user) {
@@ -21,15 +20,18 @@ export class ChatService {
     return user;
   }
 
-  // Sauvegarder un message
-  async saveMessage(user: User, content: string): Promise<Message> {
-    const message = this.messageRepo.create({ user, content });
+  // ✅ On accepte maintenant message texte OU gifUrl
+  async saveMessage(user: User, content?: string, gifUrl?: string): Promise<Message> {
+    const message = this.messageRepo.create({ user, content, gifUrl });
     return this.messageRepo.save(message);
   }
 
-  // Récupérer tous les messages avec le nom du sender
-  async getAllMessages(): Promise<{ username: string; message: string }[]> {
+  async getAllMessages(): Promise<{ username: string; message?: string; gifUrl?: string }[]> {
     const messages = await this.messageRepo.find({ relations: ['user'], order: { createdAt: 'ASC' } });
-    return messages.map(m => ({ username: m.user.name, message: m.content }));
+    return messages.map(m => ({
+      username: m.user.name,
+      message: m.content,
+      gifUrl: m.gifUrl,
+    }));
   }
 }

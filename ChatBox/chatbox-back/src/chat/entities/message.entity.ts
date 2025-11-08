@@ -6,10 +6,13 @@ export class Message {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ nullable: true })
   content: string;
 
-  @ManyToOne(() => User, user => user.messages)
+  @Column({ nullable: true })
+  gifUrl: string; // 👉 champ optionnel pour stocker un GIF (ex: lien Giphy)
+
+  @ManyToOne(() => User, user => user.messages, { eager: true })
   user: User;
 
   @CreateDateColumn()

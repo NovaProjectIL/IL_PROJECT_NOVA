@@ -9,12 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
+    "@heroicons/react": "^2.2.0",
     "@popperjs/core": "^2.11.8",
-    "axios": "^1.12.2",
+    "axios": "^1.13.2",
     "bootstrap": "^5.3.8",
     "next": "16.0.0",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
