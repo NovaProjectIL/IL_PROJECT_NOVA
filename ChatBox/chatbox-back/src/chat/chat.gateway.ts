@@ -10,19 +10,26 @@ import { ChatService } from './chat.service';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer()
-  server: Server;
-
-  private randomNames = ['Wafa', 'Ali', 'Bob', 'Sara', 'Lina', 'Tom'];
+  @WebSocketServer() server: Server;
 
   constructor(private readonly chatService: ChatService) {}
 
+  // --- Connexion d’un client ---
   async handleConnection(client: Socket) {
-    const name = this.randomNames[Math.floor(Math.random() * this.randomNames.length)];
-    const user = await this.chatService.getOrCreateUser(name);
+    const users = await this.chatService.getAllUsers();
+    let user;
+
+    if (users.length > 0) {
+      // 👇 chaque client a maintenant un user unique pour éviter la confusion
+      const userName = `Utilisateur${users.length + 1}`;
+      user = await this.chatService.getOrCreateUser(userName);
+    } else {
+      user = await this.chatService.getOrCreateUser('Utilisateur1');
+    }
 
     client.data.user = user;
 
+    // Envoi de tout l’historique au nouveau client
     const messages = await this.chatService.getAllMessages();
     client.emit('loadMessages', messages);
 
@@ -33,24 +40,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(`Client déconnecté: ${client.id}`);
   }
 
-  // ✅ Gère maintenant texte + GIF
+  // --- Envoi d’un message ---
   @SubscribeMessage('sendMessage')
-  async handleMessage(client: Socket, payload: { message?: string; gifUrl?: string }) {
+  async handleMessage(
+    client: Socket,
+    payload: { message?: string; gifUrl?: string },
+  ) {
     const user = client.data.user;
+    if (!user) return;
 
+    // Sauvegarde en BDD
+    const savedMessage = await this.chatService.saveMessage(
+      user,
+      payload.message,
+      payload.gifUrl,
+    );
 
-    // Sauvegarder message (texte ou gif)
-    await this.chatService.saveMessage(user, payload.message, payload.gifUrl);
-
-    // Diffuser à tous les clients
+    // Diffusion à tous les clients connectés
     this.server.emit('receiveMessage', {
       username: user.name,
-      message: payload.message,
-      gifUrl: payload.gifUrl,
+      message: savedMessage.content,
+      gifUrl: savedMessage.gifUrl,
+      createdAt: savedMessage.createdAt,
     });
-    await this.chatService.saveMessage(user, message);
-
-    this.server.emit('receiveMessage', { username: user.name, message });
-
   }
 }

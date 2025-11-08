@@ -49,7 +49,17 @@
     <button onclick="sendGif()">Envoyer GIF</button>
 
     <script>
-      const socket = io("http://localhost:3000");
+      // 🔹 Connexion au bon port
+      const socket = io("http://localhost:3001");
+
+      // 🔹 Vérifier la connexion
+      socket.on("connect", () => {
+        console.log("Connecté au serveur Socket.IO :", socket.id);
+      });
+
+      socket.on("connect_error", (err) => {
+        console.error("Erreur de connexion :", err);
+      });
 
       // 🔹 Envoi d’un message texte
       function sendMessage() {
@@ -69,11 +79,13 @@
 
       // 🔹 Réception d’un message (texte ou GIF)
       socket.on("receiveMessage", (data) => {
+        console.log("Message reçu :", data);
         displayMessage(data);
       });
 
       // 🔹 Chargement de l’historique
       socket.on("loadMessages", (messages) => {
+        console.log("Historique reçu :", messages);
         const ul = document.getElementById("messages");
         ul.innerHTML = "";
         messages.forEach(displayMessage);
@@ -98,7 +110,9 @@
           li.appendChild(gif);
         }
 
-        document.getElementById("messages").appendChild(li);
+        const ul = document.getElementById("messages");
+        ul.appendChild(li);
+        ul.scrollTop = ul.scrollHeight; // 🔹 scroll automatique vers le dernier message
       }
     </script>
   </body>

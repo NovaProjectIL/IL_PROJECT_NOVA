@@ -20,18 +20,38 @@ export class ChatService {
     return user;
   }
 
-  // ✅ On accepte maintenant message texte OU gifUrl
-  async saveMessage(user: User, content?: string, gifUrl?: string): Promise<Message> {
-    const message = this.messageRepo.create({ user, content, gifUrl });
+  async getAllUsers(): Promise<User[]> {
+    return this.userRepo.find();
+  }
+
+  // Création d'un message en instanciant la classe directement (évite les problèmes de typing)
+  async saveMessage(
+    user: User,
+    content?: string,
+    gifUrl?: string,
+  ): Promise<Message> {
+    const message = new Message();            // <-- instanciation explicite
+    message.user = user;
+    message.content = content ?? null;
+    message.gifUrl = gifUrl ?? null;
+    // createdAt sera géré par @CreateDateColumn
     return this.messageRepo.save(message);
   }
 
-  async getAllMessages(): Promise<{ username: string; message?: string; gifUrl?: string }[]> {
-    const messages = await this.messageRepo.find({ relations: ['user'], order: { createdAt: 'ASC' } });
-    return messages.map(m => ({
-      username: m.user.name,
-      message: m.content,
-      gifUrl: m.gifUrl,
+  // Retourne l'historique formaté (username + message + gifUrl + createdAt)
+  async getAllMessages(): Promise<
+    { username: string; message?: string; gifUrl?: string; createdAt: Date }[]
+  > {
+    const messages = await this.messageRepo.find({
+      relations: ['user'],
+      order: { createdAt: 'ASC' },
+    });
+
+    return messages.map((m) => ({
+      username: m.user?.name ?? 'Inconnu',
+      message: m.content ?? undefined,
+      gifUrl: m.gifUrl ?? undefined,
+      createdAt: m.createdAt,
     }));
   }
 }
