@@ -1,3 +1,4 @@
+// Ton fichier Chat.tsx, modifié
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -5,7 +6,12 @@ import { io, Socket } from "socket.io-client";
 
 type Message = { username: string; message: string };
 
-export default function Chat() {
+// On définit les Props que ce composant reçoit
+type ChatProps = {
+  onClose: () => void; // Une fonction pour fermer la fenêtre
+};
+
+export default function Chat({ onClose }: ChatProps) { // On récupère "onClose" ici
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const socketRef = useRef<Socket | null>(null);
@@ -29,17 +35,25 @@ export default function Chat() {
       scrollToBottom();
     });
 
+    // On s'assure de scroller aussi quand le composant s'ouvre
+    scrollToBottom();
+
     return () => {
       s.disconnect();
     };
   }, []);
 
+  // Ton code pour scroller (inchangé)
   const scrollToBottom = () => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
+    // Petit délai pour laisser le DOM se mettre à jour
+    setTimeout(() => {
+      if (listRef.current) {
+        listRef.current.scrollTop = listRef.current.scrollHeight;
+      }
+    }, 50);
   };
 
+  // Ton code pour envoyer (inchangé)
   const sendMessage = () => {
     if (!text.trim()) return;
     socketRef.current?.emit("sendMessage", text.trim());
@@ -47,13 +61,25 @@ export default function Chat() {
   };
 
   return (
-    <div className="chat">
+    // "chat-container-inner" permet au chat de prendre 100%
+    // de la fenêtre "chat-window-container"
+    <div className="chat-container-inner">
+      
+      {/* === DÉBUT DES AJOUTS === */}
+      <div className="chat-header">
+        <h3>Support en ligne</h3>
+        <button onClick={onClose} className="chat-close-btn">
+          &times; {/* Une simple croix pour fermer */}
+        </button>
+      </div>
+      {/* === FIN DES AJOUTS === */}
+
       <div className="messages" ref={listRef}>
         {messages.length === 0 ? (
-          <div>Aucun message</div>
+          <div className="no-messages">Aucun message</div>
         ) : (
           messages.map((m, i) => (
-            <div key={i}>
+            <div key={i} className="message-item">
               <b>{m.username}: </b>
               {m.message}
             </div>
@@ -61,13 +87,16 @@ export default function Chat() {
         )}
       </div>
 
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-        placeholder="Écris ton message..."
-      />
-      <button onClick={sendMessage}>Envoyer</button>
+      {/* On groupe l'input et le bouton pour le style */}
+      <div className="chat-input-area">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          placeholder="Écris ton message..."
+        />
+        <button onClick={sendMessage}>Envoyer</button>
+      </div>
     </div>
   );
 }
