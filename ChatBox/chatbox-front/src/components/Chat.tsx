@@ -17,14 +17,12 @@ export default function Chat() {
 
     s.on("connect", () => console.log("[Socket] connected:", s.id));
 
-    // Charger les messages existants
     s.on("loadMessages", (msgs: Message[]) => {
       console.log("[Socket] loadMessages:", msgs);
       setMessages(msgs);
       scrollToBottom();
     });
 
-    // Quand un nouveau message est reçu
     s.on("receiveMessage", (msg: Message) => {
       console.log("[Socket] receiveMessage:", msg);
       setMessages((prev) => [...prev, msg]);
