@@ -38,6 +38,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleMessage(client: Socket, payload: { message?: string; gifUrl?: string }) {
     const user = client.data.user;
 
+
     // Sauvegarder message (texte ou gif)
     await this.chatService.saveMessage(user, payload.message, payload.gifUrl);
 
@@ -47,5 +48,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       message: payload.message,
       gifUrl: payload.gifUrl,
     });
+    await this.chatService.saveMessage(user, message);
+
+    this.server.emit('receiveMessage', { username: user.name, message });
+
   }
 }
