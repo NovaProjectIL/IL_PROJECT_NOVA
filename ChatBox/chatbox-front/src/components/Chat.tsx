@@ -1,17 +1,22 @@
-// Ton fichier Chat.tsx, modifié
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
-type Message = { username: string; message: string };
+// 1. MISE À JOUR DU TYPE MESSAGE
+// Le backend envoie maintenant plus d'infos
+type Message = {
+  username: string;
+  message: string | null; // Le message peut être null si c'est un GIF
+  gifUrl: string | null;  // Le GIF peut être null si c'est un message
+  createdAt: string;    // Pratique pour une clé unique
+};
 
-// On définit les Props que ce composant reçoit
 type ChatProps = {
   onClose: () => void; // Une fonction pour fermer la fenêtre
 };
 
-export default function Chat({ onClose }: ChatProps) { // On récupère "onClose" ici
+export default function Chat({ onClose }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const socketRef = useRef<Socket | null>(null);
@@ -23,6 +28,7 @@ export default function Chat({ onClose }: ChatProps) { // On récupère "onClose
 
     s.on("connect", () => console.log("[Socket] connected:", s.id));
 
+    // Ces écouteurs sont maintenant compatibles avec le nouveau type Message
     s.on("loadMessages", (msgs: Message[]) => {
       console.log("[Socket] loadMessages:", msgs);
       setMessages(msgs);
@@ -35,7 +41,6 @@ export default function Chat({ onClose }: ChatProps) { // On récupère "onClose
       scrollToBottom();
     });
 
-    // On s'assure de scroller aussi quand le composant s'ouvre
     scrollToBottom();
 
     return () => {
@@ -43,9 +48,7 @@ export default function Chat({ onClose }: ChatProps) { // On récupère "onClose
     };
   }, []);
 
-  // Ton code pour scroller (inchangé)
   const scrollToBottom = () => {
-    // Petit délai pour laisser le DOM se mettre à jour
     setTimeout(() => {
       if (listRef.current) {
         listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -53,41 +56,58 @@ export default function Chat({ onClose }: ChatProps) { // On récupère "onClose
     }, 50);
   };
 
-  // Ton code pour envoyer (inchangé)
+  // 2. MISE À JOUR DE SENDMESSAGE
   const sendMessage = () => {
-    if (!text.trim()) return;
-    socketRef.current?.emit("sendMessage", text.trim());
+    const messageContent = text.trim();
+    if (!messageContent) return; // Ne rien envoyer si c'est vide
+
+    // Le backend attend un objet { message?: string, gifUrl?: string }
+    // On envoie donc un objet avec la clé "message"
+    socketRef.current?.emit("sendMessage", { message: messageContent });
+    
     setText("");
   };
 
   return (
-    // "chat-container-inner" permet au chat de prendre 100%
-    // de la fenêtre "chat-window-container"
     <div className="chat-container-inner">
-      
-      {/* === DÉBUT DES AJOUTS === */}
       <div className="chat-header">
         <h3>Support en ligne</h3>
         <button onClick={onClose} className="chat-close-btn">
-          &times; {/* Une simple croix pour fermer */}
+          &times;
         </button>
       </div>
-      {/* === FIN DES AJOUTS === */}
 
       <div className="messages" ref={listRef}>
         {messages.length === 0 ? (
           <div className="no-messages">Aucun message</div>
         ) : (
+          // 3. MISE À JOUR DE L'AFFICHAGE
+          // On gère le texte ET les GIFs
           messages.map((m, i) => (
-            <div key={i} className="message-item">
+            <div key={`${m.createdAt}-${i}`} className="message-item">
               <b>{m.username}: </b>
-              {m.message}
+              
+              {/* Afficher le texte s'il existe */}
+              {m.message && <div>{m.message}</div>}
+              
+              {/* Afficher le GIF s'il existe */}
+              {m.gifUrl && (
+                <img
+                  src={m.gifUrl}
+                  alt="gif"
+                  style={{
+                    maxWidth: '250px', // Limiter la taille du GIF
+                    borderRadius: '8px',
+                    // Ajouter un espace si y'a aussi du texte
+                    marginTop: m.message ? '8px' : '0',
+                  }}
+                />
+              )}
             </div>
           ))
         )}
       </div>
 
-      {/* On groupe l'input et le bouton pour le style */}
       <div className="chat-input-area">
         <input
           value={text}
