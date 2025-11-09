@@ -1,15 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react"; // Retrait de useContext
+import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
-// --- RETRAIT DES IMPORTS (pour corriger les erreurs) ---
-// import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
-// import { GiphyFetch } from "@giphy/js-fetch-api";
-// ... (et tous les imports de @giphy/react-components)
-// --- FIN DU RETRAIT ---
-
-// Le type Message est correct
+// ... (tous vos imports et types restent les mêmes) ...
 type Message = {
   username: string;
   message: string | null;
@@ -19,46 +13,42 @@ type Message = {
 
 type ChatProps = {
   onClose: () => void;
+  pseudo: string; // Le pseudo choisi dans le Widget
 };
 
-// --- RÉINTRODUCTION DE LA BASE DE DONNÉES LOCALE D'EMOJIS ---
+// ... (toutes vos constantes d'emoji et GIPHY restent les mêmes) ...
 const emojiCategories = {
+// ... (contenu des emojis inchangé) ...
   "Smileys & Émotions": [ '😊', '😂', '❤️', '👍', '🙏', '😢', '🎉', '🤔', '🔥', '👏', '😮', '😍', '😄', '😁', '😆', '😅', '🤣', '😇', '😉', '😌', '😘', '🥰', '😗', '😙', '😚', '😋', '😛', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '😣', '😖', '😫', '😩', '🥺', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠' ],
   "Objets & Nourriture": [ '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍈', '🍒', '🍑', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🦴', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🧆', '🌮', '🌯', '🥗', '🥘', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '☕️', '🍵', '🧃', '🥤', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊', '🥄', '🍴', '🍽', '🥣', '🥡', '🥢', '🧂' ],
   "Animaux": [ '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦', '🐤', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🐛' ],
 };
-// -----------------------------------------------------------------
-
-// --- CONFIGURATION GIPHY (avec votre clé) ---
 const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1"; 
-// -------------------------
-
-// --- NOUVEAU : Type pour les résultats de GIPHY ---
 type GiphyGif = {
   id: string;
   title: string;
   images: {
-    fixed_width: { // On utilise une taille fixe pour la grille
-      url: string;
-    }
+    fixed_width: { url: string; }
   }
 };
 // ------------------------------------------------
 
-export default function Chat({ onClose }: ChatProps) {
+export default function Chat({ onClose, pseudo }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
-  
-  // --- MODIFIÉ : États pour le GIPHY fetch ---
   const [gifSearch, setGifSearch] = useState("");
   const [gifResults, setGifResults] = useState<GiphyGif[]>([]);
   const [isGiphyLoading, setIsGiphyLoading] = useState(false);
-  // ----------------------------------------
-  
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [showExtraButtons, setShowExtraButtons] = useState(false);
+
+  // --- NOUVEAU : États pour l'indicateur de frappe ---
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingSentRef = useRef(false); // Pour éviter d'envoyer 'typing' à chaque frappe
+  // -------------------------------------------------
 
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -67,12 +57,19 @@ export default function Chat({ onClose }: ChatProps) {
     const s = io("http://localhost:3001", { transports: ["websocket"] });
     socketRef.current = s;
     
-    s.on("connect", () => console.log("[Socket] connected:", s.id));
+    s.on("connect", () => {
+      console.log("[Socket] connected:", s.id);
+      s.emit("setUser", { username: pseudo });
+    });
 
-    // Écoute l'événement 'identity' du backend (pour les bulles bleues/grises)
-    s.on('identity', (name: string) => {
+    const handleIdentity = (name: string) => {
       console.log(`[Socket] Mon nom est: ${name}`);
       setCurrentUsername(name);
+    };
+    
+    s.on('identity', handleIdentity);
+    s.on('userSet', (data: { username: string }) => {
+      handleIdentity(data.username);
     });
 
     s.on("loadMessages", (msgs: Message[]) => {
@@ -81,64 +78,58 @@ export default function Chat({ onClose }: ChatProps) {
     });
     s.on("receiveMessage", (msg: Message) => {
       setMessages((prev) => [...prev, msg]);
+      // --- AJOUT : Si un message arrive, la personne ne tape plus ---
+      setTypingUsers(prev => prev.filter(name => name !== msg.username));
+      // ---------------------------------------------------------
       scrollToBottom();
     });
+
+    // --- NOUVEAU : Listener pour 'userTyping' ---
+    s.on('userTyping', (data: { username: string, isTyping: boolean }) => {
+      if (data.isTyping) {
+        // Ajoute l'utilisateur à la liste (sans doublons)
+        setTypingUsers(prev => [...new Set([...prev, data.username])]);
+      } else {
+        // Retire l'utilisateur de la liste
+        setTypingUsers(prev => prev.filter(name => name !== data.username));
+      }
+    });
+    // -----------------------------------------
+
     scrollToBottom();
     return () => {
+      // --- AJOUT : Nettoyage du listener ---
+      s.off('userTyping');
+      // -----------------------------------
       s.disconnect();
     };
-  }, []);
+  }, [pseudo]); 
 
-  // --- NOUVEAU : Hook pour fetch les GIFs (Trending) ---
+  // ... (les useEffect pour GIPHY restent inchangés) ...
   useEffect(() => {
-    // S'active seulement si le picker est ouvert ET qu'il n'y a pas de recherche
     if (showGifPicker && gifSearch.trim() === '' && gifResults.length === 0) {
       setIsGiphyLoading(true);
       fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${giphyApiKey}&limit=30&rating=g`)
         .then(res => res.json())
-        .then(data => {
-          setGifResults(data.data);
-          setIsGiphyLoading(false);
-        })
-        .catch(err => {
-          console.error("Erreur fetch GIPHY (Trending):", err);
-          setIsGiphyLoading(false);
-        });
+        .then(data => { setGifResults(data.data); setIsGiphyLoading(false); })
+        .catch(err => { console.error("Erreur fetch GIPHY (Trending):", err); setIsGiphyLoading(false); });
     }
-  }, [showGifPicker, gifSearch]); // Déclenché à l'ouverture du picker
-
-  // --- NOUVEAU : Hook pour fetch les GIFs (Recherche) ---
+  }, [showGifPicker, gifSearch]);
   useEffect(() => {
-    // Ne pas chercher si le champ est vide
     if (gifSearch.trim() === '') {
-      // Si on efface la recherche, on pourrait re-afficher les trending
-      setGifResults([]); // Ou `fetchTrending()`
+      setGifResults([]);
       return;
     }
-
-    // "Debounce" : attend 500ms après la fin de la frappe
     const handler = setTimeout(() => {
       setIsGiphyLoading(true);
       const url = `https://api.giphy.com/v1/gifs/search?api_key=${giphyApiKey}&q=${encodeURIComponent(gifSearch)}&limit=30&rating=g`;
-      
       fetch(url)
         .then(res => res.json())
-        .then(data => {
-          setGifResults(data.data);
-          setIsGiphyLoading(false);
-        })
-        .catch(err => {
-          console.error("Erreur fetch GIPHY (Search):", err);
-          setIsGiphyLoading(false);
-        });
-    }, 500); // Délai de 500ms
-
-    // Nettoyage du timer si l'utilisateur re-tape
+        .then(data => { setGifResults(data.data); setIsGiphyLoading(false); })
+        .catch(err => { console.error("Erreur fetch GIPHY (Search):", err); setIsGiphyLoading(false); });
+    }, 500); 
     return () => clearTimeout(handler);
-    
-  }, [gifSearch]); // Déclenché à chaque frappe dans le champ de recherche
-  
-  // ----------------------------------------------------
+  }, [gifSearch]);
   
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -148,7 +139,7 @@ export default function Chat({ onClose }: ChatProps) {
     }, 50);
   };
 
-  // Fonction d'envoi de TEXTE
+  // --- MODIFIÉ : 'sendMessage' envoie 'typing(false)' ---
   const sendMessage = () => {
     const messageContent = text.trim();
     if (!messageContent) {
@@ -156,12 +147,20 @@ export default function Chat({ onClose }: ChatProps) {
       return;
     }
     socketRef.current?.emit("sendMessage", { message: messageContent });
+    
+    // --- AJOUT : Arrêter l'indicateur de frappe ---
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (typingSentRef.current) {
+      socketRef.current?.emit('typing', false);
+      typingSentRef.current = false;
+    }
+    // ------------------------------------------
+
     setText("");
     setShowEmojiPicker(false);
     setShowGifPicker(false); 
   };
   
-  // Fonction d'envoi de GIF
   const sendGif = (gifUrl: string) => {
     socketRef.current?.emit("sendMessage", { gifUrl: gifUrl });
     setShowEmojiPicker(false);
@@ -169,18 +168,40 @@ export default function Chat({ onClose }: ChatProps) {
     setShowExtraButtons(false); 
   };
 
-  // --- MODIFIÉ : Fonction pour le clic Emoji (version locale) ---
   const onEmojiClick = (emoji: string) => {
     setText((prevText) => prevText + emoji);
   };
   
-  // --- RETRAIT : Composant interne GiphyGrid ---
-  // (n'est plus nécessaire, on fait le map directement)
+  // --- NOUVEAU : Logique de "debouncing" pour la frappe ---
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newText = e.target.value;
+    setText(newText);
+    
+    // 1. Envoyer "typing: true" si ce n'est pas déjà fait
+    if (socketRef.current && !typingSentRef.current) {
+      socketRef.current.emit('typing', true);
+      typingSentRef.current = true;
+    }
+    
+    // 2. Nettoyer l'ancien timer "stop typing"
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // 3. Créer un nouveau timer pour envoyer "typing: false" après 2s d'inactivité
+    typingTimeoutRef.current = setTimeout(() => {
+      if (socketRef.current) {
+        socketRef.current.emit('typing', false);
+        typingSentRef.current = false; // Prêt à renvoyer "true" à la prochaine frappe
+      }
+    }, 2000); // 2 secondes
+  };
+  // ----------------------------------------------------
 
   return (
     <div className="chat-container-inner">
       <div className="chat-header">
-        <h3>Support en ligne</h3>
+        <h3>Connecté: <b>{currentUsername || '...'}</b></h3>
         <button onClick={onClose} className="chat-close-btn">
           &times;
         </button>
@@ -212,9 +233,22 @@ export default function Chat({ onClose }: ChatProps) {
       </div>
       {/* --- FIN ZONE DES MESSAGES --- */}
 
-      {/* --- MODIFIÉ : ZONE DES PICKERS (avec listes locales) --- */}
+      {/* --- NOUVEAU : Indicateur de Frappe --- */}
+      <div className="typing-indicator-container">
+        {typingUsers.length > 0 && (
+          <div className="typing-indicator">
+            {/* Limite à 2 noms pour ne pas surcharger */}
+            {typingUsers.slice(0, 2).join(', ')} 
+            {typingUsers.length > 2 ? ' et d\'autres...' : ''}
+            {typingUsers.length === 1 ? ' est' : ' sont'} en train d'écrire
+            <span className="dot-flashing"></span>
+          </div>
+        )}
+      </div>
+      {/* ----------------------------------------------- */}
+
+      {/* Zone des pickers (inchangée) */}
       <div className="picker-container">
-        {/* Sélecteur d'Emojis (version locale) */}
         {showEmojiPicker && (
           <div className="emoji-picker-scroll">
             {Object.entries(emojiCategories).map(([category, emojis]) => (
@@ -235,8 +269,6 @@ export default function Chat({ onClose }: ChatProps) {
             ))}
           </div>
         )}
-
-        {/* Sélecteur de GIFs (version fetch API) */}
         {showGifPicker && (
           <div className="gif-picker">
             <input
@@ -266,9 +298,8 @@ export default function Chat({ onClose }: ChatProps) {
           </div>
         )}
       </div>
-      {/* --- FIN ZONE PICKERS --- */}
 
-      {/* Zone de saisie (inchangée) */}
+      {/* --- MODIFIÉ : Zone de saisie --- */}
       <div className="chat-input-area">
         {showExtraButtons && (
           <div className="chat-extra-buttons">
@@ -311,7 +342,9 @@ export default function Chat({ onClose }: ChatProps) {
 
         <input
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          // --- MODIFICATION : 'onChange' appelle 'handleTyping' ---
+          onChange={handleTyping}
+          // ----------------------------------------------------
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
           placeholder="Écris ton message..."
           onFocus={() => {
@@ -321,7 +354,6 @@ export default function Chat({ onClose }: ChatProps) {
           }}
         />
         
-        {/* Le bouton Envoyer (avion) est TOUJOURS visible */}
         <button 
           onClick={sendMessage} 
           className="chat-send-btn" 
