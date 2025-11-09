@@ -14,20 +14,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private readonly chatService: ChatService) {}
 
-  // --- Connexion d’un client (Reste la version initiale) ---
+  // --- Connexion d’un client (Garantit qu'un utilisateur existe toujours) ---
   async handleConnection(client: Socket) {
     const users = await this.chatService.getAllUsers();
     let user;
 
     if (users.length > 0) {
-      // 🟢 CONSERVÉ : Attribution d'un user unique pour que le chat marche tout de suite
       const userName = `Utilisateur${users.length + 1}`;
       user = await this.chatService.getOrCreateUser(userName);
     } else {
       user = await this.chatService.getOrCreateUser('Utilisateur1');
     }
 
-    client.data.user = user; // ⬅️ Ceci garantit que 'sendMessage' ne plante pas
+    client.data.user = user;
 
     // Envoi de tout l’historique au nouveau client
     const messages = await this.chatService.getAllMessages();
@@ -37,14 +36,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(client: Socket) {
-    // Utilise le pseudo attribué ou choisi pour le log
     const userName = client.data.user ? ` -> ${client.data.user.name}` : '';
     console.log(`Client déconnecté: ${client.id}${userName}`);
+    
+    // 💡 Signal d'arrêt de frappe si l'utilisateur quitte
+    if (client.data.user) {
+        this.server.emit('userTyping', { 
+            username: client.data.user.name, 
+            isTyping: false 
+        });
+    }
   }
 
-  // ------------------------------------------------------------------
   // --- NOUVEAU : Permet de définir/changer le Pseudo (Temporaire) ---
-  // ------------------------------------------------------------------
   @SubscribeMessage('setUser')
   async handleSetUser(client: Socket, payload: { username: string }) {
       if (!payload.username || typeof payload.username !== 'string') {
@@ -52,29 +56,46 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           return;
       }
       
-      // 1. Cherche ou crée l'utilisateur en BDD avec le nouveau nom
       const userName = payload.username.trim().substring(0, 50) || 'Anonymous';
       const user = await this.chatService.getOrCreateUser(userName);
       
-      // 2. ÉCRASE l'utilisateur temporaire existant avec le nouveau (ESSENTIEL)
       client.data.user = user;
       
-      // 3. Confirmation et log
       console.log(`Pseudo mis à jour pour ${client.id}: ${user.name}`);
       client.emit('userSet', { username: user.name });
       
-      // 4. Informe les autres (optionnel)
-      this.server.emit('userJoined', { username: user.name });
+      // La diffusion 'userJoined' est laissée en commentaire si vous décidez de l'utiliser plus tard
+      // this.server.emit('userJoined', { username: user.name }); 
+  }
+  
+  // --- NOUVEAU : Indicateur de frappe (Typing Indicator) ---
+  @SubscribeMessage('typing')
+  handleTyping(client: Socket, isTyping: boolean) {
+    const user = client.data.user;
+    if (!user) return;
+
+    // Diffuse le statut de frappe à tous les AUTRES clients
+    // (client.broadcast.emit garantit que l'émetteur ne reçoit pas son propre signal)
+    client.broadcast.emit('userTyping', { 
+      username: user.name, 
+      isTyping: isTyping 
+    });
   }
 
-  // --- Envoi d’un message (Reste la version initiale) ---
+  // --- Envoi d’un message ---
   @SubscribeMessage('sendMessage')
   async handleMessage(
     client: Socket,
     payload: { message?: string; gifUrl?: string },
   ) {
     const user = client.data.user;
-    if (!user) return; // 🟢 CONSERVÉ : Ne retourne rien, mais ne plantera pas grâce à handleConnection
+    if (!user) return;
+
+    // 💡 AJOUT : Envoyer un signal d'arrêt de frappe à tout le monde
+    client.broadcast.emit('userTyping', { 
+      username: user.name, 
+      isTyping: false 
+    });
 
     // Sauvegarde en BDD
     const savedMessage = await this.chatService.saveMessage(
@@ -85,7 +106,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // Diffusion à tous les clients connectés
     this.server.emit('receiveMessage', {
-      username: user.name, // ⬅️ RÉCUPÈRE LE NOM DU user DANS client.data.user (qui a été mis à jour par handleSetUser)
+      username: user.name, 
       message: savedMessage.content,
       gifUrl: savedMessage.gifUrl,
       createdAt: savedMessage.createdAt,
