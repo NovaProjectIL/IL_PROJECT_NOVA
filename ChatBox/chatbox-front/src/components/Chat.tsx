@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react"; // Retrait de useContext
 import { io, Socket } from "socket.io-client";
 
-// Le type Message est correct pour le backend
+// --- RETRAIT DES IMPORTS (pour corriger les erreurs) ---
+// import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
+// import { GiphyFetch } from "@giphy/js-fetch-api";
+// ... (et tous les imports de @giphy/react-components)
+// --- FIN DU RETRAIT ---
+
+// Le type Message est correct
 type Message = {
   username: string;
   message: string | null;
@@ -15,7 +21,7 @@ type ChatProps = {
   onClose: () => void;
 };
 
-// --- BASE DE DONNÉES LOCALE D'EMOJIS (Version complète) ---
+// --- RÉINTRODUCTION DE LA BASE DE DONNÉES LOCALE D'EMOJIS ---
 const emojiCategories = {
   "Smileys & Émotions": [ '😊', '😂', '❤️', '👍', '🙏', '😢', '🎉', '🤔', '🔥', '👏', '😮', '😍', '😄', '😁', '😆', '😅', '🤣', '😇', '😉', '😌', '😘', '🥰', '😗', '😙', '😚', '😋', '😛', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '😣', '😖', '😫', '😩', '🥺', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠' ],
   "Objets & Nourriture": [ '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍈', '🍒', '🍑', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🦴', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🧆', '🌮', '🌯', '🥗', '🥘', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '☕️', '🍵', '🧃', '🥤', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊', '🥄', '🍴', '🍽', '🥣', '🥡', '🥢', '🧂' ],
@@ -23,28 +29,36 @@ const emojiCategories = {
 };
 // -----------------------------------------------------------------
 
-// --- BASE DE DONNÉES LOCALE DE GIFs (avec recherche) ---
-const preselectedGifs = [
-  { name: 'OK', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Y1bW10d2tqYjBpd3E2bDRqcG04Mmt0dG0yM2lqZzNqdTJ6MmVhZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/10kAB0nIqV1sMU/giphy.gif' },
-  { name: 'Merci Thank You', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcmVlYzhka3VkcDR0bmdqOHRtcjN4cHlxNmY5a2U1OW1kMmVvYmNnYSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3oEdva9BUHPIs2SkGk/giphy.gif' },
-  { name: 'LOL Haha', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHQzbWFzMGR4bWZxOWw0aWNmYmI0bWw2eHFzY2Q0bXV1cGJ2eWJpcyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l36kU80xPf0ojG0Erg/giphy.gif' },
-  { name: 'Oui Yes', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExenFkMXhpY3I0NWNpZ21lbnV4enN0N2ppc3M2bGlkNW9xNWx4N2llaiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7abGQa0aRBUHgqDC/giphy.gif' },
-  { name: 'Clap Applaudir', url: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZDZvMDcycTYyNmJkcnRjeDFoOWM1am02bWgzbTNxZWNuMHY2NnZ6eCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/nbvFVPiEiJH68/giphy.gif' },
-];
-// -----------------------------------------------------------------
+// --- CONFIGURATION GIPHY (avec votre clé) ---
+const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1"; 
+// -------------------------
 
+// --- NOUVEAU : Type pour les résultats de GIPHY ---
+type GiphyGif = {
+  id: string;
+  title: string;
+  images: {
+    fixed_width: { // On utilise une taille fixe pour la grille
+      url: string;
+    }
+  }
+};
+// ------------------------------------------------
 
 export default function Chat({ onClose }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
-  const [gifSearch, setGifSearch] = useState("");
   
-  // --- NOUVEAU : État pour le nom d'utilisateur et le panneau d'options ---
+  // --- MODIFIÉ : États pour le GIPHY fetch ---
+  const [gifSearch, setGifSearch] = useState("");
+  const [gifResults, setGifResults] = useState<GiphyGif[]>([]);
+  const [isGiphyLoading, setIsGiphyLoading] = useState(false);
+  // ----------------------------------------
+  
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [showExtraButtons, setShowExtraButtons] = useState(false);
-  // --------------------------------------------------
 
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -55,20 +69,17 @@ export default function Chat({ onClose }: ChatProps) {
     
     s.on("connect", () => console.log("[Socket] connected:", s.id));
 
-    // --- CORRECTION : Écouter l'événement 'identity' du backend ---
+    // Écoute l'événement 'identity' du backend (pour les bulles bleues/grises)
     s.on('identity', (name: string) => {
       console.log(`[Socket] Mon nom est: ${name}`);
       setCurrentUsername(name);
     });
-    // ------------------------------------------------------
 
     s.on("loadMessages", (msgs: Message[]) => {
-      console.log("[Socket] loadMessages:", msgs);
       setMessages(msgs);
       scrollToBottom();
     });
     s.on("receiveMessage", (msg: Message) => {
-      console.log("[Socket] receiveMessage:", msg);
       setMessages((prev) => [...prev, msg]);
       scrollToBottom();
     });
@@ -78,6 +89,57 @@ export default function Chat({ onClose }: ChatProps) {
     };
   }, []);
 
+  // --- NOUVEAU : Hook pour fetch les GIFs (Trending) ---
+  useEffect(() => {
+    // S'active seulement si le picker est ouvert ET qu'il n'y a pas de recherche
+    if (showGifPicker && gifSearch.trim() === '' && gifResults.length === 0) {
+      setIsGiphyLoading(true);
+      fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${giphyApiKey}&limit=30&rating=g`)
+        .then(res => res.json())
+        .then(data => {
+          setGifResults(data.data);
+          setIsGiphyLoading(false);
+        })
+        .catch(err => {
+          console.error("Erreur fetch GIPHY (Trending):", err);
+          setIsGiphyLoading(false);
+        });
+    }
+  }, [showGifPicker, gifSearch]); // Déclenché à l'ouverture du picker
+
+  // --- NOUVEAU : Hook pour fetch les GIFs (Recherche) ---
+  useEffect(() => {
+    // Ne pas chercher si le champ est vide
+    if (gifSearch.trim() === '') {
+      // Si on efface la recherche, on pourrait re-afficher les trending
+      setGifResults([]); // Ou `fetchTrending()`
+      return;
+    }
+
+    // "Debounce" : attend 500ms après la fin de la frappe
+    const handler = setTimeout(() => {
+      setIsGiphyLoading(true);
+      const url = `https://api.giphy.com/v1/gifs/search?api_key=${giphyApiKey}&q=${encodeURIComponent(gifSearch)}&limit=30&rating=g`;
+      
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          setGifResults(data.data);
+          setIsGiphyLoading(false);
+        })
+        .catch(err => {
+          console.error("Erreur fetch GIPHY (Search):", err);
+          setIsGiphyLoading(false);
+        });
+    }, 500); // Délai de 500ms
+
+    // Nettoyage du timer si l'utilisateur re-tape
+    return () => clearTimeout(handler);
+    
+  }, [gifSearch]); // Déclenché à chaque frappe dans le champ de recherche
+  
+  // ----------------------------------------------------
+  
   const scrollToBottom = () => {
     setTimeout(() => {
       if (listRef.current) {
@@ -104,20 +166,16 @@ export default function Chat({ onClose }: ChatProps) {
     socketRef.current?.emit("sendMessage", { gifUrl: gifUrl });
     setShowEmojiPicker(false);
     setShowGifPicker(false);
-    setShowExtraButtons(false); // Ferme aussi le panneau d'options
+    setShowExtraButtons(false); 
   };
-  // ------------------------------------
 
-  // Fonction pour ajouter un emoji au texte
+  // --- MODIFIÉ : Fonction pour le clic Emoji (version locale) ---
   const onEmojiClick = (emoji: string) => {
     setText((prevText) => prevText + emoji);
   };
   
-  // Logique de filtrage des GIFs
-  const filteredGifs = preselectedGifs.filter(gif => 
-    gif.name.toLowerCase().includes(gifSearch.toLowerCase())
-  );
-  // ----------------------------------------
+  // --- RETRAIT : Composant interne GiphyGrid ---
+  // (n'est plus nécessaire, on fait le map directement)
 
   return (
     <div className="chat-container-inner">
@@ -128,31 +186,23 @@ export default function Chat({ onClose }: ChatProps) {
         </button>
       </div>
 
-      {/* --- ZONE DES MESSAGES (Avec logique .me / .other) --- */}
+      {/* Zone des messages (inchangée) */}
       <div className="messages" ref={listRef}>
         {messages.length === 0 ? (
           <div className="no-messages">Aucun message</div>
         ) : (
           messages.map((m, i) => {
-            // CORRECTION : On vérifie si le message vient de "moi"
             const isMe = currentUsername && m.username === currentUsername;
-            
             return (
               <div 
-                key={`${m.createdAt}-${i}`} // Clé unique
+                key={`${m.createdAt}-${i}`} 
                 className={`message-item ${isMe ? 'me' : 'other'}`}
               >
-                {/* On n'affiche le nom que si ce n'est pas "moi" */}
                 {!isMe && <b className="message-username">{m.username}</b>}
-                
                 <div className="message-bubble">
                   {m.message && <div>{m.message}</div>}
                   {m.gifUrl && (
-                    <img
-                      src={m.gifUrl}
-                      alt="gif"
-                      className="chat-gif"
-                    />
+                    <img src={m.gifUrl} alt="gif" className="chat-gif" />
                   )}
                 </div>
               </div>
@@ -162,9 +212,9 @@ export default function Chat({ onClose }: ChatProps) {
       </div>
       {/* --- FIN ZONE DES MESSAGES --- */}
 
-      {/* --- ZONE DES PICKERS (Emojis + GIFs) --- */}
+      {/* --- MODIFIÉ : ZONE DES PICKERS (avec listes locales) --- */}
       <div className="picker-container">
-        {/* Sélecteur d'Emojis (version complète) */}
+        {/* Sélecteur d'Emojis (version locale) */}
         {showEmojiPicker && (
           <div className="emoji-picker-scroll">
             {Object.entries(emojiCategories).map(([category, emojis]) => (
@@ -186,31 +236,31 @@ export default function Chat({ onClose }: ChatProps) {
           </div>
         )}
 
-        {/* Sélecteur de GIFs (avec recherche) */}
+        {/* Sélecteur de GIFs (version fetch API) */}
         {showGifPicker && (
           <div className="gif-picker">
             <input
               type="text"
               className="gif-search-bar"
-              placeholder="Rechercher parmi les GIFs populaires..."
+              placeholder="Rechercher sur GIPHY..."
               value={gifSearch}
               onChange={(e) => setGifSearch(e.target.value)}
             />
             <div className="gif-grid-scroll">
+              {isGiphyLoading && <div className="no-messages">Chargement...</div>}
+              {!isGiphyLoading && gifResults.length === 0 && (
+                <div className="no-messages">Aucun GIF trouvé.</div>
+              )}
               <div className="gif-grid">
-                {filteredGifs.length > 0 ? (
-                  filteredGifs.map((gif) => (
-                    <button
-                      key={gif.url}
-                      className="gif-item"
-                      onClick={() => sendGif(gif.url)}
-                    >
-                      <img src={gif.url} alt={gif.name} />
-                    </button>
-                  ))
-                ) : (
-                  <div className="no-messages">Aucun GIF trouvé.</div>
-                )}
+                {!isGiphyLoading && gifResults.map((gif) => (
+                  <button
+                    key={gif.id}
+                    className="gif-item"
+                    onClick={() => sendGif(gif.images.fixed_width.url)}
+                  >
+                    <img src={gif.images.fixed_width.url} alt={gif.title} />
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -218,10 +268,8 @@ export default function Chat({ onClose }: ChatProps) {
       </div>
       {/* --- FIN ZONE PICKERS --- */}
 
-      {/* --- NOUVELLE ZONE DE SAISIE (Moderne) --- */}
+      {/* Zone de saisie (inchangée) */}
       <div className="chat-input-area">
-        
-        {/* Panneau d'options qui s'ouvre avec le [+] */}
         {showExtraButtons && (
           <div className="chat-extra-buttons">
             <button
@@ -249,7 +297,6 @@ export default function Chat({ onClose }: ChatProps) {
           </div>
         )}
 
-        {/* Bouton [+] pour ouvrir les options */}
         <button
           className="chat-icon-btn chat-plus-btn"
           onClick={() => {
@@ -267,7 +314,6 @@ export default function Chat({ onClose }: ChatProps) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
           placeholder="Écris ton message..."
-          // Ferme les pickers quand on clique sur l'input
           onFocus={() => {
             setShowEmojiPicker(false);
             setShowGifPicker(false);
@@ -275,17 +321,15 @@ export default function Chat({ onClose }: ChatProps) {
           }}
         />
         
-        {/* Le bouton Envoyer n'apparaît que si on a écrit du texte */}
-        {text.trim().length > 0 ? (
-          <button onClick={sendMessage} className="chat-send-btn" title="Envoyer">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          </button>
-        ) : (
-          // Bouton "Pouce" par défaut (ou un autre)
-          <button onClick={() => onEmojiClick('👍')} className="chat-icon-btn chat-like-btn" title="Envoyer un 'J'aime'">
-            👍
-          </button>
-        )}
+        {/* Le bouton Envoyer (avion) est TOUJOURS visible */}
+        <button 
+          onClick={sendMessage} 
+          className="chat-send-btn" 
+          title="Envoyer"
+          disabled={text.trim().length === 0}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
       </div>
     </div>
   );

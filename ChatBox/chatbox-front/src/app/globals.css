@@ -115,12 +115,10 @@ html, body, #__next {
   margin-bottom: 8px;
 }
 
-/* Alignement pour "moi" */
 .message-item.me {
   align-items: flex-end;
 }
 
-/* Alignement pour "les autres" */
 .message-item.other {
   align-items: flex-start;
 }
@@ -159,22 +157,20 @@ html, body, #__next {
   margin-top: 20px;
 }
 
-/* --- STYLES POUR EMOJI/GIF (ajoutés) --- */
+/* --- STYLES POUR EMOJI/GIF (Bibliothèques) --- */
 
 .chat-gif {
   max-width: 250px; 
   border-radius: 8px;
-  /* Un GIF peut être le seul contenu de la bulle, pas de marge */
 }
 
 .picker-container {
   position: absolute;
-  /* Positionné au-dessus de la barre de saisie */
-  bottom: 60px; /* Hauteur de la barre de saisie */
+  bottom: 60px; 
   left: 10px;
   right: 10px;
   z-index: 10;
-  border-radius: 12px; /* Plus moderne */
+  border-radius: 12px; 
   overflow: hidden;
   box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
   background: #fff;
@@ -184,44 +180,24 @@ html, body, #__next {
   border: 1px solid #eee;
 }
 
-.emoji-picker-scroll {
-  padding: 10px;
-  overflow-y: auto;
-}
-.emoji-category {
-  margin-bottom: 10px;
-}
-.emoji-category h4 {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: #555;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 4px;
-}
-.emoji-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.emoji-grid button {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 5px;
-  border-radius: 8px;
-  line-height: 1;
-}
-.emoji-grid button:hover {
-  background-color: #f0f0f0;
+/* --- Styles pour Sélecteur EMOJI (Bibliothèque) --- */
+/* La bibliothèque s'adapte, mais on enlève les bordures inutiles */
+.picker-container .EmojiPickerReact {
+  width: 100% !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
+/* --- Styles pour Sélecteur GIF (Bibliothèque) --- */
 .gif-picker {
   display: flex;
   flex-direction: column;
-  height: 350px; /* Hauteur fixe pour le picker GIF */
+  height: 350px; /* Hauteur fixe */
+  background: #fff;
 }
-.gif-search-bar {
+
+/* Cible la barre de recherche de la bibliothèque GIPHY */
+.gif-picker .giphy-search-bar {
   width: calc(100% - 20px);
   margin: 10px;
   padding: 10px;
@@ -230,32 +206,15 @@ html, body, #__next {
   font-size: 14px;
   box-sizing: border-box;
 }
+
+/* Conteneur pour la grille GIPHY */
 .gif-grid-scroll {
   flex-grow: 1;
   overflow-y: auto;
   padding: 0 10px 10px 10px;
 }
-.gif-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-.gif-item {
-  border: none;
-  padding: 0;
-  border-radius: 4px;
-  overflow: hidden;
-  cursor: pointer;
-}
-.gif-item img {
-  width: 100%;
-  height: 100px;
-  object-fit: cover;
-  display: block;
-}
-.gif-item:hover {
-  opacity: 0.8;
-}
+/* --- FIN STYLES PICKER --- */
+
 
 /* === NOUVELLE ZONE DE SAISIE (Moderne) === */
 .chat-input-area {
@@ -270,7 +229,6 @@ html, body, #__next {
   position: relative; /* Pour le panneau d'options */
 }
 
-/* Panneau d'options qui s'ouvre */
 .chat-extra-buttons {
   position: absolute;
   bottom: 55px; /* Juste au-dessus du bouton [+] */
@@ -284,11 +242,10 @@ html, body, #__next {
   border: 1px solid #eee;
 }
 
-/* Boutons icônes génériques */
 .chat-icon-btn {
   background: none;
   border: none;
-  font-size: 24px; /* Augmenté pour une meilleure cible tactile */
+  font-size: 24px; 
   cursor: pointer;
   padding: 6px;
   border-radius: 50%;
@@ -303,21 +260,12 @@ html, body, #__next {
   background-color: #e0e0e0;
 }
 
-/* Bouton [+] spécifique */
 .chat-plus-btn {
   font-size: 28px;
   font-weight: 300;
   color: var(--chat-blue);
 }
 
-/* Bouton "Like" spécifique */
-.chat-like-btn {
-  font-size: 24px;
-  padding: 6px;
-  color: var(--chat-blue);
-}
-
-/* Champ de texte */
 .chat-input-area input {
   flex-grow: 1;
   border: 1px solid #ccc;
@@ -333,23 +281,31 @@ html, body, #__next {
   border-color: var(--chat-blue);
 }
 
-/* Bouton Envoyer (icône SVG) */
 .chat-send-btn {
-  padding: 6px; /* Adapté à la taille de l'icône */
+  padding: 6px;
   border-radius: 50%;
   background: var(--chat-blue);
   color: white;
   border: none;
   cursor: pointer;
   font-weight: bold;
-  transition: background-color 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: background-color 0.2s, opacity 0.2s;
 }
 .chat-send-btn:hover {
   background: #0056b3;
+}
+
+.chat-send-btn:disabled {
+  background-color: #b0c4de;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.chat-send-btn:hover:disabled {
+  background-color: #b0c4de;
 }
 
 
@@ -368,3 +324,4 @@ html, body, #__next {
     right: 10px;
   }
 }
+
