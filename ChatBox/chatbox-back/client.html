@@ -23,10 +23,10 @@
         margin: 5px;
         padding: 6px 8px;
         border-radius: 5px;
-        word-wrap: break-word; /* Pour les longs messages/URLs */
+        word-wrap: break-word;
       }
       .system-msg {
-        background: #ffe0b2; /* Couleur pour les messages système */
+        background: #ffe0b2;
         font-style: italic;
       }
       .user-msg {
@@ -47,7 +47,14 @@
         background: #fff;
       }
       #chat-interface {
-        display: none; /* Cache l'interface du chat tant que le pseudo n'est pas défini */
+        display: none;
+      }
+      /* Style pour l'indicateur de frappe */
+      #typing-indicator {
+        font-size: 0.9em;
+        margin-bottom: 5px;
+        color: gray;
+        height: 20px;
       }
     </style>
   </head>
@@ -64,7 +71,14 @@
     <div id="chat-interface">
       <ul id="messages"></ul>
       
-      <input id="msg" placeholder="Écris ton message..." />
+      <div id="typing-indicator"></div>
+      
+      <input 
+        id="msg" 
+        placeholder="Écris ton message..." 
+        onkeydown="handleTyping(true)" 
+        onkeyup="handleTyping(false)"
+      />
       <button onclick="sendMessage()">Envoyer</button>
 
       <br /><br />
@@ -74,17 +88,84 @@
     </div>
 
     <script>
-      // 🔹 Connexion au bon port
       const socket = io("http://localhost:3001");
       const chatInterface = document.getElementById("chat-interface");
       const userForm = document.getElementById("user-form");
       const statusSpan = document.getElementById("status");
+      // 💡 Variables pour l'indicateur de frappe
+      const typingIndicator = document.getElementById("typing-indicator");
+      const typingUsers = new Set();
+      let typingTimeout;
+      let isTyping = false;
+
+      // ------------------------------------------------------------------
+      // --- NOUVEAU : Logique de l'indicateur de frappe ---
+      // ------------------------------------------------------------------
+      
+      function handleTyping(typing) {
+          const messageInput = document.getElementById("msg");
+          const content = messageInput.value; // Ne pas utiliser .trim() ici pour détecter l'espace
+          
+          // Logique de Démarrage
+          if (content.length > 0 && !isTyping) {
+              // Envoie le signal true
+              socket.emit('typing', true);
+              isTyping = true;
+          }
+          
+          // Logique d'Arrêt : uniquement si la barre de saisie est vide
+          if (content.length === 0 && isTyping) {
+              clearTimeout(typingTimeout);
+              socket.emit('typing', false);
+              isTyping = false;
+          }
+          
+          // Le timer est conservé, mais il ne sert plus à envoyer 'false'
+          // Il sert à réinitialiser le statut si l'utilisateur met une pause
+          clearTimeout(typingTimeout);
+          if (isTyping) {
+              typingTimeout = setTimeout(() => {
+                  // Si le temps expire mais qu'il y a encore du texte, on ne fait rien
+                  // Si le temps expire et qu'il n'y a plus de texte, le bloc précédent l'a déjà géré.
+              }, 5000); 
+          }
+      }
+
+      socket.on("userTyping", (data) => {
+          if (data.isTyping) {
+              typingUsers.add(data.username);
+          } else {
+              typingUsers.delete(data.username);
+          }
+          
+          updateTypingIndicator();
+      });
+      
+      function updateTypingIndicator() {
+          const usersArray = Array.from(typingUsers);
+          
+          if (usersArray.length === 0) {
+              typingIndicator.textContent = '';
+          } else if (usersArray.length === 1) {
+              typingIndicator.textContent = `${usersArray[0]} est en train d'écrire...`;
+          } else if (usersArray.length === 2) {
+              typingIndicator.textContent = `${usersArray.join(' et ')} sont en train d'écrire...`;
+          } else {
+              typingIndicator.textContent = 'Plusieurs personnes sont en train d\'écrire...';
+          }
+          
+          const ul = document.getElementById("messages");
+          ul.scrollTop = ul.scrollHeight;
+      }
+      
+      // ------------------------------------------------------------------
+      // --- Fonctions existantes (MODIFIÉES pour stopper l'indicateur) ---
+      // ------------------------------------------------------------------
 
       // 🔹 Fonction pour définir le pseudo
       function setUsername() {
         const username = document.getElementById("username-input").value.trim();
         if (username) {
-          // Envoie l'événement au backend
           socket.emit("setUser", { username });
           statusSpan.textContent = "Envoi du pseudo...";
           statusSpan.style.color = 'orange';
@@ -95,27 +176,20 @@
       socket.on("userSet", (data) => {
         statusSpan.textContent = `Bienvenue, ${data.username}!`;
         statusSpan.style.color = 'green';
-        userForm.style.display = 'none'; // Cache le formulaire
-        chatInterface.style.display = 'block'; // Affiche l'interface de chat
+        userForm.style.display = 'none';
+        chatInterface.style.display = 'block';
       });
       
-      // 🔹 Notification d'erreur du backend (ex: pseudo invalide)
+      // 🔹 Notification d'erreur du backend
       socket.on("error", (msg) => {
           console.error('Erreur du serveur:', msg);
           statusSpan.textContent = `Erreur: ${msg}`;
           statusSpan.style.color = 'red';
       });
-      
-      // 🔹 Notification d'un nouvel utilisateur qui a rejoint
-      socket.on("userJoined", (data) => {
-          displaySystemMessage(`📢 ${data.username} a rejoint le chat.`);
-      });
-
 
       // 🔹 Vérifier la connexion
       socket.on("connect", () => {
         console.log("Connecté au serveur Socket.IO :", socket.id);
-        // Au début, on s'assure que seul le formulaire de pseudo est visible
         userForm.style.display = 'block';
         chatInterface.style.display = 'none';
         statusSpan.textContent = "Connecté au serveur.";
@@ -128,18 +202,34 @@
         statusSpan.style.color = 'red';
       });
 
-      // 🔹 Envoi d’un message texte
+      // 🔹 Envoi d’un message texte (MODIFIÉ)
       function sendMessage() {
         const message = document.getElementById("msg").value.trim();
         if (!message) return;
+        
+        // 💡 Assure l'arrêt de l'indicateur local et envoie le signal d'arrêt
+        clearTimeout(typingTimeout);
+        if (isTyping) {
+            socket.emit('typing', false);
+            isTyping = false;
+        }
+        
         socket.emit("sendMessage", { message });
         document.getElementById("msg").value = "";
       }
 
-      // 🔹 Envoi d’un GIF
+      // 🔹 Envoi d’un GIF (MODIFIÉ)
       function sendGif() {
         const gifUrl = document.getElementById("gifUrl").value.trim();
         if (!gifUrl) return;
+
+        // 💡 Assure l'arrêt de l'indicateur local et envoie le signal d'arrêt
+        clearTimeout(typingTimeout);
+        if (isTyping) {
+            socket.emit('typing', false);
+            isTyping = false;
+        }
+
         socket.emit("sendMessage", { gifUrl });
         document.getElementById("gifUrl").value = "";
       }
@@ -188,10 +278,10 @@
 
         const ul = document.getElementById("messages");
         ul.appendChild(li);
-        ul.scrollTop = ul.scrollHeight; // 🔹 scroll automatique vers le dernier message
+        ul.scrollTop = ul.scrollHeight;
       }
       
-      // 🔹 Fonction d’affichage des messages système/notifications
+      // 🔹 Fonction d’affichage des messages système/notifications (Non utilisée pour 'userJoined')
       function displaySystemMessage(text) {
           const li = document.createElement("li");
           li.classList.add('system-msg');
