@@ -22,8 +22,15 @@
       #messages li {
         margin: 5px;
         padding: 6px 8px;
-        background: #eef;
         border-radius: 5px;
+        word-wrap: break-word; /* Pour les longs messages/URLs */
+      }
+      .system-msg {
+        background: #ffe0b2; /* Couleur pour les messages système */
+        font-style: italic;
+      }
+      .user-msg {
+        background: #eef;
       }
       input {
         padding: 5px;
@@ -33,32 +40,92 @@
         padding: 5px 10px;
         margin-left: 5px;
       }
+      #user-form {
+        margin-bottom: 20px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        background: #fff;
+      }
+      #chat-interface {
+        display: none; /* Cache l'interface du chat tant que le pseudo n'est pas défini */
+      }
     </style>
   </head>
   <body>
     <h1>💬 Chat Temps Réel</h1>
 
-    <ul id="messages"></ul>
+    <div id="user-form">
+      <label for="username-input">Entre ton pseudo :</label>
+      <input id="username-input" placeholder="Ex: JeanDu75" />
+      <button onclick="setUsername()">Définir Pseudo</button>
+      <span id="status"></span>
+    </div>
 
-    <input id="msg" placeholder="Écris ton message..." />
-    <button onclick="sendMessage()">Envoyer</button>
+    <div id="chat-interface">
+      <ul id="messages"></ul>
+      
+      <input id="msg" placeholder="Écris ton message..." />
+      <button onclick="sendMessage()">Envoyer</button>
 
-    <br /><br />
+      <br /><br />
 
-    <input id="gifUrl" placeholder="Colle un lien GIF (optionnel)" />
-    <button onclick="sendGif()">Envoyer GIF</button>
+      <input id="gifUrl" placeholder="Colle un lien GIF (optionnel)" />
+      <button onclick="sendGif()">Envoyer GIF</button>
+    </div>
 
     <script>
       // 🔹 Connexion au bon port
       const socket = io("http://localhost:3001");
+      const chatInterface = document.getElementById("chat-interface");
+      const userForm = document.getElementById("user-form");
+      const statusSpan = document.getElementById("status");
+
+      // 🔹 Fonction pour définir le pseudo
+      function setUsername() {
+        const username = document.getElementById("username-input").value.trim();
+        if (username) {
+          // Envoie l'événement au backend
+          socket.emit("setUser", { username });
+          statusSpan.textContent = "Envoi du pseudo...";
+          statusSpan.style.color = 'orange';
+        }
+      }
+
+      // 🔹 Réponse du serveur après la définition du pseudo
+      socket.on("userSet", (data) => {
+        statusSpan.textContent = `Bienvenue, ${data.username}!`;
+        statusSpan.style.color = 'green';
+        userForm.style.display = 'none'; // Cache le formulaire
+        chatInterface.style.display = 'block'; // Affiche l'interface de chat
+      });
+      
+      // 🔹 Notification d'erreur du backend (ex: pseudo invalide)
+      socket.on("error", (msg) => {
+          console.error('Erreur du serveur:', msg);
+          statusSpan.textContent = `Erreur: ${msg}`;
+          statusSpan.style.color = 'red';
+      });
+      
+      // 🔹 Notification d'un nouvel utilisateur qui a rejoint
+      socket.on("userJoined", (data) => {
+          displaySystemMessage(`📢 ${data.username} a rejoint le chat.`);
+      });
+
 
       // 🔹 Vérifier la connexion
       socket.on("connect", () => {
         console.log("Connecté au serveur Socket.IO :", socket.id);
+        // Au début, on s'assure que seul le formulaire de pseudo est visible
+        userForm.style.display = 'block';
+        chatInterface.style.display = 'none';
+        statusSpan.textContent = "Connecté au serveur.";
+        statusSpan.style.color = 'blue';
       });
 
       socket.on("connect_error", (err) => {
         console.error("Erreur de connexion :", err);
+        statusSpan.textContent = "Erreur de connexion au serveur.";
+        statusSpan.style.color = 'red';
       });
 
       // 🔹 Envoi d’un message texte
@@ -91,13 +158,18 @@
         messages.forEach(displayMessage);
       });
 
-      // 🔹 Fonction d’affichage (texte + GIF)
+      // 🔹 Fonction d’affichage d'un message utilisateur (texte + GIF)
       function displayMessage(data) {
         const li = document.createElement("li");
+        li.classList.add('user-msg');
+        
+        let content = `<strong>${data.username} :</strong> `;
 
         if (data.message) {
-          li.textContent = `${data.username} : ${data.message}`;
+          content += data.message;
         }
+
+        li.innerHTML = content;
 
         if (data.gifUrl) {
           const gif = document.createElement("img");
@@ -106,13 +178,28 @@
           gif.style.maxWidth = "150px";
           gif.style.display = "block";
           gif.style.marginTop = "5px";
-          li.innerHTML = `<strong>${data.username} :</strong>`;
+          
+          if (!data.message) {
+             li.innerHTML = `<strong>${data.username} :</strong>`;
+          }
+          
           li.appendChild(gif);
         }
 
         const ul = document.getElementById("messages");
         ul.appendChild(li);
         ul.scrollTop = ul.scrollHeight; // 🔹 scroll automatique vers le dernier message
+      }
+      
+      // 🔹 Fonction d’affichage des messages système/notifications
+      function displaySystemMessage(text) {
+          const li = document.createElement("li");
+          li.classList.add('system-msg');
+          li.textContent = text;
+          
+          const ul = document.getElementById("messages");
+          ul.appendChild(li);
+          ul.scrollTop = ul.scrollHeight;
       }
     </script>
   </body>
