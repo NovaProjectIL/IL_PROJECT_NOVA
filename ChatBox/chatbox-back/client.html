@@ -7,290 +7,434 @@
     <style>
       body {
         font-family: Arial, sans-serif;
-        background: #f9f9f9;
-        margin: 20px;
+        background: #f0f2f5;
+        margin: 0;
+        padding: 20px;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        overflow: hidden;
+      }
+      .header {
+        background: #2c5aa0;
+        color: white;
+        padding: 15px 20px;
+        text-align: center;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 1.5em;
+      }
+      .user-info {
+        background: #e3f2fd;
+        padding: 10px 20px;
+        font-weight: bold;
+        color: #2c5aa0;
       }
       #messages {
         list-style: none;
         padding: 0;
-        border: 1px solid #ccc;
-        background: white;
-        height: 300px;
+        margin: 0;
+        height: 400px;
         overflow-y: auto;
-        margin-bottom: 10px;
+        background: #fafafa;
       }
       #messages li {
-        margin: 5px;
-        padding: 6px 8px;
-        border-radius: 5px;
+        margin: 8px;
+        padding: 10px 15px;
+        border-radius: 8px;
         word-wrap: break-word;
+        animation: fadeIn 0.3s ease-in;
       }
-      .system-msg {
-        background: #ffe0b2;
-        font-style: italic;
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
       }
       .user-msg {
-        background: #eef;
+        background: white;
+        border-left: 4px solid #2c5aa0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .system-msg {
+        background: #fff3e0;
+        font-style: italic;
+        text-align: center;
+        color: #666;
+        border-left: 4px solid #ff9800;
+      }
+      .message-username {
+        font-weight: bold;
+        color: #2c5aa0;
+        margin-bottom: 3px;
+      }
+      .message-content {
+        margin: 5px 0;
+      }
+      .message-time {
+        font-size: 0.8em;
+        color: #888;
+        text-align: right;
+      }
+      .input-area {
+        padding: 15px 20px;
+        background: white;
+        border-top: 1px solid #eee;
+      }
+      .input-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
       }
       input {
-        padding: 5px;
-        width: 60%;
-      }
-      button {
-        padding: 5px 10px;
-        margin-left: 5px;
-      }
-      #user-form {
-        margin-bottom: 20px;
+        flex: 1;
         padding: 10px;
         border: 1px solid #ddd;
-        background: #fff;
+        border-radius: 5px;
+        font-size: 14px;
       }
-      #chat-interface {
-        display: none;
+      input:focus {
+        outline: none;
+        border-color: #2c5aa0;
       }
-      /* Style pour l'indicateur de frappe */
+      button {
+        padding: 10px 20px;
+        background: #2c5aa0;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      button:hover {
+        background: #1e3d6f;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
       #typing-indicator {
-        font-size: 0.9em;
-        margin-bottom: 5px;
-        color: gray;
         height: 20px;
+        padding: 0 20px;
+        font-size: 0.9em;
+        color: #666;
+        font-style: italic;
+      }
+      .connection-status {
+        padding: 8px 20px;
+        text-align: center;
+        font-size: 0.9em;
+      }
+      .connected {
+        background: #e8f5e8;
+        color: #2e7d32;
+      }
+      .disconnected {
+        background: #ffebee;
+        color: #c62828;
+      }
+      .gif-preview {
+        max-width: 150px;
+        max-height: 150px;
+        border-radius: 5px;
+        margin-top: 5px;
       }
     </style>
   </head>
   <body>
-    <h1>💬 Chat Temps Réel</h1>
+    <div class="container">
+      <div class="header">
+        <h1>💬 Chat Temps Réel</h1>
+      </div>
 
-    <div id="user-form">
-      <label for="username-input">Entre ton pseudo :</label>
-      <input id="username-input" placeholder="Ex: JeanDu75" />
-      <button onclick="setUsername()">Définir Pseudo</button>
-      <span id="status"></span>
-    </div>
+      <div id="connection-status" class="connection-status disconnected">
+        🔄 Connexion en cours...
+      </div>
 
-    <div id="chat-interface">
+      <div id="user-info" class="user-info" style="display: none;">
+        👤 Connecté en tant que : <span id="current-username"></span>
+      </div>
+
       <ul id="messages"></ul>
       
       <div id="typing-indicator"></div>
-      
-      <input 
-        id="msg" 
-        placeholder="Écris ton message..." 
-        onkeydown="handleTyping(true)" 
-        onkeyup="handleTyping(false)"
-      />
-      <button onclick="sendMessage()">Envoyer</button>
 
-      <br /><br />
-
-      <input id="gifUrl" placeholder="Colle un lien GIF (optionnel)" />
-      <button onclick="sendGif()">Envoyer GIF</button>
+      <div class="input-area">
+        <div class="input-group">
+          <input 
+            id="msg" 
+            placeholder="Tapez votre message..." 
+            disabled
+            onkeydown="handleTyping(true)" 
+            onkeyup="handleTyping(false)"
+            onkeypress="handleKeyPress(event)"
+          />
+          <button id="send-btn" onclick="sendMessage()" disabled>Envoyer</button>
+        </div>
+        
+        <div class="input-group">
+          <input 
+            id="gifUrl" 
+            placeholder="URL d'un GIF (optionnel)" 
+            disabled
+          />
+          <button id="gif-btn" onclick="sendGif()" disabled>Envoyer GIF</button>
+        </div>
+      </div>
     </div>
 
     <script>
       const socket = io("http://localhost:3001");
-      const chatInterface = document.getElementById("chat-interface");
-      const userForm = document.getElementById("user-form");
-      const statusSpan = document.getElementById("status");
-      // 💡 Variables pour l'indicateur de frappe
+      const messagesList = document.getElementById("messages");
+      const connectionStatus = document.getElementById("connection-status");
+      const userInfo = document.getElementById("user-info");
+      const currentUsernameSpan = document.getElementById("current-username");
       const typingIndicator = document.getElementById("typing-indicator");
-      const typingUsers = new Set();
+      const messageInput = document.getElementById("msg");
+      const gifInput = document.getElementById("gifUrl");
+      const sendBtn = document.getElementById("send-btn");
+      const gifBtn = document.getElementById("gif-btn");
+
+      let typingUsers = new Set();
       let typingTimeout;
       let isTyping = false;
+      let currentUsername = '';
 
       // ------------------------------------------------------------------
-      // --- NOUVEAU : Logique de l'indicateur de frappe ---
-      // ------------------------------------------------------------------
-      
-      function handleTyping(typing) {
-          const messageInput = document.getElementById("msg");
-          const content = messageInput.value; // Ne pas utiliser .trim() ici pour détecter l'espace
-          
-          // Logique de Démarrage
-          if (content.length > 0 && !isTyping) {
-              // Envoie le signal true
-              socket.emit('typing', true);
-              isTyping = true;
-          }
-          
-          // Logique d'Arrêt : uniquement si la barre de saisie est vide
-          if (content.length === 0 && isTyping) {
-              clearTimeout(typingTimeout);
-              socket.emit('typing', false);
-              isTyping = false;
-          }
-          
-          // Le timer est conservé, mais il ne sert plus à envoyer 'false'
-          // Il sert à réinitialiser le statut si l'utilisateur met une pause
-          clearTimeout(typingTimeout);
-          if (isTyping) {
-              typingTimeout = setTimeout(() => {
-                  // Si le temps expire mais qu'il y a encore du texte, on ne fait rien
-                  // Si le temps expire et qu'il n'y a plus de texte, le bloc précédent l'a déjà géré.
-              }, 5000); 
-          }
-      }
-
-      socket.on("userTyping", (data) => {
-          if (data.isTyping) {
-              typingUsers.add(data.username);
-          } else {
-              typingUsers.delete(data.username);
-          }
-          
-          updateTypingIndicator();
-      });
-      
-      function updateTypingIndicator() {
-          const usersArray = Array.from(typingUsers);
-          
-          if (usersArray.length === 0) {
-              typingIndicator.textContent = '';
-          } else if (usersArray.length === 1) {
-              typingIndicator.textContent = `${usersArray[0]} est en train d'écrire...`;
-          } else if (usersArray.length === 2) {
-              typingIndicator.textContent = `${usersArray.join(' et ')} sont en train d'écrire...`;
-          } else {
-              typingIndicator.textContent = 'Plusieurs personnes sont en train d\'écrire...';
-          }
-          
-          const ul = document.getElementById("messages");
-          ul.scrollTop = ul.scrollHeight;
-      }
-      
-      // ------------------------------------------------------------------
-      // --- Fonctions existantes (MODIFIÉES pour stopper l'indicateur) ---
+      // --- Gestion de la connexion ---
       // ------------------------------------------------------------------
 
-      // 🔹 Fonction pour définir le pseudo
-      function setUsername() {
-        const username = document.getElementById("username-input").value.trim();
-        if (username) {
-          socket.emit("setUser", { username });
-          statusSpan.textContent = "Envoi du pseudo...";
-          statusSpan.style.color = 'orange';
-        }
-      }
-
-      // 🔹 Réponse du serveur après la définition du pseudo
-      socket.on("userSet", (data) => {
-        statusSpan.textContent = `Bienvenue, ${data.username}!`;
-        statusSpan.style.color = 'green';
-        userForm.style.display = 'none';
-        chatInterface.style.display = 'block';
-      });
-      
-      // 🔹 Notification d'erreur du backend
-      socket.on("error", (msg) => {
-          console.error('Erreur du serveur:', msg);
-          statusSpan.textContent = `Erreur: ${msg}`;
-          statusSpan.style.color = 'red';
-      });
-
-      // 🔹 Vérifier la connexion
       socket.on("connect", () => {
-        console.log("Connecté au serveur Socket.IO :", socket.id);
-        userForm.style.display = 'block';
-        chatInterface.style.display = 'none';
-        statusSpan.textContent = "Connecté au serveur.";
-        statusSpan.style.color = 'blue';
+        console.log("✅ Connecté au serveur");
+        connectionStatus.textContent = "✅ Connecté au chat";
+        connectionStatus.className = "connection-status connected";
+        
+        // Activer les champs de saisie
+        messageInput.disabled = false;
+        gifInput.disabled = false;
+        sendBtn.disabled = false;
+        gifBtn.disabled = false;
+        
+        // Focus sur le champ message
+        messageInput.focus();
       });
 
       socket.on("connect_error", (err) => {
-        console.error("Erreur de connexion :", err);
-        statusSpan.textContent = "Erreur de connexion au serveur.";
-        statusSpan.style.color = 'red';
+        console.error("❌ Erreur de connexion :", err);
+        connectionStatus.textContent = "❌ Erreur de connexion au serveur";
+        connectionStatus.className = "connection-status disconnected";
+        
+        // Désactiver les champs de saisie
+        messageInput.disabled = true;
+        gifInput.disabled = true;
+        sendBtn.disabled = true;
+        gifBtn.disabled = true;
       });
 
-      // 🔹 Envoi d’un message texte (MODIFIÉ)
-      function sendMessage() {
-        const message = document.getElementById("msg").value.trim();
-        if (!message) return;
+      socket.on("disconnect", () => {
+        console.log("🔌 Déconnecté du serveur");
+        connectionStatus.textContent = "🔌 Déconnecté - Reconnexion...";
+        connectionStatus.className = "connection-status disconnected";
         
-        // 💡 Assure l'arrêt de l'indicateur local et envoie le signal d'arrêt
-        clearTimeout(typingTimeout);
-        if (isTyping) {
-            socket.emit('typing', false);
-            isTyping = false;
+        // Désactiver les champs de saisie
+        messageInput.disabled = true;
+        gifInput.disabled = true;
+        sendBtn.disabled = true;
+        gifBtn.disabled = true;
+      });
+
+      // ------------------------------------------------------------------
+      // --- Gestion des utilisateurs ---
+      // ------------------------------------------------------------------
+
+      socket.on("identity", (username) => {
+        console.log("👤 Identité reçue:", username);
+        currentUsername = username;
+        currentUsernameSpan.textContent = username;
+        userInfo.style.display = 'block';
+        
+        // SUPPRIMÉ : La notification de bienvenue
+        // displaySystemMessage(`Bienvenue ${username} ! Vous pouvez commencer à chatter.`);
+      });
+
+      // ------------------------------------------------------------------
+      // --- Gestion des messages ---
+      // ------------------------------------------------------------------
+
+      socket.on("loadMessages", (messages) => {
+        console.log("📨 Historique chargé:", messages.length, "messages");
+        messagesList.innerHTML = "";
+        
+        if (messages.length === 0) {
+          displaySystemMessage("Aucun message dans l'historique. Soyez le premier à chatter !");
+        } else {
+          messages.forEach(displayMessage);
         }
         
-        socket.emit("sendMessage", { message });
-        document.getElementById("msg").value = "";
-      }
+        scrollToBottom();
+      });
 
-      // 🔹 Envoi d’un GIF (MODIFIÉ)
-      function sendGif() {
-        const gifUrl = document.getElementById("gifUrl").value.trim();
-        if (!gifUrl) return;
-
-        // 💡 Assure l'arrêt de l'indicateur local et envoie le signal d'arrêt
-        clearTimeout(typingTimeout);
-        if (isTyping) {
-            socket.emit('typing', false);
-            isTyping = false;
-        }
-
-        socket.emit("sendMessage", { gifUrl });
-        document.getElementById("gifUrl").value = "";
-      }
-
-      // 🔹 Réception d’un message (texte ou GIF)
       socket.on("receiveMessage", (data) => {
-        console.log("Message reçu :", data);
+        console.log("📩 Message reçu:", data);
         displayMessage(data);
       });
 
-      // 🔹 Chargement de l’historique
-      socket.on("loadMessages", (messages) => {
-        console.log("Historique reçu :", messages);
-        const ul = document.getElementById("messages");
-        ul.innerHTML = "";
-        messages.forEach(displayMessage);
-      });
-
-      // 🔹 Fonction d’affichage d'un message utilisateur (texte + GIF)
       function displayMessage(data) {
         const li = document.createElement("li");
-        li.classList.add('user-msg');
+        li.className = 'user-msg';
         
-        let content = `<strong>${data.username} :</strong> `;
-
+        const time = new Date(data.createdAt).toLocaleTimeString('fr-FR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        
+        let content = `
+          <div class="message-username">${data.username}</div>
+          <div class="message-content">
+        `;
+        
         if (data.message) {
           content += data.message;
         }
-
+        
+        content += `</div><div class="message-time">${time}</div>`;
+        
         li.innerHTML = content;
 
         if (data.gifUrl) {
           const gif = document.createElement("img");
           gif.src = data.gifUrl;
           gif.alt = "GIF";
-          gif.style.maxWidth = "150px";
-          gif.style.display = "block";
-          gif.style.marginTop = "5px";
+          gif.className = "gif-preview";
+          gif.onerror = function() {
+            this.style.display = 'none';
+            const errorSpan = document.createElement("span");
+            errorSpan.textContent = "❌ GIF non chargé";
+            errorSpan.style.color = '#ff4444';
+            li.querySelector('.message-content').appendChild(errorSpan);
+          };
           
-          if (!data.message) {
-             li.innerHTML = `<strong>${data.username} :</strong>`;
-          }
-          
-          li.appendChild(gif);
+          li.querySelector('.message-content').appendChild(gif);
         }
 
-        const ul = document.getElementById("messages");
-        ul.appendChild(li);
-        ul.scrollTop = ul.scrollHeight;
+        messagesList.appendChild(li);
+        scrollToBottom();
       }
-      
-      // 🔹 Fonction d’affichage des messages système/notifications (Non utilisée pour 'userJoined')
+
       function displaySystemMessage(text) {
-          const li = document.createElement("li");
-          li.classList.add('system-msg');
-          li.textContent = text;
-          
-          const ul = document.getElementById("messages");
-          ul.appendChild(li);
-          ul.scrollTop = ul.scrollHeight;
+        const li = document.createElement("li");
+        li.className = 'system-msg';
+        li.textContent = text;
+        messagesList.appendChild(li);
+        scrollToBottom();
       }
+
+      // ------------------------------------------------------------------
+      // --- Indicateur de frappe ---
+      // ------------------------------------------------------------------
+
+      function handleTyping(typing) {
+        const content = messageInput.value;
+        
+        if (content.length > 0 && !isTyping) {
+          socket.emit('typing', true);
+          isTyping = true;
+        }
+        
+        if (content.length === 0 && isTyping) {
+          clearTimeout(typingTimeout);
+          socket.emit('typing', false);
+          isTyping = false;
+        }
+        
+        clearTimeout(typingTimeout);
+        if (isTyping) {
+          typingTimeout = setTimeout(() => {}, 5000);
+        }
+      }
+
+      function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+          sendMessage();
+        }
+      }
+
+      socket.on("userTyping", (data) => {
+        if (data.isTyping) {
+          typingUsers.add(data.username);
+        } else {
+          typingUsers.delete(data.username);
+        }
+        updateTypingIndicator();
+      });
+
+      function updateTypingIndicator() {
+        const usersArray = Array.from(typingUsers);
+        
+        if (usersArray.length === 0) {
+          typingIndicator.textContent = '';
+        } else if (usersArray.length === 1) {
+          typingIndicator.textContent = `${usersArray[0]} est en train d'écrire...`;
+        } else if (usersArray.length === 2) {
+          typingIndicator.textContent = `${usersArray.join(' et ')} sont en train d'écrire...`;
+        } else {
+          typingIndicator.textContent = 'Plusieurs personnes écrivent...';
+        }
+        
+        scrollToBottom();
+      }
+
+      // ------------------------------------------------------------------
+      // --- Envoi de messages ---
+      // ------------------------------------------------------------------
+
+      function sendMessage() {
+        const message = messageInput.value.trim();
+        if (!message) return;
+        
+        clearTimeout(typingTimeout);
+        if (isTyping) {
+          socket.emit('typing', false);
+          isTyping = false;
+        }
+        
+        socket.emit("sendMessage", { message });
+        messageInput.value = "";
+        messageInput.focus();
+      }
+
+      function sendGif() {
+        const gifUrl = gifInput.value.trim();
+        if (!gifUrl) {
+          alert("Veuillez entrer une URL de GIF");
+          return;
+        }
+
+        clearTimeout(typingTimeout);
+        if (isTyping) {
+          socket.emit('typing', false);
+          isTyping = false;
+        }
+
+        socket.emit("sendMessage", { gifUrl });
+        gifInput.value = "";
+        messageInput.focus();
+      }
+
+      // ------------------------------------------------------------------
+      // --- Utilitaires ---
+      // ------------------------------------------------------------------
+
+      function scrollToBottom() {
+        messagesList.scrollTop = messagesList.scrollHeight;
+      }
+
+      // Auto-scroll quand de nouveaux messages arrivent
+      const observer = new MutationObserver(scrollToBottom);
+      observer.observe(messagesList, { childList: true });
     </script>
   </body>
 </html>

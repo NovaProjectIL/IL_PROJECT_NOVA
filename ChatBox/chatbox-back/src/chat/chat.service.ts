@@ -24,21 +24,20 @@ export class ChatService {
     return this.userRepo.find();
   }
 
-  // Création d'un message en instanciant la classe directement (évite les problèmes de typing)
+  // Création d'un message en instanciant la classe directement
   async saveMessage(
     user: User,
     content?: string,
     gifUrl?: string,
   ): Promise<Message> {
-    const message = new Message();            // <-- instanciation explicite
+    const message = new Message();
     message.user = user;
     message.content = content ?? null;
     message.gifUrl = gifUrl ?? null;
-    // createdAt sera géré par @CreateDateColumn
     return this.messageRepo.save(message);
   }
 
-  // Retourne l'historique formaté (username + message + gifUrl + createdAt)
+  // Retourne l'historique formaté
   async getAllMessages(): Promise<
     { username: string; message?: string; gifUrl?: string; createdAt: Date }[]
   > {

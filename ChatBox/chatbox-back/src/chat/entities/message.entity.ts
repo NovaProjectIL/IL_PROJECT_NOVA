@@ -7,10 +7,10 @@ export class Message {
   id: number;
 
   @Column({ type: 'text', nullable: true })
-  content: string | null; // ✅ permet de stocker null
+  content: string | null; 
 
   @Column({ type: 'text', nullable: true })
-  gifUrl: string | null; // ✅ permet de stocker null
+  gifUrl: string | null; 
 
   @ManyToOne(() => User, (user) => user.messages, {
     eager: true,

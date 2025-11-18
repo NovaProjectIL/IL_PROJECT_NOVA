@@ -10,12 +10,12 @@ import { Message } from './chat/entities/message.entity';
       type: 'postgres',
       host: 'pedago.univ-avignon.fr',
       port: 5432,
-      username: 'uapv2400036', // ton identifiant étudiant
-      password: 'JcxIH9', // ton mot de passe pédagogique
-      database: 'etd', // ✅ CORRECTION : base partagée des étudiants
-      schema: 'uapv2400036', // ✅ ton schéma personnel dans la base etd
+      username: 'uapv2400036', 
+      password: 'JcxIH9', 
+      database: 'etd', 
+      schema: 'uapv2400036', 
       entities: [User, Message],
-      synchronize: true, // crée automatiquement les tables (en dev)
+      synchronize: true, 
       autoLoadEntities: true,
       logging: true,
       ssl: false,

@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { Message } from './message.entity';
 
-@Entity('users') // renomme la table en "users"
+@Entity('users') 
 export class User {
   @PrimaryGeneratedColumn()
   id: number;
