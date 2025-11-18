@@ -164,11 +164,9 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
       </div>
 
       <div className="position-relative">
-        {/* --- ZONES DE SELECTION (GIF / EMOJI) --- */}
         {(showEmojiPicker || showGifPicker) && (
             <div className="picker-overlay shadow-sm" style={{ height: '380px' }}>
                 
-                {/* En-tête du picker */}
                 <div className="d-flex justify-content-between align-items-center px-3 py-2 bg-light border-bottom">
                     <span className="fw-bold text-primary small text-uppercase ls-1">
                         {showEmojiPicker ? "😄 Émojis" : "🎬 GIFs Giphy"}
@@ -179,7 +177,6 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
                     ></button>
                 </div>
                 
-                {/* Contenu Emoji */}
                 {showEmojiPicker && (
                     <div className="h-100 w-100">
                         <EmojiPicker 
@@ -192,7 +189,6 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
                     </div>
                 )}
                 
-                {/* Contenu GIF (Nouveau Design) */}
                 {showGifPicker && (
                     <div className="h-100 d-flex flex-column bg-white">
                         <div className="p-2 bg-light border-bottom">
@@ -210,7 +206,6 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
                              </div>
                         </div>
                         
-                        {/* Grille centrée et contenue */}
                         <div className="flex-grow-1 overflow-auto p-2 d-flex justify-content-center bg-white">
                             <div style={{ width: '340px' }}> {/* Conteneur fixe pour la grille */}
                                 <Grid 
@@ -232,7 +227,6 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
             </div>
         )}
 
-        {/* Zone de saisie */}
         <div className="p-3 bg-white border-top">
             <div className="input-group bg-light border rounded-pill shadow-sm overflow-hidden">
                 <button 

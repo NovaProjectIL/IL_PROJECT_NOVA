@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 
 export const metadata = {
   title: "Live Chat",
-  description: "Chat moderne avec Bootstrap",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
