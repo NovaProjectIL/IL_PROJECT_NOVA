@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import EmojiPicker from "emoji-picker-react";
+import { GiphyFetch } from "@giphy/js-fetch-api";
+import { Grid } from "@giphy/react-components";
 
-// ... (tous vos imports et types restent les mêmes) ...
 type Message = {
   username: string;
   message: string | null;
@@ -13,356 +15,261 @@ type Message = {
 
 type ChatProps = {
   onClose: () => void;
-  pseudo: string; // Le pseudo choisi dans le Widget
+  pseudo: string;
+  onMessageReceived?: () => void;
 };
 
-// ... (toutes vos constantes d'emoji et GIPHY restent les mêmes) ...
-const emojiCategories = {
-// ... (contenu des emojis inchangé) ...
-  "Smileys & Émotions": [ '😊', '😂', '❤️', '👍', '🙏', '😢', '🎉', '🤔', '🔥', '👏', '😮', '😍', '😄', '😁', '😆', '😅', '🤣', '😇', '😉', '😌', '😘', '🥰', '😗', '😙', '😚', '😋', '😛', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '😣', '😖', '😫', '😩', '🥺', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠' ],
-  "Objets & Nourriture": [ '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍈', '🍒', '🍑', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🦴', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙', '🧆', '🌮', '🌯', '🥗', '🥘', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '☕️', '🍵', '🧃', '🥤', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊', '🥄', '🍴', '🍽', '🥣', '🥡', '🥢', '🧂' ],
-  "Animaux": [ '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦', '🐤', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🐛' ],
-};
-const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1"; 
-type GiphyGif = {
-  id: string;
-  title: string;
-  images: {
-    fixed_width: { url: string; }
-  }
-};
-// ------------------------------------------------
+const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1";
+const gf = new GiphyFetch(giphyApiKey);
 
-export default function Chat({ onClose, pseudo }: ChatProps) {
+export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
-  const [gifSearch, setGifSearch] = useState("");
-  const [gifResults, setGifResults] = useState<GiphyGif[]>([]);
-  const [isGiphyLoading, setIsGiphyLoading] = useState(false);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
-  const [showExtraButtons, setShowExtraButtons] = useState(false);
-
-  // --- NOUVEAU : États pour l'indicateur de frappe ---
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const typingSentRef = useRef(false); // Pour éviter d'envoyer 'typing' à chaque frappe
-  // -------------------------------------------------
+  const [gifSearch, setGifSearch] = useState("");
 
   const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const s = io("http://localhost:3001", { transports: ["websocket"] });
     socketRef.current = s;
-    
+
     s.on("connect", () => {
-      console.log("[Socket] connected:", s.id);
       s.emit("setUser", { username: pseudo });
     });
 
-    const handleIdentity = (name: string) => {
-      console.log(`[Socket] Mon nom est: ${name}`);
-      setCurrentUsername(name);
-    };
-    
-    s.on('identity', handleIdentity);
-    s.on('userSet', (data: { username: string }) => {
-      handleIdentity(data.username);
-    });
+    s.on("identity", (name: string) => setCurrentUsername(name));
+    s.on("userSet", (data: { username: string }) => setCurrentUsername(data.username));
 
     s.on("loadMessages", (msgs: Message[]) => {
       setMessages(msgs);
       scrollToBottom();
     });
+
     s.on("receiveMessage", (msg: Message) => {
       setMessages((prev) => [...prev, msg]);
-      // --- AJOUT : Si un message arrive, la personne ne tape plus ---
-      setTypingUsers(prev => prev.filter(name => name !== msg.username));
-      // ---------------------------------------------------------
+      setTypingUsers((prev) => prev.filter((name) => name !== msg.username));
+      if (onMessageReceived) onMessageReceived();
       scrollToBottom();
     });
 
-    // --- NOUVEAU : Listener pour 'userTyping' ---
-    s.on('userTyping', (data: { username: string, isTyping: boolean }) => {
+    s.on("userTyping", (data: { username: string; isTyping: boolean }) => {
       if (data.isTyping) {
-        // Ajoute l'utilisateur à la liste (sans doublons)
-        setTypingUsers(prev => [...new Set([...prev, data.username])]);
+        setTypingUsers((prev) => [...new Set([...prev, data.username])]);
       } else {
-        // Retire l'utilisateur de la liste
-        setTypingUsers(prev => prev.filter(name => name !== data.username));
+        setTypingUsers((prev) => prev.filter((name) => name !== data.username));
       }
+      scrollToBottom();
     });
-    // -----------------------------------------
 
-    scrollToBottom();
     return () => {
-      // --- AJOUT : Nettoyage du listener ---
-      s.off('userTyping');
-      // -----------------------------------
       s.disconnect();
     };
-  }, [pseudo]); 
+  }, [pseudo, onMessageReceived]);
 
-  // ... (les useEffect pour GIPHY restent inchangés) ...
-  useEffect(() => {
-    if (showGifPicker && gifSearch.trim() === '' && gifResults.length === 0) {
-      setIsGiphyLoading(true);
-      fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${giphyApiKey}&limit=30&rating=g`)
-        .then(res => res.json())
-        .then(data => { setGifResults(data.data); setIsGiphyLoading(false); })
-        .catch(err => { console.error("Erreur fetch GIPHY (Trending):", err); setIsGiphyLoading(false); });
-    }
-  }, [showGifPicker, gifSearch]);
-  useEffect(() => {
-    if (gifSearch.trim() === '') {
-      setGifResults([]);
-      return;
-    }
-    const handler = setTimeout(() => {
-      setIsGiphyLoading(true);
-      const url = `https://api.giphy.com/v1/gifs/search?api_key=${giphyApiKey}&q=${encodeURIComponent(gifSearch)}&limit=30&rating=g`;
-      fetch(url)
-        .then(res => res.json())
-        .then(data => { setGifResults(data.data); setIsGiphyLoading(false); })
-        .catch(err => { console.error("Erreur fetch GIPHY (Search):", err); setIsGiphyLoading(false); });
-    }, 500); 
-    return () => clearTimeout(handler);
-  }, [gifSearch]);
-  
   const scrollToBottom = () => {
     setTimeout(() => {
       if (listRef.current) {
         listRef.current.scrollTop = listRef.current.scrollHeight;
       }
-    }, 50);
+    }, 100);
   };
 
-  // --- MODIFIÉ : 'sendMessage' envoie 'typing(false)' ---
   const sendMessage = () => {
-    const messageContent = text.trim();
-    if (!messageContent) {
-      setText(""); 
-      return;
-    }
-    socketRef.current?.emit("sendMessage", { message: messageContent });
-    
-    // --- AJOUT : Arrêter l'indicateur de frappe ---
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (typingSentRef.current) {
-      socketRef.current?.emit('typing', false);
-      typingSentRef.current = false;
-    }
-    // ------------------------------------------
-
+    if (!text.trim()) return;
+    socketRef.current?.emit("sendMessage", { message: text.trim() });
+    socketRef.current?.emit("typing", false);
     setText("");
     setShowEmojiPicker(false);
-    setShowGifPicker(false); 
+    setShowGifPicker(false);
   };
-  
+
   const sendGif = (gifUrl: string) => {
     socketRef.current?.emit("sendMessage", { gifUrl: gifUrl });
     setShowEmojiPicker(false);
     setShowGifPicker(false);
-    setShowExtraButtons(false); 
   };
 
-  const onEmojiClick = (emoji: string) => {
-    setText((prevText) => prevText + emoji);
-  };
-  
-  // --- NOUVEAU : Logique de "debouncing" pour la frappe ---
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newText = e.target.value;
-    setText(newText);
-    
-    // 1. Envoyer "typing: true" si ce n'est pas déjà fait
-    if (socketRef.current && !typingSentRef.current) {
-      socketRef.current.emit('typing', true);
-      typingSentRef.current = true;
-    }
-    
-    // 2. Nettoyer l'ancien timer "stop typing"
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    // 3. Créer un nouveau timer pour envoyer "typing: false" après 2s d'inactivité
+    setText(e.target.value);
+    socketRef.current?.emit("typing", true);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      if (socketRef.current) {
-        socketRef.current.emit('typing', false);
-        typingSentRef.current = false; // Prêt à renvoyer "true" à la prochaine frappe
-      }
-    }, 2000); // 2 secondes
+      socketRef.current?.emit("typing", false);
+    }, 2000);
   };
-  // ----------------------------------------------------
+
+  const fetchGifs = (offset: number) => {
+    if (gifSearch.trim() === "") {
+      return gf.trending({ offset, limit: 10 });
+    }
+    return gf.search(gifSearch, { offset, limit: 10 });
+  };
 
   return (
-    <div className="chat-container-inner">
-      <div className="chat-header">
-        <h3>Connecté: <b>{currentUsername || '...'}</b></h3>
-        <button onClick={onClose} className="chat-close-btn">
-          &times;
+    <>
+      <div className="chat-header-gradient d-flex justify-content-between align-items-center shadow-sm">
+        <div className="d-flex align-items-center gap-2">
+          <div className="bg-white bg-opacity-25 rounded-circle p-2 d-flex justify-content-center align-items-center" style={{width: '40px', height: '40px'}}>
+             <i className="bi bi-chat-fill text-white fs-5"></i>
+          </div>
+          <div>
+            <h6 className="m-0 fw-bold">Chat Mauve</h6>
+            <small className="text-white-50" style={{ fontSize: '0.8rem' }}>
+              {currentUsername ? `En ligne: ${currentUsername}` : 'Connexion...'}
+            </small>
+          </div>
+        </div>
+        <button onClick={onClose} className="btn btn-sm text-white opacity-75">
+          <i className="bi bi-x-lg fs-5"></i>
         </button>
       </div>
 
-      {/* Zone des messages (inchangée) */}
-      <div className="messages" ref={listRef}>
-        {messages.length === 0 ? (
-          <div className="no-messages">Aucun message</div>
-        ) : (
-          messages.map((m, i) => {
-            const isMe = currentUsername && m.username === currentUsername;
-            return (
-              <div 
-                key={`${m.createdAt}-${i}`} 
-                className={`message-item ${isMe ? 'me' : 'other'}`}
-              >
-                {!isMe && <b className="message-username">{m.username}</b>}
-                <div className="message-bubble">
-                  {m.message && <div>{m.message}</div>}
-                  {m.gifUrl && (
-                    <img src={m.gifUrl} alt="gif" className="chat-gif" />
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-      {/* --- FIN ZONE DES MESSAGES --- */}
-
-      {/* --- NOUVEAU : Indicateur de Frappe --- */}
-      <div className="typing-indicator-container">
-        {typingUsers.length > 0 && (
-          <div className="typing-indicator">
-            {/* Limite à 2 noms pour ne pas surcharger */}
-            {typingUsers.slice(0, 2).join(', ')} 
-            {typingUsers.length > 2 ? ' et d\'autres...' : ''}
-            {typingUsers.length === 1 ? ' est' : ' sont'} en train d'écrire
-            <span className="dot-flashing"></span>
+      <div className="flex-grow-1 bg-white overflow-auto p-3 d-flex flex-column gap-2" ref={listRef}>
+        {messages.length === 0 && (
+          <div className="h-100 d-flex flex-column justify-content-center align-items-center text-muted opacity-50">
+            <i className="bi bi-chat-heart fs-1 mb-2"></i>
+            <p>Dites bonjour !</p>
           </div>
         )}
-      </div>
-      {/* ----------------------------------------------- */}
 
-      {/* Zone des pickers (inchangée) */}
-      <div className="picker-container">
-        {showEmojiPicker && (
-          <div className="emoji-picker-scroll">
-            {Object.entries(emojiCategories).map(([category, emojis]) => (
-              <div key={category} className="emoji-category">
-                <h4>{category}</h4>
-                <div className="emoji-grid">
-                  {emojis.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => onEmojiClick(emoji)}
-                      title={emoji}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {showGifPicker && (
-          <div className="gif-picker">
-            <input
-              type="text"
-              className="gif-search-bar"
-              placeholder="Rechercher sur GIPHY..."
-              value={gifSearch}
-              onChange={(e) => setGifSearch(e.target.value)}
-            />
-            <div className="gif-grid-scroll">
-              {isGiphyLoading && <div className="no-messages">Chargement...</div>}
-              {!isGiphyLoading && gifResults.length === 0 && (
-                <div className="no-messages">Aucun GIF trouvé.</div>
-              )}
-              <div className="gif-grid">
-                {!isGiphyLoading && gifResults.map((gif) => (
-                  <button
-                    key={gif.id}
-                    className="gif-item"
-                    onClick={() => sendGif(gif.images.fixed_width.url)}
-                  >
-                    <img src={gif.images.fixed_width.url} alt={gif.title} />
-                  </button>
-                ))}
+        {messages.map((m, i) => {
+          const isMe = currentUsername && m.username === currentUsername;
+          return (
+            <div key={i} className={`d-flex flex-column w-100 ${isMe ? "align-items-end" : "align-items-start"}`}>
+              {!isMe && <small className="text-secondary ms-2 mb-1" style={{fontSize: '0.75rem'}}>{m.username}</small>}
+              <div className={`message-bubble shadow-sm ${isMe ? "message-me" : "message-other"}`}>
+                {m.message && <span>{m.message}</span>}
+                {m.gifUrl && (
+                    <div className="rounded overflow-hidden">
+                        <img src={m.gifUrl} alt="GIF" className="img-fluid" style={{maxHeight: '150px'}} />
+                    </div>
+                )}
               </div>
             </div>
+          );
+        })}
+
+        {typingUsers.length > 0 && (
+          <div className="ms-2 mb-2 text-muted fst-italic small typing-indicator">
+            {typingUsers.length > 2 ? "Plusieurs personnes écrivent" : typingUsers.join(", ") + " écrit"}
+            <span></span><span></span><span></span>
           </div>
         )}
       </div>
 
-      {/* --- MODIFIÉ : Zone de saisie --- */}
-      <div className="chat-input-area">
-        {showExtraButtons && (
-          <div className="chat-extra-buttons">
-            <button
-              className="chat-icon-btn"
-              onClick={() => {
-                setShowEmojiPicker(true);
-                setShowGifPicker(false);
-                setShowExtraButtons(false);
-              }}
-              title="Emojis"
-            >
-              😊
-            </button>
-            <button
-              className="chat-icon-btn"
-              onClick={() => {
-                setShowGifPicker(true);
-                setShowEmojiPicker(false);
-                setShowExtraButtons(false);
-              }}
-              title="GIFs"
-            >
-              🖼️
-            </button>
-          </div>
+      <div className="position-relative">
+        {/* --- ZONES DE SELECTION (GIF / EMOJI) --- */}
+        {(showEmojiPicker || showGifPicker) && (
+            <div className="picker-overlay shadow-sm" style={{ height: '380px' }}>
+                
+                {/* En-tête du picker */}
+                <div className="d-flex justify-content-between align-items-center px-3 py-2 bg-light border-bottom">
+                    <span className="fw-bold text-primary small text-uppercase ls-1">
+                        {showEmojiPicker ? "😄 Émojis" : "🎬 GIFs Giphy"}
+                    </span>
+                    <button 
+                        className="btn-close small" 
+                        onClick={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
+                    ></button>
+                </div>
+                
+                {/* Contenu Emoji */}
+                {showEmojiPicker && (
+                    <div className="h-100 w-100">
+                        <EmojiPicker 
+                            onEmojiClick={(e) => setText((prev) => prev + e.emoji)} 
+                            width="100%" 
+                            height="100%"
+                            searchDisabled={false}
+                            previewConfig={{ showPreview: false }}
+                        />
+                    </div>
+                )}
+                
+                {/* Contenu GIF (Nouveau Design) */}
+                {showGifPicker && (
+                    <div className="h-100 d-flex flex-column bg-white">
+                        <div className="p-2 bg-light border-bottom">
+                             <div className="input-group input-group-sm">
+                                <span className="input-group-text bg-white border-end-0 text-muted">
+                                    <i className="bi bi-search"></i>
+                                </span>
+                                <input 
+                                    type="text" 
+                                    className="form-control border-start-0 ps-0" 
+                                    placeholder="Rechercher un GIF..." 
+                                    value={gifSearch}
+                                    onChange={(e) => setGifSearch(e.target.value)}
+                                />
+                             </div>
+                        </div>
+                        
+                        {/* Grille centrée et contenue */}
+                        <div className="flex-grow-1 overflow-auto p-2 d-flex justify-content-center bg-white">
+                            <div style={{ width: '340px' }}> {/* Conteneur fixe pour la grille */}
+                                <Grid 
+                                    fetchGifs={fetchGifs} 
+                                    width={340} 
+                                    columns={3} 
+                                    gutter={8}
+                                    noLink={true}
+                                    key={gifSearch}
+                                    onGifClick={(gif, e) => {
+                                        e.preventDefault();
+                                        sendGif(gif.images.original.url);
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
         )}
 
-        <button
-          className="chat-icon-btn chat-plus-btn"
-          onClick={() => {
-            setShowExtraButtons(!showExtraButtons);
-            setShowEmojiPicker(false);
-            setShowGifPicker(false);
-          }}
-          title="Options"
-        >
-          {showExtraButtons ? '✕' : '＋'}
-        </button>
-
-        <input
-          value={text}
-          // --- MODIFICATION : 'onChange' appelle 'handleTyping' ---
-          onChange={handleTyping}
-          // ----------------------------------------------------
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Écris ton message..."
-          onFocus={() => {
-            setShowEmojiPicker(false);
-            setShowGifPicker(false);
-            setShowExtraButtons(false);
-          }}
-        />
-        
-        <button 
-          onClick={sendMessage} 
-          className="chat-send-btn" 
-          title="Envoyer"
-          disabled={text.trim().length === 0}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-        </button>
+        {/* Zone de saisie */}
+        <div className="p-3 bg-white border-top">
+            <div className="input-group bg-light border rounded-pill shadow-sm overflow-hidden">
+                <button 
+                    className={`btn border-0 px-3 ${showEmojiPicker ? 'text-primary bg-white shadow-sm' : 'text-secondary'}`}
+                    onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
+                    title="Emojis"
+                >
+                    <i className="bi bi-emoji-smile fs-5"></i>
+                </button>
+                <button 
+                    className={`btn border-0 px-3 ${showGifPicker ? 'text-primary bg-white shadow-sm' : 'text-secondary'}`}
+                    onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
+                    title="GIFs"
+                >
+                    <i className="bi bi-filetype-gif fs-5"></i>
+                </button>
+                
+                <input
+                    type="text"
+                    className="form-control border-0 bg-transparent shadow-none"
+                    placeholder="Votre message..."
+                    value={text}
+                    onChange={handleTyping}
+                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                    onFocus={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
+                />
+                
+                <button 
+                    className="btn border-0 px-3 text-primary hover-scale"
+                    onClick={sendMessage}
+                    disabled={!text.trim()}
+                >
+                    <i className="bi bi-send-fill fs-5"></i>
+                </button>
+            </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

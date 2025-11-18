@@ -1,32 +1,54 @@
-// Dans un nouveau fichier, ex: components/ChatWidget.tsx
 "use client";
 
 import { useState } from "react";
-import Chat from "./Chat"; // Assure-toi que le chemin est correct
-import "../app/globals.css"; // On va créer ce fichier CSS juste après
+import Chat from "./Chat";
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // Si le chat est fermé, on affiche juste la "bulle"
-  if (!isOpen) {
-    return (
-      <button
-        className="chat-toggle-button"
-        onClick={() => setIsOpen(true)}
-      >
-        💬 Des questions ?
-      </button>
-    );
-  }
+  // Appelée par Chat.tsx quand un message arrive
+  const handleMessageReceived = () => {
+    if (!isOpen) {
+      setUnreadCount((prev) => prev + 1);
+    }
+  };
 
-  // Si le chat est ouvert, on affiche la fenêtre complète
+  const handleOpenChat = () => {
+    setIsOpen(true);
+    setUnreadCount(0); // Reset du compteur à l'ouverture
+  };
+
   return (
-    <div className="chat-window-container">
-      {/* On passe la fonction "setIsOpen" à ton composant Chat
-        pour qu'il puisse se fermer de l'intérieur.
-      */}
-      <Chat onClose={() => setIsOpen(false)} />
-    </div>
+    <>
+      {/* BOUTON FLOTTANT (Visible seulement si fermé) */}
+      <div className={`chat-widget-container ${isOpen ? 'd-none' : ''}`}>
+        <button
+          className="btn btn-mauve rounded-pill px-4 py-3 shadow-lg d-flex align-items-center gap-2 position-relative"
+          onClick={handleOpenChat}
+        >
+          <i className="bi bi-chat-dots-fill fs-4"></i>
+          <span className="fw-bold">Live Chat</span>
+
+          {/* --- NOTIFICATION INTÉGRÉE ET PROPRE --- */}
+          {unreadCount > 0 && (
+            <span className="badge bg-danger rounded-pill ms-2 shadow-sm animate-bounce">
+              {unreadCount > 9 ? "+9" : unreadCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* FENÊTRE DE CHAT (Toujours montée dans le DOM, mais cachée avec d-none) */}
+      <div className={`chat-widget-container ${!isOpen ? 'd-none' : ''}`}>
+        <div className="chat-card">
+          <Chat 
+            onClose={() => setIsOpen(false)} 
+            pseudo="Invité" 
+            onMessageReceived={handleMessageReceived}
+          />
+        </div>
+      </div>
+    </>
   );
 }

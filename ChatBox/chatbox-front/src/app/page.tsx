@@ -1,22 +1,16 @@
 import Head from 'next/head';
-// 1. On importe ChatWidget au lieu de Chat
 import ChatWidget from '../components/ChatWidget'; 
 
 export default function Home() {
   return (
     <>
       <Head>
-        <title>Chat — Frontend</title>
+        <title>TEST CHAT</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
       <main className="page">
-        <h1 className="title">Chat</h1>
-        
-        {/* 2. On appelle notre nouveau widget ici.
-          Il va s'afficher tout seul en bas à droite.
-        */}
+        <h1 className="title"> Test de Chat</h1>
         <ChatWidget />
-
       </main>
     </>
   );
