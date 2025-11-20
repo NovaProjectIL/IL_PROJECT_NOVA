@@ -4,7 +4,7 @@ import { useState } from "react";
 import Chat from "./Chat";
 
 export default function ChatWidget() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true); 
   const [unreadCount, setUnreadCount] = useState(0);
 
   const handleMessageReceived = () => {
@@ -13,31 +13,31 @@ export default function ChatWidget() {
     }
   };
 
-  const handleOpenChat = () => {
-    setIsOpen(true);
-    setUnreadCount(0);
+  const toggleChat = () => {
+    setIsOpen(!isOpen);
+    if (!isOpen) setUnreadCount(0);
   };
 
   return (
     <>
-      <div className={`chat-widget-container ${isOpen ? 'd-none' : ''}`}>
-        <button
-          className="btn btn-mauve rounded-pill px-4 py-3 shadow-lg d-flex align-items-center gap-2 position-relative"
-          onClick={handleOpenChat}
+      {!isOpen && (
+        <div 
+          className="chat-trigger-side"
+          onClick={toggleChat}
+          title="Ouvrir le chat"
         >
-          <i className="bi bi-chat-dots-fill fs-4"></i>
-          <span className="fw-bold">Live Chat</span>
-
+          <span className="chat-trigger-text">Chat</span>
+          
           {unreadCount > 0 && (
-            <span className="badge bg-danger rounded-pill ms-2 shadow-sm animate-bounce">
-              {unreadCount > 9 ? "+9" : unreadCount}
+            <span className="badge-notification animate-bounce">
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
-        </button>
-      </div>
+        </div>
+      )}
 
-      <div className={`chat-widget-container ${!isOpen ? 'd-none' : ''}`}>
-        <div className="chat-card">
+      <div className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`}>
+        <div className="chat-panel">
           <Chat 
             onClose={() => setIsOpen(false)} 
             pseudo="Invité" 

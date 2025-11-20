@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import EmojiPicker from "emoji-picker-react";
+import EmojiPicker, { Theme } from "emoji-picker-react";
 import { GiphyFetch } from "@giphy/js-fetch-api";
 import { Grid } from "@giphy/react-components";
 
@@ -113,41 +113,45 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
 
   return (
     <>
-      <div className="chat-header-gradient d-flex justify-content-between align-items-center shadow-sm">
-        <div className="d-flex align-items-center gap-2">
-          <div className="bg-white bg-opacity-25 rounded-circle p-2 d-flex justify-content-center align-items-center" style={{width: '40px', height: '40px'}}>
-             <i className="bi bi-chat-fill text-white fs-5"></i>
-          </div>
-          <div>
-            <h6 className="m-0 fw-bold">Live Chat</h6>
-            <small className="text-white-50" style={{ fontSize: '0.8rem' }}>
-              {currentUsername ? `En ligne: ${currentUsername}` : 'Connexion...'}
-            </small>
-          </div>
+      <div className="chat-header-rave">
+        <div className="d-flex align-items-center gap-3">
+           <div className="rounded-circle d-flex align-items-center justify-content-center" 
+                style={{width:'40px', height:'40px', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.1)'}}>
+             <i className="bi bi-people-fill text-white"></i>
+           </div>
+           <div>
+             <h6 className="m-0 fw-bold text-white" style={{letterSpacing: '0.5px'}}>Salon Général</h6>
+             <div className="d-flex align-items-center">
+               <span className="bg-success rounded-circle me-2" style={{width:'6px', height:'6px'}}></span>
+               <small className="text-white-50" style={{ fontSize: '0.75rem' }}>
+                 {currentUsername || 'Connexion...'}
+               </small>
+             </div>
+           </div>
         </div>
-        <button onClick={onClose} className="btn btn-sm text-white opacity-75">
-          <i className="bi bi-x-lg fs-5"></i>
+        <button onClick={onClose} className="btn btn-icon-rave fs-5" title="Masquer le chat">
+          <i className="bi bi-chevron-right"></i>
         </button>
       </div>
 
-      <div className="flex-grow-1 bg-white overflow-auto p-3 d-flex flex-column gap-2" ref={listRef}>
+      <div className="chat-body-rave" ref={listRef}>
         {messages.length === 0 && (
-          <div className="h-100 d-flex flex-column justify-content-center align-items-center text-muted opacity-50">
-            <i className="bi bi-chat-heart fs-1 mb-2"></i>
-            <p>Dites bonjour !</p>
+          <div className="h-100 d-flex flex-column justify-content-center align-items-center text-white-50">
+            <i className="bi bi-chat-dots fs-1 mb-3 opacity-50"></i>
+            <p className="small">La conversation commence ici.</p>
           </div>
         )}
 
         {messages.map((m, i) => {
           const isMe = currentUsername && m.username === currentUsername;
           return (
-            <div key={i} className={`d-flex flex-column w-100 ${isMe ? "align-items-end" : "align-items-start"}`}>
-              {!isMe && <small className="text-secondary ms-2 mb-1" style={{fontSize: '0.75rem'}}>{m.username}</small>}
-              <div className={`message-bubble shadow-sm ${isMe ? "message-me" : "message-other"}`}>
+            <div key={i} className={`d-flex flex-column ${isMe ? "align-items-end" : "align-items-start"}`}>
+              {!isMe && <span className="username-label">{m.username}</span>}
+              <div className={`message-bubble ${isMe ? "message-me" : "message-other"}`}>
                 {m.message && <span>{m.message}</span>}
                 {m.gifUrl && (
-                    <div className="rounded overflow-hidden">
-                        <img src={m.gifUrl} alt="GIF" className="img-fluid" style={{maxHeight: '150px'}} />
+                    <div className="rounded overflow-hidden mt-1">
+                        <img src={m.gifUrl} alt="GIF" className="img-fluid" style={{maxHeight: '180px'}} />
                     </div>
                 )}
               </div>
@@ -156,112 +160,108 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
         })}
 
         {typingUsers.length > 0 && (
-          <div className="ms-2 mb-2 text-muted fst-italic small typing-indicator">
-            {typingUsers.length > 2 ? "Plusieurs personnes écrivent" : typingUsers.join(", ") + " is typing..."}
-            <span></span><span></span><span></span>
+          <div className="text-white-50 ms-3 fst-italic small d-flex align-items-center">
+            <div className="typing-indicator me-2">
+                <span></span><span></span><span></span>
+            </div>
+            {typingUsers.length > 2 ? "Plusieurs personnes..." : typingUsers.join(", ") + " ..."}
           </div>
         )}
       </div>
 
-      <div className="position-relative">
+      <div className="chat-input-rave position-relative">
         {(showEmojiPicker || showGifPicker) && (
-            <div className="picker-overlay shadow-sm" style={{ height: '380px' }}>
-                
-                <div className="d-flex justify-content-between align-items-center px-3 py-2 bg-light border-bottom">
-                    <span className="fw-bold text-primary small text-uppercase ls-1">
-                        {showEmojiPicker ? "Emoji" : "GIF"}
+            <div className="picker-overlay">
+                <div className="d-flex justify-content-between align-items-center px-3 py-2 border-bottom border-secondary" style={{background: 'rgba(20,20,30,0.95)'}}>
+                    <span className="fw-bold text-white small text-uppercase ls-1">
+                        {showEmojiPicker ? "Émojis" : "GIFs"}
                     </span>
                     <button 
-                        className="btn-close small" 
+                        className="btn-close btn-close-white small" 
                         onClick={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
                     ></button>
                 </div>
-                
-                {showEmojiPicker && (
-                    <div className="h-100 w-100">
-                        <EmojiPicker 
-                            onEmojiClick={(e) => setText((prev) => prev + e.emoji)} 
-                            width="100%" 
-                            height="100%"
-                            searchDisabled={false}
-                            previewConfig={{ showPreview: false }}
-                        />
-                    </div>
-                )}
-                
-                {showGifPicker && (
-                    <div className="h-100 d-flex flex-column bg-white">
-                        <div className="p-2 bg-light border-bottom">
-                             <div className="input-group input-group-sm">
-                                <span className="input-group-text bg-white border-end-0 text-muted">
-                                    <i className="bi bi-search"></i>
-                                </span>
-                                <input 
-                                    type="text" 
-                                    className="form-control border-start-0 ps-0" 
-                                    placeholder="Rechercher un GIF..." 
-                                    value={gifSearch}
-                                    onChange={(e) => setGifSearch(e.target.value)}
-                                />
-                             </div>
-                        </div>
-                        
-                        <div className="flex-grow-1 overflow-auto p-2 d-flex justify-content-center bg-white">
-                            <div style={{ width: '340px' }}> {/* Conteneur fixe pour la grille */}
-                                <Grid 
-                                    fetchGifs={fetchGifs} 
-                                    width={340} 
-                                    columns={3} 
-                                    gutter={8}
-                                    noLink={true}
-                                    key={gifSearch}
-                                    onGifClick={(gif, e) => {
-                                        e.preventDefault();
-                                        sendGif(gif.images.original.url);
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                )}
+
+                <div className="picker-content h-100 w-100 bg-dark">
+                  {showEmojiPicker && (
+                      <EmojiPicker 
+                          onEmojiClick={(e) => setText((prev) => prev + e.emoji)} 
+                          width="100%" 
+                          height="100%"
+                          theme={Theme.DARK}
+                          searchDisabled={false}
+                          previewConfig={{ showPreview: false }}
+                      />
+                  )}
+                  
+                  {showGifPicker && (
+                      <div className="d-flex flex-column h-100" style={{background: '#121212'}}>
+                          <div className="p-2 border-bottom border-secondary">
+                             <input 
+                                  type="text" 
+                                  className="form-control bg-dark text-white border-secondary form-control-sm" 
+                                  placeholder="Rechercher..." 
+                                  value={gifSearch}
+                                  onChange={(e) => setGifSearch(e.target.value)}
+                                  autoFocus
+                              />
+                          </div>
+                          <div className="flex-grow-1 overflow-auto p-2 d-flex justify-content-center">
+                              <Grid 
+                                  fetchGifs={fetchGifs} 
+                                  width={320} 
+                                  columns={3} 
+                                  gutter={6}
+                                  noLink={true}
+                                  key={gifSearch}
+                                  onGifClick={(gif, e) => {
+                                      e.preventDefault();
+                                      sendGif(gif.images.original.url);
+                                  }}
+                              />
+                          </div>
+                      </div>
+                  )}
+                </div>
             </div>
         )}
 
-        <div className="p-3 bg-white border-top">
-            <div className="input-group bg-light border rounded-pill shadow-sm overflow-hidden">
-                <button 
-                    className={`btn border-0 px-3 ${showEmojiPicker ? 'text-primary bg-white shadow-sm' : 'text-secondary'}`}
-                    onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
-                    title="Emojis"
-                >
-                    <i className="bi bi-emoji-smile fs-5"></i>
-                </button>
-                <button 
-                    className={`btn border-0 px-3 ${showGifPicker ? 'text-primary bg-white shadow-sm' : 'text-secondary'}`}
-                    onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
-                    title="GIFs"
-                >
-                    <i className="bi bi-filetype-gif fs-5"></i>
-                </button>
-                
-                <input
-                    type="text"
-                    className="form-control border-0 bg-transparent shadow-none"
-                    placeholder="Votre message..."
-                    value={text}
-                    onChange={handleTyping}
-                    onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                    onFocus={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
-                />
-                
-                <button 
-                    className="btn border-0 px-3 text-primary hover-scale"
-                    onClick={sendMessage}
-                    disabled={!text.trim()}
-                >
-                    <i className="bi bi-send-fill fs-5"></i>
-                </button>
-            </div>
+        <div className="input-group-rave">
+            <button 
+                className={`btn-icon-rave ${showEmojiPicker ? 'text-white' : ''}`}
+                onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
+                title="Emojis"
+            >
+                <i className="bi bi-emoji-smile fs-5"></i>
+            </button>
+            <button 
+                className={`btn-icon-rave ${showGifPicker ? 'text-white' : ''}`}
+                onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
+                title="GIFs"
+            >
+                <i className="bi bi-filetype-gif fs-5"></i>
+            </button>
+            
+            <input
+                type="text"
+                className="form-control-rave"
+                placeholder="Envoyer un message..."
+                value={text}
+                onChange={handleTyping}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                onFocus={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
+            />
+            
+            <button 
+                className="btn-send-rave"
+                onClick={sendMessage}
+                disabled={!text.trim()}
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
         </div>
       </div>
     </>
