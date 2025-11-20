@@ -25,8 +25,7 @@ const gf = new GiphyFetch(giphyApiKey);
 export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'none' | 'emoji' | 'gif'>('none');
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [gifSearch, setGifSearch] = useState("");
@@ -85,14 +84,12 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
     socketRef.current?.emit("sendMessage", { message: text.trim() });
     socketRef.current?.emit("typing", false);
     setText("");
-    setShowEmojiPicker(false);
-    setShowGifPicker(false);
+    setPickerMode('none');
   };
 
   const sendGif = (gifUrl: string) => {
     socketRef.current?.emit("sendMessage", { gifUrl: gifUrl });
-    setShowEmojiPicker(false);
-    setShowGifPicker(false);
+    setPickerMode('none');
   };
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,34 +108,41 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
     return gf.search(gifSearch, { offset, limit: 10 });
   };
 
+  const formatTime = (dateString: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <>
       <div className="chat-header-rave">
         <div className="d-flex align-items-center gap-3">
-           <div className="rounded-circle d-flex align-items-center justify-content-center" 
-                style={{width:'40px', height:'40px', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.1)'}}>
-             <i className="bi bi-people-fill text-white"></i>
-           </div>
-           <div>
-             <h6 className="m-0 fw-bold text-white" style={{letterSpacing: '0.5px'}}>Salon Général</h6>
-             <div className="d-flex align-items-center">
-               <span className="bg-success rounded-circle me-2" style={{width:'6px', height:'6px'}}></span>
-               <small className="text-white-50" style={{ fontSize: '0.75rem' }}>
-                 {currentUsername || 'Connexion...'}
-               </small>
-             </div>
+           
+           <img 
+             src="/logo.png" 
+             alt="Nova Logo" 
+             className="chat-logo"
+           />
+
+           {/* Titre supprimé, on garde juste le statut Live */}
+           <div className="d-flex align-items-center">
+             <span className="bg-success rounded-circle me-2 shadow-sm" style={{width:'6px', height:'6px', boxShadow: '0 0 8px #28a745'}}></span>
+             <small className="text-white-50 fw-bold" style={{ fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
+               Live Now
+             </small>
            </div>
         </div>
-        <button onClick={onClose} className="btn btn-icon-rave fs-5" title="Masquer le chat">
-          <i className="bi bi-chevron-right"></i>
+        <button onClick={onClose} className="btn btn-icon-rave fs-4">
+          <i className="bi bi-arrow-right-circle"></i>
         </button>
       </div>
 
       <div className="chat-body-rave" ref={listRef}>
         {messages.length === 0 && (
-          <div className="h-100 d-flex flex-column justify-content-center align-items-center text-white-50">
-            <i className="bi bi-chat-dots fs-1 mb-3 opacity-50"></i>
-            <p className="small">La conversation commence ici.</p>
+          <div className="h-100 d-flex flex-column justify-content-center align-items-center text-white-50 opacity-50">
+            <img src="/logo.png" alt="Logo" style={{width: '60px', opacity: 0.3, filter: 'grayscale(100%)'}} className="mb-3" />
+            <p className="fw-light ls-1">START THE VIBE</p>
           </div>
         )}
 
@@ -147,69 +151,95 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
           return (
             <div key={i} className={`d-flex flex-column ${isMe ? "align-items-end" : "align-items-start"}`}>
               {!isMe && <span className="username-label">{m.username}</span>}
-              <div className={`message-bubble ${isMe ? "message-me" : "message-other"}`}>
-                {m.message && <span>{m.message}</span>}
-                {m.gifUrl && (
-                    <div className="rounded overflow-hidden mt-1">
-                        <img src={m.gifUrl} alt="GIF" className="img-fluid" style={{maxHeight: '180px'}} />
-                    </div>
-                )}
-              </div>
+              
+              {m.message && (
+                <div className={`message-bubble ${isMe ? "message-me" : "message-other"}`}>
+                  {m.message}
+                </div>
+              )}
+
+              {m.gifUrl && (
+                <div className={`mt-2 ${isMe ? 'text-end' : 'text-start'}`}>
+                    <img 
+                      src={m.gifUrl} 
+                      alt="GIF" 
+                      className="gif-image"
+                      style={{maxHeight: '200px', maxWidth: '100%'}} 
+                    />
+                </div>
+              )}
+              
+              <span className="message-time">
+                {formatTime(m.createdAt)}
+              </span>
             </div>
           );
         })}
 
         {typingUsers.length > 0 && (
-          <div className="text-white-50 ms-3 fst-italic small d-flex align-items-center">
+          <div className="text-white-50 ms-3 fst-italic small d-flex align-items-center mt-2">
             <div className="typing-indicator me-2">
-                <span></span><span></span><span></span>
+                <span style={{background: 'var(--neon-purple)'}}></span>
+                <span style={{background: 'var(--neon-blue)'}}></span>
+                <span style={{background: 'white'}}></span>
             </div>
-            {typingUsers.length > 2 ? "Plusieurs personnes..." : typingUsers.join(", ") + " ..."}
+            <span style={{fontSize: '0.75rem'}}>{typingUsers.length > 2 ? "Plusieurs..." : typingUsers.join(", ") + " ..."}</span>
           </div>
         )}
       </div>
 
       <div className="chat-input-rave position-relative">
-        {(showEmojiPicker || showGifPicker) && (
+        {pickerMode !== 'none' && (
             <div className="picker-overlay">
-                <div className="d-flex justify-content-between align-items-center px-3 py-2 border-bottom border-secondary" style={{background: 'rgba(20,20,30,0.95)'}}>
-                    <span className="fw-bold text-white small text-uppercase ls-1">
-                        {showEmojiPicker ? "Émojis" : "GIFs"}
-                    </span>
+                <div className="picker-tabs">
                     <button 
-                        className="btn-close btn-close-white small" 
-                        onClick={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
-                    ></button>
+                        className={`picker-tab ${pickerMode === 'emoji' ? 'active' : ''}`}
+                        onClick={() => setPickerMode('emoji')}
+                    >
+                        <i className="bi bi-emoji-smile me-2"></i> Emojis
+                    </button>
+                    <button 
+                        className={`picker-tab ${pickerMode === 'gif' ? 'active' : ''}`}
+                        onClick={() => setPickerMode('gif')}
+                    >
+                        <i className="bi bi-filetype-gif me-2"></i> GIFs
+                    </button>
+                    <button className="btn-close-custom" onClick={() => setPickerMode('none')}>
+                        <i className="bi bi-x-lg"></i>
+                    </button>
                 </div>
-
-                <div className="picker-content h-100 w-100 bg-dark">
-                  {showEmojiPicker && (
-                      <EmojiPicker 
-                          onEmojiClick={(e) => setText((prev) => prev + e.emoji)} 
-                          width="100%" 
-                          height="100%"
-                          theme={Theme.DARK}
-                          searchDisabled={false}
-                          previewConfig={{ showPreview: false }}
-                      />
+                
+                <div className="flex-grow-1 position-relative overflow-hidden">
+                  {pickerMode === 'emoji' && (
+                      <div className="h-100 w-100">
+                          <EmojiPicker 
+                              onEmojiClick={(e) => setText((prev) => prev + e.emoji)} 
+                              width="100%" 
+                              height="100%"
+                              theme={Theme.DARK}
+                              searchDisabled={false}
+                              previewConfig={{ showPreview: false }}
+                              style={{background: 'transparent', border: 'none'}}
+                          />
+                      </div>
                   )}
                   
-                  {showGifPicker && (
-                      <div className="d-flex flex-column h-100" style={{background: '#121212'}}>
-                          <div className="p-2 border-bottom border-secondary">
+                  {pickerMode === 'gif' && (
+                      <div className="h-100 d-flex flex-column">
+                          <div className="px-3 pb-2">
                              <input 
                                   type="text" 
-                                  className="form-control bg-dark text-white border-secondary form-control-sm" 
-                                  placeholder="Rechercher..." 
+                                  className="form-control bg-dark text-white border-secondary form-control-sm rounded-pill" 
+                                  placeholder="Search Giphy..." 
                                   value={gifSearch}
                                   onChange={(e) => setGifSearch(e.target.value)}
                                   autoFocus
                               />
                           </div>
-                          <div className="flex-grow-1 overflow-auto p-2 d-flex justify-content-center">
+                          <div className="flex-grow-1 overflow-auto px-2 pb-2 d-flex justify-content-center">
                               <Grid 
                                   fetchGifs={fetchGifs} 
-                                  width={320} 
+                                  width={360} 
                                   columns={3} 
                                   gutter={6}
                                   noLink={true}
@@ -228,18 +258,10 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
 
         <div className="input-group-rave">
             <button 
-                className={`btn-icon-rave ${showEmojiPicker ? 'text-white' : ''}`}
-                onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
-                title="Emojis"
+                className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`}
+                onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}
             >
-                <i className="bi bi-emoji-smile fs-5"></i>
-            </button>
-            <button 
-                className={`btn-icon-rave ${showGifPicker ? 'text-white' : ''}`}
-                onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
-                title="GIFs"
-            >
-                <i className="bi bi-filetype-gif fs-5"></i>
+                <i className="bi bi-plus-circle-fill fs-4"></i>
             </button>
             
             <input
@@ -249,7 +271,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
                 value={text}
                 onChange={handleTyping}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                onFocus={() => { setShowEmojiPicker(false); setShowGifPicker(false); }}
+                onFocus={() => setPickerMode('none')}
             />
             
             <button 
@@ -257,7 +279,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
                 onClick={sendMessage}
                 disabled={!text.trim()}
             >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13"></line>
                     <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>

@@ -53,4 +53,10 @@ export class ChatService {
       createdAt: m.createdAt,
     }));
   }
+
+  // --- NOUVELLE MÉTHODE : Supprimer tous les messages ---
+  async deleteAllMessages(): Promise<void> {
+    // .clear() est efficace pour vider une table entière
+    await this.messageRepo.clear();
+  }
 }
