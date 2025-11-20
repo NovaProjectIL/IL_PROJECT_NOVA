@@ -432,7 +432,7 @@
         messagesList.scrollTop = messagesList.scrollHeight;
       }
 
-      // Auto-scroll quand de nouveaux messages arrivent
+      
       const observer = new MutationObserver(scrollToBottom);
       observer.observe(messagesList, { childList: true });
     </script>

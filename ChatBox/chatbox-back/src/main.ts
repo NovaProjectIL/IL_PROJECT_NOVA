@@ -10,6 +10,6 @@ async function bootstrap() {
   });
 
   await app.listen(3001);
-  console.log("✅ NestJS backend is running on port 3001");
+  console.log(" NestJS backend is running on port 3001");
 }
 bootstrap();
