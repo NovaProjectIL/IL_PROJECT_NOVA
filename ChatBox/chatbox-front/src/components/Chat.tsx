@@ -116,24 +116,11 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
 
   return (
     <>
+      {/* HEADER NETTOYÉ : Juste le titre "Chat" */}
       <div className="chat-header-rave">
-        <div className="d-flex align-items-center gap-3">
-           
-           <img 
-             src="/logo.png" 
-             alt="Nova Logo" 
-             className="chat-logo"
-           />
-
-           {/* Titre supprimé, on garde juste le statut Live */}
-           <div className="d-flex align-items-center">
-             <span className="bg-success rounded-circle me-2 shadow-sm" style={{width:'6px', height:'6px', boxShadow: '0 0 8px #28a745'}}></span>
-             <small className="text-white-50 fw-bold" style={{ fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
-               Live Now
-             </small>
-           </div>
-        </div>
-        <button onClick={onClose} className="btn btn-icon-rave fs-4">
+        <h4 className="m-0 fw-bold text-white" style={{ letterSpacing: '1px' }}>Live Chat</h4>
+        
+        <button onClick={onClose} className="btn btn-icon-rave fs-4" title="Masquer">
           <i className="bi bi-arrow-right-circle"></i>
         </button>
       </div>
@@ -141,8 +128,8 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
       <div className="chat-body-rave" ref={listRef}>
         {messages.length === 0 && (
           <div className="h-100 d-flex flex-column justify-content-center align-items-center text-white-50 opacity-50">
-            <img src="/logo.png" alt="Logo" style={{width: '60px', opacity: 0.3, filter: 'grayscale(100%)'}} className="mb-3" />
-            <p className="fw-light ls-1">START THE VIBE</p>
+            <i className="bi bi-chat-dots fs-1 mb-3" style={{fontSize: '4rem'}}></i>
+            <p className="fw-light ls-1">Aucun message</p>
           </div>
         )}
 
@@ -274,14 +261,14 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
                 onFocus={() => setPickerMode('none')}
             />
             
+            {/* NOUVELLE ICONE D'ENVOI PLUS JOLIE */}
             <button 
                 className="btn-send-rave"
                 onClick={sendMessage}
                 disabled={!text.trim()}
             >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
                 </svg>
             </button>
         </div>

@@ -15,22 +15,6 @@ body {
   overflow: hidden;
 }
 
-/* --- STYLE DU LOGO (Réduit) --- */
-.chat-logo {
-  height: 35px; /* Taille réduite comme demandé */
-  width: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
-  transition: transform 0.3s ease, filter 0.3s ease;
-}
-
-.chat-logo:hover {
-  transform: scale(1.05);
-  filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.6));
-}
-/* --------------------- */
-
-
 .video-background-placeholder {
   position: fixed;
   top: 0;
@@ -96,16 +80,6 @@ body {
   justify-content: space-between;
   background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 100%);
   z-index: 10;
-}
-
-.chat-title {
-  font-size: 1.4rem;
-  font-weight: 800;
-  background: linear-gradient(90deg, #fff, #ccc);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: -0.5px;
-  margin-top: 5px;
 }
 
 .chat-body-rave {
