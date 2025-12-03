@@ -116,7 +116,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
 
   return (
     <>
-      {/* HEADER NETTOYÉ : Juste le titre "Chat" */}
+   
       <div className="chat-header-rave">
         <h4 className="m-0 fw-bold text-white" style={{ letterSpacing: '1px' }}>Live Chat</h4>
         
