@@ -1,15 +1,31 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  ManyToOne,
+  
+} from 'typeorm';
 import { Message } from './message.entity';
+import { Room } from './room.entity';
 
-@Entity('users') 
+@Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ default: 'Anonymous' })
+  @Column()
   name: string;
 
+  @Column({ default: 'MEMBER' })
+  role: string;
 
-  @OneToMany(() => Message, message => message.user)
+  @Column({ type: 'timestamptz', default: () => 'now()' })
+  joinedAt: Date;
+
+  @ManyToOne(() => Room, (room) => room.users, { onDelete: 'CASCADE' })
+  room: Room;
+
+  @OneToMany(() => Message, (message) => message.user)
   messages: Message[];
 }

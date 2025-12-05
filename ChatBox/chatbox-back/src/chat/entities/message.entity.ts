@@ -1,5 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  JoinColumn,
+} from 'typeorm';
 import { User } from './user.entity';
+import { ChatSession } from './chat-session.entity';
 
 @Entity('messages')
 export class Message {
@@ -7,17 +15,27 @@ export class Message {
   id: number;
 
   @Column({ type: 'text', nullable: true })
-  content: string | null; 
+  content: string | null;
 
   @Column({ type: 'text', nullable: true })
-  gifUrl: string | null; 
+  gifUrl: string | null;
 
+  // when user deleted => user_id set to NULL, message stays
   @ManyToOne(() => User, (user) => user.messages, {
     eager: true,
-    onDelete: 'CASCADE',
+    nullable: true,
+    onDelete: 'SET NULL',
   })
-  user: User;
+  @JoinColumn({ name: 'user_id' })
+  user: User | null;
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
+
+  // when session deleted => message deleted
+  @ManyToOne(() => ChatSession, (session) => session.messages, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'chat_session_id' })
+  chatSession: ChatSession;
 }

@@ -20,11 +20,10 @@ export class ChatService {
     return user;
   }
 
-  async getAllUsers(): Promise<User[]> {
-    return this.userRepo.find();
+  async findUserById(userId: number): Promise<User | null> {
+    return this.userRepo.findOne({ where: { id: userId } });
   }
 
-  // Création d'un message en instanciant la classe directement
   async saveMessage(
     user: User,
     content?: string,
@@ -37,10 +36,7 @@ export class ChatService {
     return this.messageRepo.save(message);
   }
 
-  // Retourne l'historique formaté
-  async getAllMessages(): Promise<
-    { username: string; message?: string; gifUrl?: string; createdAt: Date }[]
-  > {
+  async getAllMessages() {
     const messages = await this.messageRepo.find({
       relations: ['user'],
       order: { createdAt: 'ASC' },
@@ -52,11 +48,5 @@ export class ChatService {
       gifUrl: m.gifUrl ?? undefined,
       createdAt: m.createdAt,
     }));
-  }
-
-  // --- NOUVELLE MÉTHODE : Supprimer tous les messages ---
-  async deleteAllMessages(): Promise<void> {
-    // .clear() est efficace pour vider une table entière
-    await this.messageRepo.clear();
   }
 }

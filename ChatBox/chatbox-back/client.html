@@ -5,182 +5,35 @@
     <title>💬 Chat temps réel</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        background: #f0f2f5;
-        margin: 0;
-        padding: 20px;
-      }
-      .container {
-        max-width: 800px;
-        margin: 0 auto;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        overflow: hidden;
-      }
-      .header {
-        background: #2c5aa0;
-        color: white;
-        padding: 15px 20px;
-        text-align: center;
-      }
-      .header h1 {
-        margin: 0;
-        font-size: 1.5em;
-      }
-      .user-info {
-        background: #e3f2fd;
-        padding: 10px 20px;
-        font-weight: bold;
-        color: #2c5aa0;
-      }
-      #messages {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-        height: 400px;
-        overflow-y: auto;
-        background: #fafafa;
-      }
-      #messages li {
-        margin: 8px;
-        padding: 10px 15px;
-        border-radius: 8px;
-        word-wrap: break-word;
-        animation: fadeIn 0.3s ease-in;
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(5px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .user-msg {
-        background: white;
-        border-left: 4px solid #2c5aa0;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      }
-      .system-msg {
-        background: #fff3e0;
-        font-style: italic;
-        text-align: center;
-        color: #666;
-        border-left: 4px solid #ff9800;
-      }
-      .message-username {
-        font-weight: bold;
-        color: #2c5aa0;
-        margin-bottom: 3px;
-      }
-      .message-content {
-        margin: 5px 0;
-      }
-      .message-time {
-        font-size: 0.8em;
-        color: #888;
-        text-align: right;
-      }
-      .input-area {
-        padding: 15px 20px;
-        background: white;
-        border-top: 1px solid #eee;
-      }
-      .input-group {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-      input {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        font-size: 14px;
-      }
-      input:focus {
-        outline: none;
-        border-color: #2c5aa0;
-      }
-      button {
-        padding: 10px 20px;
-        background: #2c5aa0;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 14px;
-      }
-      button:hover {
-        background: #1e3d6f;
-      }
-      button:disabled {
-        background: #ccc;
-        cursor: not-allowed;
-      }
-      #typing-indicator {
-        height: 20px;
-        padding: 0 20px;
-        font-size: 0.9em;
-        color: #666;
-        font-style: italic;
-      }
-      .connection-status {
-        padding: 8px 20px;
-        text-align: center;
-        font-size: 0.9em;
-      }
-      .connected {
-        background: #e8f5e8;
-        color: #2e7d32;
-      }
-      .disconnected {
-        background: #ffebee;
-        color: #c62828;
-      }
-      .gif-preview {
-        max-width: 150px;
-        max-height: 150px;
-        border-radius: 5px;
-        margin-top: 5px;
-      }
+      body { font-family: Arial; background: #f0f2f5; margin: 0; padding: 20px; }
+      .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; }
+      .header { background: #2c5aa0; color: white; padding: 15px; text-align: center; }
+      #messages { list-style: none; padding: 0; margin: 0; height: 400px; overflow-y: auto; background: #fafafa; }
+      #messages li { margin: 8px; padding: 10px; border-radius: 8px; }
+      .user-msg { background: white; border-left: 4px solid #2c5aa0; }
+      .input-area { padding: 15px; background: white; border-top: 1px solid #eee; }
+      .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+      input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+      button { padding: 10px 20px; background: #2c5aa0; color: white; border: none; border-radius: 5px; cursor: pointer; }
+      button:disabled { background: #ccc; cursor: not-allowed; }
+      #typing-indicator { padding: 0 15px; color: #666; font-style: italic; }
     </style>
   </head>
   <body>
     <div class="container">
-      <div class="header">
-        <h1>💬 Chat Temps Réel</h1>
+      <div class="header"><h1>💬 Chat</h1></div>
+      <div id="user-info" style="display: none; padding: 10px; background: #e3f2fd;">
+        Connecté : <span id="current-username"></span>
       </div>
-
-      <div id="connection-status" class="connection-status disconnected">
-        🔄 Connexion en cours...
-      </div>
-
-      <div id="user-info" class="user-info" style="display: none;">
-        👤 Connecté en tant que : <span id="current-username"></span>
-      </div>
-
       <ul id="messages"></ul>
-      
       <div id="typing-indicator"></div>
-
       <div class="input-area">
         <div class="input-group">
-          <input 
-            id="msg" 
-            placeholder="Tapez votre message..." 
-            disabled
-            onkeydown="handleTyping(true)" 
-            onkeyup="handleTyping(false)"
-            onkeypress="handleKeyPress(event)"
-          />
+          <input id="msg" placeholder="Votre message..." disabled />
           <button id="send-btn" onclick="sendMessage()" disabled>Envoyer</button>
         </div>
-        
         <div class="input-group">
-          <input 
-            id="gifUrl" 
-            placeholder="URL d'un GIF (optionnel)" 
-            disabled
-          />
+          <input id="gifUrl" placeholder="URL GIF (optionnel)" disabled />
           <button id="gif-btn" onclick="sendGif()" disabled>Envoyer GIF</button>
         </div>
       </div>
@@ -188,253 +41,120 @@
 
     <script>
       const socket = io("http://localhost:3001");
-      const messagesList = document.getElementById("messages");
-      const connectionStatus = document.getElementById("connection-status");
-      const userInfo = document.getElementById("user-info");
-      const currentUsernameSpan = document.getElementById("current-username");
-      const typingIndicator = document.getElementById("typing-indicator");
-      const messageInput = document.getElementById("msg");
-      const gifInput = document.getElementById("gifUrl");
-      const sendBtn = document.getElementById("send-btn");
-      const gifBtn = document.getElementById("gif-btn");
-
-      let typingUsers = new Set();
-      let typingTimeout;
-      let isTyping = false;
       let currentUsername = '';
+      let typingUsers = new Set();
 
-      // ------------------------------------------------------------------
-      // --- Gestion de la connexion ---
-      // ------------------------------------------------------------------
-
-      socket.on("connect", () => {
-        console.log("✅ Connecté au serveur");
-        connectionStatus.textContent = "✅ Connecté au chat";
-        connectionStatus.className = "connection-status connected";
+      // Récupérer le nom réel depuis l'API /rooms/members
+      async function getRealUserName() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomCode = urlParams.get('roomCode') || localStorage.getItem('roomCode');
+        const memberId = localStorage.getItem('memberId');
         
-        // Activer les champs de saisie
-        messageInput.disabled = false;
-        gifInput.disabled = false;
-        sendBtn.disabled = false;
-        gifBtn.disabled = false;
-        
-        // Focus sur le champ message
-        messageInput.focus();
-      });
-
-      socket.on("connect_error", (err) => {
-        console.error("❌ Erreur de connexion :", err);
-        connectionStatus.textContent = "❌ Erreur de connexion au serveur";
-        connectionStatus.className = "connection-status disconnected";
-        
-        // Désactiver les champs de saisie
-        messageInput.disabled = true;
-        gifInput.disabled = true;
-        sendBtn.disabled = true;
-        gifBtn.disabled = true;
-      });
-
-      socket.on("disconnect", () => {
-        console.log("🔌 Déconnecté du serveur");
-        connectionStatus.textContent = "🔌 Déconnecté - Reconnexion...";
-        connectionStatus.className = "connection-status disconnected";
-        
-        // Désactiver les champs de saisie
-        messageInput.disabled = true;
-        gifInput.disabled = true;
-        sendBtn.disabled = true;
-        gifBtn.disabled = true;
-      });
-
-      // ------------------------------------------------------------------
-      // --- Gestion des utilisateurs ---
-      // ------------------------------------------------------------------
-
-      socket.on("identity", (username) => {
-        console.log("👤 Identité reçue:", username);
-        currentUsername = username;
-        currentUsernameSpan.textContent = username;
-        userInfo.style.display = 'block';
-        
-        // SUPPRIMÉ : La notification de bienvenue
-        // displaySystemMessage(`Bienvenue ${username} ! Vous pouvez commencer à chatter.`);
-      });
-
-      // ------------------------------------------------------------------
-      // --- Gestion des messages ---
-      // ------------------------------------------------------------------
-
-      socket.on("loadMessages", (messages) => {
-        console.log("📨 Historique chargé:", messages.length, "messages");
-        messagesList.innerHTML = "";
-        
-        if (messages.length === 0) {
-          displaySystemMessage("Aucun message dans l'historique. Soyez le premier à chatter !");
-        } else {
-          messages.forEach(displayMessage);
+        if (roomCode && memberId) {
+          try {
+            const response = await fetch(`/rooms/members?codeRoom=${roomCode}`);
+            const data = await response.json();
+            const member = data.members.find(m => m.id == memberId);
+            return member ? member.name : null;
+          } catch (error) {
+            return null;
+          }
         }
+        return null;
+      }
+
+      // Connexion
+      socket.on("connect", async () => {
+        // Récupérer le vrai nom
+        const realName = await getRealUserName();
+        const savedUserId = localStorage.getItem('chatUserId');
         
+        // Envoyer le nom au serveur
+        socket.emit('setUsername', {
+          username: realName || `User_${socket.id.substring(0, 4)}`,
+          userId: savedUserId ? parseInt(savedUserId) : undefined
+        });
+        
+        // Activer les champs
+        document.getElementById('msg').disabled = false;
+        document.getElementById('gifUrl').disabled = false;
+        document.getElementById('send-btn').disabled = false;
+        document.getElementById('gif-btn').disabled = false;
+        document.getElementById('msg').focus();
+      });
+
+      // Recevoir l'identité
+      socket.on("identity", (data) => {
+        currentUsername = data.username;
+        document.getElementById('current-username').textContent = data.username;
+        document.getElementById('user-info').style.display = 'block';
+        localStorage.setItem('chatUserId', data.userId);
+        localStorage.setItem('chatUsername', data.username);
+      });
+
+      // Recevoir les messages
+      socket.on("loadMessages", (messages) => {
+        const messagesList = document.getElementById('messages');
+        messagesList.innerHTML = '';
+        messages.forEach(displayMessage);
         scrollToBottom();
       });
 
-      socket.on("receiveMessage", (data) => {
-        console.log("📩 Message reçu:", data);
-        displayMessage(data);
-      });
+      socket.on("receiveMessage", displayMessage);
 
       function displayMessage(data) {
         const li = document.createElement("li");
         li.className = 'user-msg';
-        
-        const time = new Date(data.createdAt).toLocaleTimeString('fr-FR', {
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-        
-        let content = `
-          <div class="message-username">${data.username}</div>
-          <div class="message-content">
+        li.innerHTML = `
+          <strong>${data.username}</strong><br>
+          ${data.message || ''}
+          ${data.gifUrl ? `<br><img src="${data.gifUrl}" style="max-width:150px; margin-top:5px;">` : ''}
+          <div style="text-align:right; color:#888; font-size:0.8em">
+            ${new Date(data.createdAt).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}
+          </div>
         `;
-        
-        if (data.message) {
-          content += data.message;
-        }
-        
-        content += `</div><div class="message-time">${time}</div>`;
-        
-        li.innerHTML = content;
-
-        if (data.gifUrl) {
-          const gif = document.createElement("img");
-          gif.src = data.gifUrl;
-          gif.alt = "GIF";
-          gif.className = "gif-preview";
-          gif.onerror = function() {
-            this.style.display = 'none';
-            const errorSpan = document.createElement("span");
-            errorSpan.textContent = "❌ GIF non chargé";
-            errorSpan.style.color = '#ff4444';
-            li.querySelector('.message-content').appendChild(errorSpan);
-          };
-          
-          li.querySelector('.message-content').appendChild(gif);
-        }
-
-        messagesList.appendChild(li);
+        document.getElementById('messages').appendChild(li);
         scrollToBottom();
       }
 
-      function displaySystemMessage(text) {
-        const li = document.createElement("li");
-        li.className = 'system-msg';
-        li.textContent = text;
-        messagesList.appendChild(li);
-        scrollToBottom();
-      }
-
-      // ------------------------------------------------------------------
-      // --- Indicateur de frappe ---
-      // ------------------------------------------------------------------
-
-      function handleTyping(typing) {
-        const content = messageInput.value;
-        
-        if (content.length > 0 && !isTyping) {
-          socket.emit('typing', true);
-          isTyping = true;
-        }
-        
-        if (content.length === 0 && isTyping) {
-          clearTimeout(typingTimeout);
-          socket.emit('typing', false);
-          isTyping = false;
-        }
-        
-        clearTimeout(typingTimeout);
-        if (isTyping) {
-          typingTimeout = setTimeout(() => {}, 5000);
-        }
-      }
-
-      function handleKeyPress(event) {
-        if (event.key === 'Enter') {
-          sendMessage();
-        }
-      }
-
+      // Indicateur de frappe
       socket.on("userTyping", (data) => {
-        if (data.isTyping) {
-          typingUsers.add(data.username);
-        } else {
-          typingUsers.delete(data.username);
-        }
-        updateTypingIndicator();
+        if (data.isTyping) typingUsers.add(data.username);
+        else typingUsers.delete(data.username);
+        
+        const usersArray = Array.from(typingUsers);
+        const indicator = document.getElementById('typing-indicator');
+        
+        if (usersArray.length === 0) indicator.textContent = '';
+        else if (usersArray.length === 1) indicator.textContent = `${usersArray[0]} écrit...`;
+        else if (usersArray.length === 2) indicator.textContent = `${usersArray.join(' et ')} écrivent...`;
+        else indicator.textContent = 'Plusieurs personnes écrivent...';
       });
 
-      function updateTypingIndicator() {
-        const usersArray = Array.from(typingUsers);
-        
-        if (usersArray.length === 0) {
-          typingIndicator.textContent = '';
-        } else if (usersArray.length === 1) {
-          typingIndicator.textContent = `${usersArray[0]} est en train d'écrire...`;
-        } else if (usersArray.length === 2) {
-          typingIndicator.textContent = `${usersArray.join(' et ')} sont en train d'écrire...`;
-        } else {
-          typingIndicator.textContent = 'Plusieurs personnes écrivent...';
-        }
-        
-        scrollToBottom();
-      }
-
-      // ------------------------------------------------------------------
-      // --- Envoi de messages ---
-      // ------------------------------------------------------------------
-
+      // Envoi de messages
       function sendMessage() {
-        const message = messageInput.value.trim();
+        const message = document.getElementById('msg').value.trim();
         if (!message) return;
-        
-        clearTimeout(typingTimeout);
-        if (isTyping) {
-          socket.emit('typing', false);
-          isTyping = false;
-        }
-        
         socket.emit("sendMessage", { message });
-        messageInput.value = "";
-        messageInput.focus();
+        document.getElementById('msg').value = "";
       }
 
       function sendGif() {
-        const gifUrl = gifInput.value.trim();
-        if (!gifUrl) {
-          alert("Veuillez entrer une URL de GIF");
-          return;
-        }
-
-        clearTimeout(typingTimeout);
-        if (isTyping) {
-          socket.emit('typing', false);
-          isTyping = false;
-        }
-
+        const gifUrl = document.getElementById('gifUrl').value.trim();
+        if (!gifUrl) return alert("Entrez une URL de GIF");
         socket.emit("sendMessage", { gifUrl });
-        gifInput.value = "";
-        messageInput.focus();
+        document.getElementById('gifUrl').value = "";
       }
 
-      // ------------------------------------------------------------------
-      // --- Utilitaires ---
-      // ------------------------------------------------------------------
+      // Touche Entrée
+      document.getElementById('msg').onkeypress = (e) => {
+        if (e.key === 'Enter') sendMessage();
+      };
 
       function scrollToBottom() {
+        const messagesList = document.getElementById('messages');
         messagesList.scrollTop = messagesList.scrollHeight;
       }
-
-      
-      const observer = new MutationObserver(scrollToBottom);
-      observer.observe(messagesList, { childList: true });
     </script>
   </body>
 </html>

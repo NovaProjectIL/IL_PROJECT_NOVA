@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChatModule } from './chat/chat.module';
 import { User } from './chat/entities/user.entity';
 import { Message } from './chat/entities/message.entity';
+import { Room } from './chat/entities/room.entity'; // ← AJOUT
+import { ChatSession } from './chat/entities/chat-session.entity'; // ← AJOUT
 
 @Module({
   imports: [
@@ -14,7 +16,7 @@ import { Message } from './chat/entities/message.entity';
       password: 'JcxIH9', 
       database: 'etd', 
       schema: 'uapv2400036', 
-      entities: [User, Message],
+      entities: [User, Message, Room, ChatSession], 
       synchronize: true, 
       autoLoadEntities: true,
       logging: true,
