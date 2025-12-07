@@ -39,10 +39,16 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
     socketRef.current = s;
 
     s.on("connect", () => {
-      s.emit("setUser", { username: pseudo });
+      // ✅ CORRECTION CRITIQUE : Aligne l'événement sur le nouveau Gateway
+      s.emit("setUsername", { username: pseudo });
     });
 
-    s.on("identity", (name: string) => setCurrentUsername(name));
+    s.on("identity", (data: any) => {
+        // Le backend renvoie { username: string, userId: number }
+        const name = typeof data === 'object' ? data.username : data;
+        setCurrentUsername(name);
+    });
+
     s.on("userSet", (data: { username: string }) => setCurrentUsername(data.username));
 
     s.on("loadMessages", (msgs: Message[]) => {
@@ -116,20 +122,23 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
 
   return (
     <>
-   
+      {/* HEADER ÉPURÉ : Juste le titre "Chat" */}
       <div className="chat-header-rave">
-        <h4 className="m-0 fw-bold text-white" style={{ letterSpacing: '1px' }}>Live Chat</h4>
+        <h4 className="m-0 fw-bold text-white" style={{ letterSpacing: '1px', fontSize: '1.4rem' }}>
+          Chat
+        </h4>
         
-        <button onClick={onClose} className="btn btn-icon-rave fs-4" title="Masquer">
-          <i className="bi bi-arrow-right-circle"></i>
+        {/* Icône de fermeture simple */}
+        <button onClick={onClose} className="btn btn-icon-rave fs-4" title="Fermer">
+          <i className="bi bi-x-lg"></i>
         </button>
       </div>
 
       <div className="chat-body-rave" ref={listRef}>
         {messages.length === 0 && (
           <div className="h-100 d-flex flex-column justify-content-center align-items-center text-white-50 opacity-50">
-            <i className="bi bi-chat-dots fs-1 mb-3" style={{fontSize: '4rem'}}></i>
-            <p className="fw-light ls-1">Aucun message</p>
+            <i className="bi bi-chat-dots fs-1 mb-3" style={{fontSize: '3rem'}}></i>
+            <p className="fw-light ls-1 text-uppercase small">La conversation commence ici</p>
           </div>
         )}
 
@@ -151,7 +160,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
                       src={m.gifUrl} 
                       alt="GIF" 
                       className="gif-image"
-                      style={{maxHeight: '200px', maxWidth: '100%'}} 
+                      style={{maxHeight: '180px', maxWidth: '100%'}} 
                     />
                 </div>
               )}
@@ -261,15 +270,13 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
                 onFocus={() => setPickerMode('none')}
             />
             
-            {/* NOUVELLE ICONE D'ENVOI PLUS JOLIE */}
+            {/* NOUVELLE ICONE D'ENVOI : Flèche simple et pleine */}
             <button 
                 className="btn-send-rave"
                 onClick={sendMessage}
                 disabled={!text.trim()}
             >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                </svg>
+                <i className="bi bi-arrow-up-circle-fill fs-6"></i>
             </button>
         </div>
       </div>
