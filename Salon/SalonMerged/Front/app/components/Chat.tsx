@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { io, Socket } from "socket.io-client";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import { GiphyFetch } from "@giphy/js-fetch-api";
 import { Grid } from "@giphy/react-components";
@@ -18,64 +17,52 @@ type ChatProps = {
   onClose: () => void;
   pseudo: string;
   onMessageReceived?: () => void;
+  socket: any;      // Reçoit le socket de la page
+  roomCode: string; // Reçoit le code de la room
 };
 
-const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1";
+const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1"; // Ta clé
 const gf = new GiphyFetch(giphyApiKey);
 
-export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) {
+export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomCode }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [pickerMode, setPickerMode] = useState<'none' | 'emoji' | 'gif'>('none');
-  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [gifSearch, setGifSearch] = useState("");
 
-  const socketRef = useRef<Socket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // ⚠️ Assure-toi que le port est bon (3001 ou 4000)
-    const s = io("http://localhost:3001", { transports: ["websocket"] });
-    socketRef.current = s;
+    if (!socket) return;
 
-    s.on("connect", () => {
-      s.emit("setUsername", { username: pseudo });
-    });
-
-    s.on("identity", (data: any) => {
-        const name = typeof data === 'object' ? data.username : data;
-        setCurrentUsername(name);
-    });
-
-    s.on("userSet", (data: { username: string }) => setCurrentUsername(data.username));
-
-    s.on("loadMessages", (msgs: Message[]) => {
-      setMessages(msgs);
-      scrollToBottom();
-    });
-
-    s.on("receiveMessage", (msg: Message) => {
+    const handleReceiveMessage = (msg: Message) => {
       setMessages((prev) => [...prev, msg]);
       setTypingUsers((prev) => prev.filter((name) => name !== msg.username));
       if (onMessageReceived) onMessageReceived();
       scrollToBottom();
-    });
+    };
 
-    s.on("userTyping", (data: { username: string; isTyping: boolean }) => {
+    const handleUserTyping = (data: { username: string; isTyping: boolean }) => {
       if (data.isTyping) {
         setTypingUsers((prev) => [...new Set([...prev, data.username])]);
       } else {
         setTypingUsers((prev) => prev.filter((name) => name !== data.username));
       }
       scrollToBottom();
-    });
-
-    return () => {
-      s.disconnect();
     };
-  }, [pseudo, onMessageReceived]);
+
+    // Écoute les événements
+    socket.on("receiveMessage", handleReceiveMessage);
+    socket.on("userTyping", handleUserTyping);
+
+    // Nettoyage des écouteurs uniquement (pas de disconnect ici)
+    return () => {
+      socket.off("receiveMessage", handleReceiveMessage);
+      socket.off("userTyping", handleUserTyping);
+    };
+  }, [socket, onMessageReceived, roomCode]);
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -87,23 +74,36 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
 
   const sendMessage = () => {
     if (!text.trim()) return;
-    socketRef.current?.emit("sendMessage", { message: text.trim() });
-    socketRef.current?.emit("typing", false);
+    
+    // Envoi au serveur avec le code de la room
+    socket?.emit("sendMessage", { 
+        roomCode, 
+        message: text.trim(), 
+        username: pseudo 
+    });
+    
+    socket?.emit("typing", { roomCode, isTyping: false, username: pseudo });
     setText("");
     setPickerMode('none');
   };
 
   const sendGif = (gifUrl: string) => {
-    socketRef.current?.emit("sendMessage", { gifUrl: gifUrl });
+    socket?.emit("sendMessage", { 
+        roomCode, 
+        gifUrl: gifUrl, 
+        username: pseudo 
+    });
     setPickerMode('none');
   };
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setText(e.target.value);
-    socketRef.current?.emit("typing", true);
+    
+    socket?.emit("typing", { roomCode, isTyping: true, username: pseudo });
+    
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socketRef.current?.emit("typing", false);
+      socket?.emit("typing", { roomCode, isTyping: false, username: pseudo });
     }, 2000);
   };
 
@@ -120,7 +120,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
 
   return (
     <>
-      {/* Header */}
+      {/* Header avec la classe CSS du fichier globals.css */}
       <div className="chat-header-rave">
         <h4 className="m-0 fw-bold text-white" style={{ letterSpacing: '1px', fontSize: '1.2rem' }}>
           CHAT ROOM
@@ -128,7 +128,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
         <button 
             onClick={onClose} 
             className="btn-icon-rave" 
-            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -137,7 +137,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
         </button>
       </div>
 
-      {/* Messages Zone */}
+      {/* Zone des messages */}
       <div className="chat-body-rave" ref={listRef}>
         {messages.length === 0 && (
           <div className="h-100 d-flex flex-column justify-content-center align-items-center text-white-50 opacity-50">
@@ -147,7 +147,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
         )}
 
         {messages.map((m, i) => {
-          const isMe = currentUsername && m.username === currentUsername;
+          const isMe = m.username === pseudo;
           return (
             <div key={i} className={`chat-message-row ${isMe ? "me" : "other"}`}>
               {!isMe && <span className="username-label">{m.username}</span>}
@@ -182,15 +182,9 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
         {pickerMode !== 'none' && (
             <div className="picker-overlay">
                 <div className="picker-tabs">
-                    <button className={`picker-tab ${pickerMode === 'emoji' ? 'active' : ''}`} onClick={() => setPickerMode('emoji')}>
-                       Emojis
-                    </button>
-                    <button className={`picker-tab ${pickerMode === 'gif' ? 'active' : ''}`} onClick={() => setPickerMode('gif')}>
-                       GIFs
-                    </button>
-                    <button className="btn-close-custom" onClick={() => setPickerMode('none')}>
-                        X
-                    </button>
+                    <button className={`picker-tab ${pickerMode === 'emoji' ? 'active' : ''}`} onClick={() => setPickerMode('emoji')}>Emojis</button>
+                    <button className={`picker-tab ${pickerMode === 'gif' ? 'active' : ''}`} onClick={() => setPickerMode('gif')}>GIFs</button>
+                    <button className="btn-close-custom" onClick={() => setPickerMode('none')}>X</button>
                 </div>
                 
                 <div className="flex-grow-1 position-relative overflow-hidden h-100">
@@ -227,18 +221,14 @@ export default function Chat({ onClose, pseudo, onMessageReceived }: ChatProps) 
         )}
 
         <div className="input-group-rave">
-            <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}>
-                +
-            </button>
+            <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}>+</button>
             <input
                 type="text" className="form-control-rave" placeholder="Envoyer un message..."
                 value={text} onChange={handleTyping}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 onFocus={() => setPickerMode('none')}
             />
-            <button className="btn-send-rave" onClick={sendMessage} disabled={!text.trim()}>
-                ➜
-            </button>
+            <button className="btn-send-rave" onClick={sendMessage} disabled={!text.trim()}>➜</button>
         </div>
       </div>
     </>

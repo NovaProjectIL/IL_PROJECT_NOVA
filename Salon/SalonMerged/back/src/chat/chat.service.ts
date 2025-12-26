@@ -15,11 +15,12 @@ export class ChatService {
     @InjectRepository(ChatSession) private chatSessionRepo: Repository<ChatSession>,
   ) {}
 
-  //GESTION UTILISATEUR
+  // GESTION UTILISATEUR
   async getOrCreateUser(name: string): Promise<User> {
     let user = await this.userRepo.findOne({ where: { name } });
     if (!user) {
-      user = this.userRepo.create({ name });
+      // On crée un user temporaire s'il n'existe pas
+      user = this.userRepo.create({ name, role: 'MEMBER' }); 
       await this.userRepo.save(user);
     }
     return user;
@@ -37,25 +38,28 @@ export class ChatService {
     codeRoom: string,
   ): Promise<Message> {
     
+    // 1. Trouver la room
     const room = await this.roomRepo.findOne({ 
       where: { code: codeRoom },
       relations: ['chatSession'] 
     });
 
     if (!room) {
-      throw new NotFoundException(`Room avec le code ${codeRoom} introuvable.`);
+      // Fallback : Si la room est introuvable, on évite le crash mais on log l'erreur
+      console.error(`Room ${codeRoom} introuvable pour le chat`);
+      throw new NotFoundException('Room introuvable');
     }
 
+    // 2. Trouver ou Créer la session de chat
     let session = room.chatSession;
-    
     if (!session) {
       session = this.chatSessionRepo.create({ room: room });
       await this.chatSessionRepo.save(session);
     }
 
- 
+    // 3. Créer le message
     const message = this.messageRepo.create({
-      content: content ?? null,
+      content: content ?? null, // Accepte null si c'est un GIF
       gifUrl: gifUrl ?? null,
       user: user,
       chatSession: session,
@@ -64,15 +68,10 @@ export class ChatService {
     return this.messageRepo.save(message);
   }
 
-  // RÉCUPÉRATION HISTORIQUE
+  // HISTORIQUE (Optionnel pour l'instant)
   async getMessagesByRoom(codeRoom: string) {
-
     const messages = await this.messageRepo.find({
-      where: {
-        chatSession: {
-          room: { code: codeRoom }
-        }
-      },
+      where: { chatSession: { room: { code: codeRoom } } },
       relations: ['user'],
       order: { createdAt: 'ASC' },
     });
@@ -83,10 +82,5 @@ export class ChatService {
       gifUrl: m.gifUrl ?? undefined,
       createdAt: m.createdAt,
     }));
-  }
-
-  
-  async getAllMessages() {
-    return [];
   }
 }

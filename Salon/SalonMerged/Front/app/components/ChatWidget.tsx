@@ -3,13 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import Chat from "./Chat";
 
-// 1. On définit les props acceptées par le Widget
 interface ChatWidgetProps {
-  pseudo?: string; // Optionnel : si tu ne le donnes pas, ce sera "Invité"
+  pseudo?: string;
+  socket: any;      // Reçu de page.tsx
+  roomCode: string; // Reçu de page.tsx
 }
 
-// 2. On récupère le pseudo via les props (avec "Invité" comme valeur par défaut)
-export default function ChatWidget({ pseudo = "Invité" }: ChatWidgetProps) {
+export default function ChatWidget({ pseudo = "Invité", socket, roomCode }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   
@@ -17,6 +17,7 @@ export default function ChatWidget({ pseudo = "Invité" }: ChatWidgetProps) {
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
+  // Gestion du redimensionnement de la sidebar
   useEffect(() => {
     const stopResizing = () => setIsResizing(false);
     const resize = (e: MouseEvent) => {
@@ -32,7 +33,6 @@ export default function ChatWidget({ pseudo = "Invité" }: ChatWidgetProps) {
       window.addEventListener("mousemove", resize);
       window.addEventListener("mouseup", stopResizing);
     }
-
     return () => {
       window.removeEventListener("mousemove", resize);
       window.removeEventListener("mouseup", stopResizing);
@@ -45,8 +45,13 @@ export default function ChatWidget({ pseudo = "Invité" }: ChatWidgetProps) {
     }
   };
 
+  useEffect(() => {
+    if (isOpen) setUnreadCount(0);
+  }, [isOpen]);
+
   return (
     <>
+      {/* Bouton pour ouvrir (Trigger) */}
       {!isOpen && (
         <div 
           className="chat-trigger-side"
@@ -62,6 +67,7 @@ export default function ChatWidget({ pseudo = "Invité" }: ChatWidgetProps) {
         </div>
       )}
 
+      {/* Container Latéral (Sidebar) */}
       <div 
         ref={sidebarRef}
         className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`}
@@ -72,11 +78,12 @@ export default function ChatWidget({ pseudo = "Invité" }: ChatWidgetProps) {
         </div>
 
         <div className="chat-panel">
-          {/* 3. On passe le pseudo dynamique au composant Chat */}
           <Chat 
             onClose={() => setIsOpen(false)} 
             pseudo={pseudo} 
             onMessageReceived={handleMessageReceived}
+            socket={socket}
+            roomCode={roomCode}
           />
         </div>
       </div>
