@@ -5,11 +5,12 @@ import Chat from "./Chat";
 
 interface ChatWidgetProps {
   pseudo?: string;
-  socket: any;      // Reçu de page.tsx
-  roomCode: string; // Reçu de page.tsx
+  userId?: number;  // IMPORTANT
+  socket: any;      
+  roomCode: string; // IMPORTANT
 }
 
-export default function ChatWidget({ pseudo = "Invité", socket, roomCode }: ChatWidgetProps) {
+export default function ChatWidget({ pseudo = "Invité", userId, socket, roomCode }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   
@@ -17,7 +18,6 @@ export default function ChatWidget({ pseudo = "Invité", socket, roomCode }: Cha
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  // Gestion du redimensionnement de la sidebar
   useEffect(() => {
     const stopResizing = () => setIsResizing(false);
     const resize = (e: MouseEvent) => {
@@ -28,7 +28,6 @@ export default function ChatWidget({ pseudo = "Invité", socket, roomCode }: Cha
         }
       }
     };
-
     if (isResizing) {
       window.addEventListener("mousemove", resize);
       window.addEventListener("mouseup", stopResizing);
@@ -49,30 +48,19 @@ export default function ChatWidget({ pseudo = "Invité", socket, roomCode }: Cha
     if (isOpen) setUnreadCount(0);
   }, [isOpen]);
 
+  // Si on n'a pas de code de room, on n'affiche rien pour éviter les erreurs
+  if (!roomCode) return null;
+
   return (
     <>
-      {/* Bouton pour ouvrir (Trigger) */}
       {!isOpen && (
-        <div 
-          className="chat-trigger-side"
-          onClick={() => setIsOpen(true)}
-          title="Ouvrir le chat"
-        >
+        <div className="chat-trigger-side" onClick={() => setIsOpen(true)} title="Ouvrir le chat">
           <span className="chat-trigger-text">Chat</span>
-          {unreadCount > 0 && (
-            <span className="badge-notification animate-jump">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
-          )}
+          {unreadCount > 0 && <span className="badge-notification animate-jump">{unreadCount > 9 ? "9+" : unreadCount}</span>}
         </div>
       )}
 
-      {/* Container Latéral (Sidebar) */}
-      <div 
-        ref={sidebarRef}
-        className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`}
-        style={{ width: `${sidebarWidth}px` }}
-      >
+      <div ref={sidebarRef} className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`} style={{ width: `${sidebarWidth}px` }}>
         <div className="resize-handle" onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}>
             <div className="resize-line"></div>
         </div>
@@ -81,9 +69,10 @@ export default function ChatWidget({ pseudo = "Invité", socket, roomCode }: Cha
           <Chat 
             onClose={() => setIsOpen(false)} 
             pseudo={pseudo} 
+            userId={userId} // ON TRANSMET L'ID
             onMessageReceived={handleMessageReceived}
             socket={socket}
-            roomCode={roomCode}
+            roomCode={roomCode} // ON TRANSMET LE CODE
           />
         </div>
       </div>

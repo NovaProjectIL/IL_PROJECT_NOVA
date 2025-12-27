@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+// Import de TES entités
 import { User } from '../entities/user.entity';
-import { Message } from '../entities/message.entity'; 
-import { Room } from '../entities/room.entity'; 
-import { ChatSession } from '../entities/chat-session.entity'; 
+import { Message } from '../entities/message.entity';
+import { Room } from '../entities/room.entity';
+import { ChatSession } from '../entities/chat-session.entity';
 
 @Injectable()
 export class ChatService {
@@ -15,10 +16,11 @@ export class ChatService {
     @InjectRepository(ChatSession) private chatSessionRepo: Repository<ChatSession>,
   ) {}
 
-  //GESTION UTILISATEUR
+  // --- GESTION UTILISATEUR ---
   async getOrCreateUser(name: string): Promise<User> {
     let user = await this.userRepo.findOne({ where: { name } });
     if (!user) {
+      // Par défaut role = MEMBER selon ton entité
       user = this.userRepo.create({ name });
       await this.userRepo.save(user);
     }
@@ -29,14 +31,15 @@ export class ChatService {
     return this.userRepo.findOne({ where: { id: userId } });
   }
 
-  // SAUVEGARDE DU MESSAGE
+  // --- SAUVEGARDE DU MESSAGE (Le cœur du système) ---
   async saveMessage(
     user: User,
     content: string | undefined,
     gifUrl: string | undefined,
-    codeRoom: string,
+    codeRoom: string, // On reçoit le code (ex: GQANZS)
   ): Promise<Message> {
     
+    // 1. Trouver la Room via son code (colonne 'code' dans Room entity)
     const room = await this.roomRepo.findOne({ 
       where: { code: codeRoom },
       relations: ['chatSession'] 
@@ -46,14 +49,15 @@ export class ChatService {
       throw new NotFoundException(`Room avec le code ${codeRoom} introuvable.`);
     }
 
+    // 2. Vérifier ou créer la ChatSession (Relation OneToOne dans Room)
     let session = room.chatSession;
-    
     if (!session) {
       session = this.chatSessionRepo.create({ room: room });
       await this.chatSessionRepo.save(session);
     }
 
- 
+    // 3. Créer le message lié à la SESSION et à l'USER
+    // Ton entité Message a bien 'user' et 'chatSession'
     const message = this.messageRepo.create({
       content: content ?? null,
       gifUrl: gifUrl ?? null,
@@ -64,29 +68,24 @@ export class ChatService {
     return this.messageRepo.save(message);
   }
 
-  // RÉCUPÉRATION HISTORIQUE
+  // --- RÉCUPÉRATION HISTORIQUE ---
   async getMessagesByRoom(codeRoom: string) {
-
+    // On cherche les messages liés à la session de la room donnée
     const messages = await this.messageRepo.find({
       where: {
         chatSession: {
-          room: { code: codeRoom }
+          room: { code: codeRoom } // Jointure automatique TypeORM
         }
       },
-      relations: ['user'],
+      relations: ['user'], // Pour avoir le pseudo de l'auteur
       order: { createdAt: 'ASC' },
     });
 
     return messages.map((m) => ({
-      username: m.user?.name ?? 'Inconnu',
+      username: m.user?.name ?? 'Inconnu', // Gestion du user nullable (SET NULL)
       message: m.content ?? undefined,
       gifUrl: m.gifUrl ?? undefined,
       createdAt: m.createdAt,
     }));
-  }
-
-  
-  async getAllMessages() {
-    return [];
   }
 }

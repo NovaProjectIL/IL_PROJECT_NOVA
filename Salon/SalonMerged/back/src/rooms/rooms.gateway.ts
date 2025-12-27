@@ -9,6 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { RoomsService } from './rooms.service';
 import { PlayStatus } from '../entities/playback-state.entity';
+import { ChatModule } from '../chat/chat.module';
 
 @WebSocketGateway({
   cors: {

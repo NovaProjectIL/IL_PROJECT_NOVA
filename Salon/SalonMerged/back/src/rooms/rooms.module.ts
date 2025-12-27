@@ -11,6 +11,7 @@ import { YouTubeVideo } from '../entities/youtube-video.entity';
 import { PlaylistModule } from '../playlist/playlist.module';
 import { ChatSession } from '../entities/chat-session.entity';
 import { RoomsGateway } from './rooms.gateway';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { RoomsGateway } from './rooms.gateway';
       YouTubeVideo,
       ChatSession,
     ]),
-    PlaylistModule,                    
+    PlaylistModule,  
+    ChatModule,                  
   ],
   controllers: [RoomsController],
   providers: [RoomsService, RoomsGateway],

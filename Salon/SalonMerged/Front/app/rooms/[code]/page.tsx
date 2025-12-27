@@ -30,13 +30,14 @@ type Message = {
 type ChatProps = {
   onClose: () => void;
   pseudo: string;
+  userId?: number; // ✅ Ajouté pour l'identification
   onMessageReceived?: () => void;
   socket: any;
   roomCode: string;
 };
 
 // --- Composant Chat ---
-function Chat({ onClose, pseudo, onMessageReceived, socket, roomCode }: ChatProps) {
+function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [pickerMode, setPickerMode] = useState<'none' | 'emoji' | 'gif'>('none');
@@ -48,6 +49,17 @@ function Chat({ onClose, pseudo, onMessageReceived, socket, roomCode }: ChatProp
 
   useEffect(() => {
     if (!socket) return;
+
+    // ✅ Identification automatique à la connexion (Fix "Utilisateur introuvable")
+    const identifyAndLoad = () => {
+        socket.emit('setUsername', { username: pseudo, userId: userId || 0 });
+        if (roomCode) {
+            socket.emit('requestMessages', { codeRoom: roomCode });
+        }
+    };
+
+    if (socket.connected) identifyAndLoad();
+    socket.on('connect', identifyAndLoad);
 
     const handleReceiveMessage = (msg: Message) => {
       setMessages((prev) => [...prev, msg]);
@@ -65,14 +77,28 @@ function Chat({ onClose, pseudo, onMessageReceived, socket, roomCode }: ChatProp
       scrollToBottom();
     };
 
+    const handleLoadMessages = (histMessages: any[]) => {
+        const formatted = histMessages.map(m => ({
+            username: m.username,
+            message: m.message,
+            gifUrl: m.gifUrl,
+            createdAt: m.createdAt
+        }));
+        setMessages(formatted);
+        scrollToBottom();
+    };
+
     socket.on("receiveMessage", handleReceiveMessage);
+    socket.on("loadMessages", handleLoadMessages);
     socket.on("userTyping", handleUserTyping);
 
     return () => {
+      socket.off("connect", identifyAndLoad);
       socket.off("receiveMessage", handleReceiveMessage);
+      socket.off("loadMessages", handleLoadMessages);
       socket.off("userTyping", handleUserTyping);
     };
-  }, [socket, onMessageReceived, roomCode]);
+  }, [socket, onMessageReceived, roomCode, pseudo, userId]);
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -84,23 +110,44 @@ function Chat({ onClose, pseudo, onMessageReceived, socket, roomCode }: ChatProp
 
   const sendMessage = () => {
     if (!text.trim()) return;
-    socket?.emit("sendMessage", { roomCode, message: text.trim(), username: pseudo });
-    socket?.emit("typing", { roomCode, isTyping: false, username: pseudo });
+    
+    // ✅ CORRECTION CRITIQUE : On envoie 'codeRoom' (attendu par le back) au lieu de 'roomCode'
+    // ✅ AJOUT : On envoie userId et username pour l'auto-réparation
+    socket?.emit("sendMessage", { 
+        codeRoom: roomCode, 
+        message: text.trim(), 
+        username: pseudo,
+        userId: userId
+    });
+    
+    // ✅ Correction ici aussi
+    socket?.emit("typing", { codeRoom: roomCode, isTyping: false, username: pseudo });
+    
     setText("");
     setPickerMode('none');
   };
 
   const sendGif = (gifUrl: string) => {
-    socket?.emit("sendMessage", { roomCode, gifUrl: gifUrl, username: pseudo });
+    // ✅ Correction codeRoom + userId
+    socket?.emit("sendMessage", { 
+        codeRoom: roomCode, 
+        gifUrl: gifUrl, 
+        username: pseudo,
+        userId: userId
+    });
     setPickerMode('none');
   };
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setText(e.target.value);
-    socket?.emit("typing", { roomCode, isTyping: true, username: pseudo });
+    
+    // ✅ Correction codeRoom
+    socket?.emit("typing", { codeRoom: roomCode, isTyping: true, username: pseudo });
+    
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socket?.emit("typing", { roomCode, isTyping: false, username: pseudo });
+      // ✅ Correction codeRoom
+      socket?.emit("typing", { codeRoom: roomCode, isTyping: false, username: pseudo });
     }, 2000);
   };
 
@@ -205,9 +252,10 @@ interface ChatWidgetProps {
   pseudo?: string;
   socket: any;
   roomCode: string;
+  userId?: number; // ✅ Ajouté ici aussi
 }
 
-function ChatWidget({ pseudo = "Invité", socket, roomCode }: ChatWidgetProps) {
+function ChatWidget({ pseudo = "Invité", userId, socket, roomCode }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(420);
@@ -240,6 +288,9 @@ function ChatWidget({ pseudo = "Invité", socket, roomCode }: ChatWidgetProps) {
     if (isOpen) setUnreadCount(0);
   }, [isOpen]);
 
+  // Si on n'a pas de code de room, on n'affiche rien pour éviter les erreurs
+  if (!roomCode) return null;
+
   return (
     <>
       {!isOpen && (
@@ -252,7 +303,14 @@ function ChatWidget({ pseudo = "Invité", socket, roomCode }: ChatWidgetProps) {
       <div ref={sidebarRef} className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`} style={{ width: `${sidebarWidth}px` }}>
         <div className="resize-handle" onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}><div className="resize-line"></div></div>
         <div className="chat-panel">
-          <Chat onClose={() => setIsOpen(false)} pseudo={pseudo} onMessageReceived={handleMessageReceived} socket={socket} roomCode={roomCode} />
+          <Chat 
+            onClose={() => setIsOpen(false)} 
+            pseudo={pseudo} 
+            userId={userId} // ✅ On transmet l'ID au Chat
+            onMessageReceived={handleMessageReceived} 
+            socket={socket} 
+            roomCode={roomCode} 
+          />
         </div>
       </div>
     </>
@@ -1173,6 +1231,7 @@ export default function RoomPage() {
         socket={socketRef.current} 
         roomCode={code} 
         pseudo={currentMemberName} 
+        userId={memberId} // ✅ LA PIÈCE MANQUANTE
       />
       
     </div>
