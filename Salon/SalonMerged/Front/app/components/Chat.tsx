@@ -16,15 +16,16 @@ type Message = {
 type ChatProps = {
   onClose: () => void;
   pseudo: string;
+  userId?: number; // Ajouté pour correspondre au DTO du backend (facultatif)
   onMessageReceived?: () => void;
-  socket: any;      // Reçoit le socket de la page
-  roomCode: string; // Reçoit le code de la room
+  socket: any;      
+  roomCode: string; 
 };
 
-const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1"; // Ta clé
+const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1"; 
 const gf = new GiphyFetch(giphyApiKey);
 
-export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomCode }: ChatProps) {
+export default function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [pickerMode, setPickerMode] = useState<'none' | 'emoji' | 'gif'>('none');
@@ -37,9 +38,18 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
   useEffect(() => {
     if (!socket) return;
 
+    // 1. IDENTIFICATION : On dit au serveur qui on est dès le montage
+    // Le backend attend 'setUsername' pour remplir client.data.user
+    socket.emit("setUsername", { 
+      username: pseudo,
+      userId: userId // Envoie l'ID si dispo, sinon le backend créera/trouvera via le pseudo
+    });
+
     const handleReceiveMessage = (msg: Message) => {
       setMessages((prev) => [...prev, msg]);
+      // Si on reçoit un message, on arrête d'afficher que la personne écrit
       setTypingUsers((prev) => prev.filter((name) => name !== msg.username));
+      
       if (onMessageReceived) onMessageReceived();
       scrollToBottom();
     };
@@ -57,12 +67,11 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
     socket.on("receiveMessage", handleReceiveMessage);
     socket.on("userTyping", handleUserTyping);
 
-    // Nettoyage des écouteurs uniquement (pas de disconnect ici)
     return () => {
       socket.off("receiveMessage", handleReceiveMessage);
       socket.off("userTyping", handleUserTyping);
     };
-  }, [socket, onMessageReceived, roomCode]);
+  }, [socket, roomCode, pseudo, userId, onMessageReceived]);
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -75,23 +84,28 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
   const sendMessage = () => {
     if (!text.trim()) return;
     
-    // Envoi au serveur avec le code de la room
+    // CORRECTION: Correspondance exacte avec le DTO du Gateway
+    // @MessageBody() payload: { message?: string; gifUrl?: string; codeRoom: string }
     socket?.emit("sendMessage", { 
-        roomCode, 
-        message: text.trim(), 
-        username: pseudo 
+        codeRoom: roomCode, // Le backend attend 'codeRoom'
+        message: text.trim()
+        // Pas besoin d'envoyer 'username', le backend utilise client.data.user
     });
     
-    socket?.emit("typing", { roomCode, isTyping: false, username: pseudo });
+    // Arrêt du typing
+    socket?.emit("typing", { 
+        codeRoom: roomCode, 
+        isTyping: false 
+    });
+    
     setText("");
     setPickerMode('none');
   };
 
   const sendGif = (gifUrl: string) => {
     socket?.emit("sendMessage", { 
-        roomCode, 
-        gifUrl: gifUrl, 
-        username: pseudo 
+        codeRoom: roomCode, 
+        gifUrl: gifUrl
     });
     setPickerMode('none');
   };
@@ -99,11 +113,19 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setText(e.target.value);
     
-    socket?.emit("typing", { roomCode, isTyping: true, username: pseudo });
+    // CORRECTION: Correspondance avec handleTyping du Gateway
+    // payload: { isTyping: boolean, codeRoom: string }
+    socket?.emit("typing", { 
+        codeRoom: roomCode, 
+        isTyping: true 
+    });
     
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socket?.emit("typing", { roomCode, isTyping: false, username: pseudo });
+      socket?.emit("typing", { 
+          codeRoom: roomCode, 
+          isTyping: false 
+      });
     }, 2000);
   };
 
@@ -120,11 +142,14 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
 
   return (
     <>
-      {/* Header avec la classe CSS du fichier globals.css */}
+      {/* Header */}
       <div className="chat-header-rave">
-        <h4 className="m-0 fw-bold text-white" style={{ letterSpacing: '1px', fontSize: '1.2rem' }}>
-          CHAT ROOM
-        </h4>
+        <div className="d-flex align-items-center gap-2">
+            <div className="status-dot online"></div>
+            <h4 className="m-0 fw-bold text-white" style={{ letterSpacing: '1px', fontSize: '1.2rem' }}>
+            SALON {roomCode}
+            </h4>
+        </div>
         <button 
             onClick={onClose} 
             className="btn-icon-rave" 
@@ -160,7 +185,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
 
               {m.gifUrl && (
                 <div className={`mt-2 ${isMe ? 'text-end' : 'text-start'}`}>
-                    <img src={m.gifUrl} alt="GIF" className="gif-image" style={{maxHeight: '150px', maxWidth: '100%'}} />
+                    <img src={m.gifUrl} alt="GIF" className="gif-image" style={{maxHeight: '150px', maxWidth: '100%', borderRadius: '12px'}} />
                 </div>
               )}
               
@@ -170,9 +195,9 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
         })}
 
         {typingUsers.length > 0 && (
-          <div className="text-white-50 ms-3 fst-italic small mt-2">
-            <span className="spinner-grow spinner-grow-sm me-2" role="status" aria-hidden="true"></span>
-            {typingUsers.length > 2 ? "Plusieurs personnes écrivent..." : typingUsers.join(", ") + " écrit..."}
+          <div className="text-white-50 ms-3 fst-italic small mt-2 d-flex align-items-center">
+            <span className="spinner-grow spinner-grow-sm me-2 text-primary" role="status" aria-hidden="true"></span>
+            <span>{typingUsers.length > 2 ? "Plusieurs personnes écrivent..." : typingUsers.join(", ") + " écrit..."}</span>
           </div>
         )}
       </div>
@@ -198,7 +223,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
                   )}
                   {pickerMode === 'gif' && (
                       <div className="h-100 d-flex flex-column">
-                          <div className="px-3 pb-2">
+                          <div className="px-3 pb-2 pt-2">
                              <input 
                                   type="text" 
                                   className="form-control bg-dark text-white border-secondary form-control-sm rounded-pill" 
@@ -221,7 +246,7 @@ export default function Chat({ onClose, pseudo, onMessageReceived, socket, roomC
         )}
 
         <div className="input-group-rave">
-            <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}>+</button>
+            <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-primary' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}>+</button>
             <input
                 type="text" className="form-control-rave" placeholder="Envoyer un message..."
                 value={text} onChange={handleTyping}
