@@ -168,7 +168,9 @@ export default function Chat({ onClose, pseudo, userId, onMessageReceived, socke
       <div className="chat-body-rave" ref={listRef}>
         {messages.length === 0 && (
           <div className="h-100 d-flex flex-column justify-content-center align-items-center text-white-50 opacity-50">
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>💬</div>
+            <div style={{ marginBottom: '1rem' }}>
+              <MessageCircle size={48} strokeWidth={1.5} />
+            </div>
             <p className="fw-light ls-1 text-uppercase small">La conversation commence ici</p>
           </div>
         )}
@@ -208,7 +210,9 @@ export default function Chat({ onClose, pseudo, userId, onMessageReceived, socke
         <div className="input-group-rave">
             <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}>+</button>
             <input type="text" className="form-control-rave" placeholder="Envoyer un message..." value={text} onChange={handleTyping} onKeyDown={(e) => e.key === "Enter" && sendMessage()} onFocus={() => setPickerMode('none')} />
-            <button className="btn-send-rave" onClick={sendMessage} disabled={!text.trim()}>➜</button>
+            <button className="btn-send-rave" onClick={sendMessage} disabled={!text.trim()}>
+              <Send size={20} />
+            </button>
         </div>
       </div>
     </>

@@ -6,6 +6,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCenter } 
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical, Film, Play, Trash2, Music, Scroll, Lightbulb, ArrowUpDown } from 'lucide-react';
 
 interface PlaylistEntry {
   id: number;
@@ -77,7 +78,9 @@ function SortablePlaylistItem({
       onClick={() => onPlayVideo(index)}
     >
       <div className="drag-handle" {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}>
-        <span className="handle-icon">⋮⋮</span>
+        <span className="handle-icon">
+          <GripVertical size={20} />
+        </span>
       </div>
       
       <div className="item-position">
@@ -93,7 +96,9 @@ function SortablePlaylistItem({
             loading="lazy"
           />
         ) : (
-          <div className="thumbnail-placeholder">🎬</div>
+          <div className="thumbnail-placeholder">
+            <Film size={24} />
+          </div>
         )}
         <div className="thumbnail-overlay">
           <span className="duration">{formatTime(entry.video?.durationSec)}</span>
@@ -123,7 +128,9 @@ function SortablePlaylistItem({
           className="action-button play-button"
           title="Lire cette vidéo"
         >
-          <span className="action-icon">▶️</span>
+          <span className="action-icon">
+            <Play size={18} />
+          </span>
         </button>
         
         <button
@@ -136,7 +143,9 @@ function SortablePlaylistItem({
           className="action-button delete-button"
           title="Supprimer de la playlist"
         >
-          <span className="action-icon">🗑️</span>
+          <span className="action-icon">
+            <Trash2 size={18} />
+          </span>
         </button>
       </div>
     </div>
@@ -194,7 +203,10 @@ export default function PlaylistComponent({
     return (
       <div className="playlist-panel empty">
         <div className="panel-header">
-          <h3>📜 Playlist</h3>
+          <h3>
+            <Scroll size={20} style={{ marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }} />
+            Playlist
+          </h3>
           <span className="count-badge">0</span>
         </div>
         <div className="empty-playlist">
@@ -209,11 +221,16 @@ export default function PlaylistComponent({
     return (
       <div className="playlist-panel empty">
         <div className="panel-header">
-          <h3>📜 Playlist</h3>
+          <h3>
+            <Scroll size={20} style={{ marginRight: '8px', display: 'inline-block', verticalAlign: 'middle' }} />
+            Playlist
+          </h3>
           <span className="count-badge">0</span>
         </div>
         <div className="empty-playlist">
-          <div className="empty-icon">🎵</div>
+          <div className="empty-icon">
+            <Music size={64} strokeWidth={1.5} />
+          </div>
           <h4>Playlist vide</h4>
           <p className="empty-description">
             Ajoutez des vidéos depuis la barre de recherche
@@ -228,7 +245,9 @@ export default function PlaylistComponent({
       <div className="panel-header">
         <div className="header-left">
           <h3>
-            <span className="header-icon">📜</span>
+            <span className="header-icon">
+              <Scroll size={20} />
+            </span>
             Playlist
           </h3>
           <span className="count-badge">{playlist.entries.length}</span>
@@ -242,7 +261,9 @@ export default function PlaylistComponent({
             </span>
           ) : (
             <span className="reorder-hint">
-              <span className="hint-icon">↕️</span>
+              <span className="hint-icon">
+                <ArrowUpDown size={16} />
+              </span>
               Glisser-déposer pour réorganiser
             </span>
           )}
@@ -303,7 +324,9 @@ export default function PlaylistComponent({
       <div className="playlist-footer">
         <div className="footer-info">
           <span className="footer-text">
-            <span className="info-icon">💡</span>
+            <span className="info-icon">
+              <Lightbulb size={16} />
+            </span>
             Cliquez sur une vidéo pour la lire
           </span>
         </div>

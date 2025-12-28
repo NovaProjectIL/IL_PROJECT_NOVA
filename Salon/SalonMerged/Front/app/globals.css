@@ -580,6 +580,11 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* Icon animation for lucide-react icons */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
 .overlay-content p {
   color: rgba(255, 255, 255, 0.8);
   margin-bottom: 1rem;

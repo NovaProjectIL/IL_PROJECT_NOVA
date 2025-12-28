@@ -11,6 +11,20 @@ import EmojiPicker, { Theme } from "emoji-picker-react";
 import { GiphyFetch } from "@giphy/js-fetch-api";
 import { Grid } from "@giphy/react-components";
 
+// --- IMPORTS DES ICÔNES ---
+import { 
+  MessageCircle, 
+  SkipBack, 
+  Play, 
+  Pause, 
+  SkipForward, 
+  Film, 
+  Loader2, 
+  CheckCircle2, 
+  Plus, 
+  Send 
+} from 'lucide-react';
+
 // ============================================================================
 // PARTIE 1 : COMPOSANTS CHAT (Intégrés directement)
 // ============================================================================
@@ -177,7 +191,9 @@ function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: 
       <div className="chat-body-rave" ref={listRef}>
         {messages.length === 0 && (
           <div className="h-100 d-flex flex-column justify-content-center align-items-center text-white-50 opacity-50">
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>💬</div>
+            <div style={{ marginBottom: '1rem' }}>
+              <MessageCircle size={48} strokeWidth={1.5} />
+            </div>
             <p className="fw-light ls-1 text-uppercase small">La conversation commence ici</p>
           </div>
         )}
@@ -238,9 +254,13 @@ function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: 
         )}
 
         <div className="input-group-rave">
-            <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}>+</button>
+            <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}>
+              <Plus size={20} />
+            </button>
             <input type="text" className="form-control-rave" placeholder="Envoyer un message..." value={text} onChange={handleTyping} onKeyDown={(e) => e.key === "Enter" && sendMessage()} onFocus={() => setPickerMode('none')} />
-            <button className="btn-send-rave" onClick={sendMessage} disabled={!text.trim()}>➜</button>
+            <button className="btn-send-rave" onClick={sendMessage} disabled={!text.trim()}>
+              <Send size={20} />
+            </button>
         </div>
       </div>
     </>
@@ -1042,10 +1062,11 @@ export default function RoomPage() {
 
   return (
     <div className={styles.container}>
-      <h1>Salon: {code}</h1>
-      <p>Votre ID: {memberId}</p>
-      <div className={`${styles.connectionStatus} ${socketRef.current?.connected ? styles.connected : styles.disconnected}`}>
-        {socketRef.current?.connected ? ' Connecté en temps réel' : ' Déconnecté'}
+      <div className={styles.roomHeader}>
+        <h1 className={styles.roomTitle}>Salon: {code}</h1>
+        <div className={`${styles.connectionBadge} ${socketRef.current?.connected ? styles.connected : styles.disconnected}`}>
+          {socketRef.current?.connected ? '🟢 Connecté' : '🔴 Déconnecté'}
+        </div>
       </div>
       
       {/* Recherche */}
@@ -1062,10 +1083,12 @@ export default function RoomPage() {
           onKeyPress={(e) => e.key === 'Enter' && handleSearch(true)}
         />
         <button onClick={() => handleSearch(true)} className={styles.searchButton}>
-          ▶️ Jouer
+          <Play size={16} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} />
+          Jouer
         </button>
         <button onClick={() => handleSearch(false)} className={`${styles.searchButton} ${styles.addButton}`}>
-          ➕ Playlist
+          <Plus size={16} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} />
+          Playlist
         </button>
       </div>
       
@@ -1087,7 +1110,10 @@ export default function RoomPage() {
       {/* Vidéo en cours */}
       {currentVideo && (
         <div className={styles.videoSection}>
-          <h3>🎬 {currentVideo.title}</h3>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Film size={24} />
+            {currentVideo.title}
+          </h3>
           <p>Chaîne: {currentVideo.channelTitle || currentVideo.author}</p>
           
           {/* Player YouTube */}
@@ -1100,7 +1126,10 @@ export default function RoomPage() {
             {!isYTReady && (
               <div className={styles.playerOverlay}>
                 <div className={styles.overlayContent}>
-                  <div className={styles.overlayText}>⏳ Chargement du player YouTube...</div>
+                  <div className={styles.overlayText} style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                    <Loader2 size={20} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                    Chargement du player YouTube...
+                  </div>
                   <div className={styles.videoId}>Vidéo: {currentVideo.youtubeId}</div>
                 </div>
               </div>
@@ -1109,7 +1138,10 @@ export default function RoomPage() {
             {isYTReady && !isPlayerReady && (
               <div className={styles.playerOverlay}>
                 <div className={styles.overlayContent}>
-                  <div className={styles.overlayText}>🎬 Initialisation du player...</div>
+                  <div className={styles.overlayText} style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                    <Film size={20} />
+                    Initialisation du player...
+                  </div>
                   <button 
                     onClick={() => {
                       setPlayerInitAttempt(prev => prev + 1);
@@ -1128,12 +1160,21 @@ export default function RoomPage() {
           <div className={`${styles.syncStatus} ${isPlayerReady ? styles.syncReady : styles.syncLoading}`}>
             {isYTReady ? (
               isPlayerReady ? (
-                '✅ Player prêt - Synchronisation activée'
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                  <CheckCircle2 size={16} />
+                  Player prêt - Synchronisation activée
+                </span>
               ) : (
-                '⏳ Player en cours d\'initialisation...'
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                  <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                  Player en cours d'initialisation...
+                </span>
               )
             ) : (
-              '⏳ Chargement de l\'API YouTube...'
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                Chargement de l'API YouTube...
+              </span>
             )}
           </div>
           
@@ -1145,24 +1186,30 @@ export default function RoomPage() {
                 onClick={handlePreviousVideo} 
                 className={`${styles.controlButton} ${styles.previousButton}`}
                 title="Vidéo précédente"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                ⏮️ Précédent
+                <SkipBack size={18} />
+                Précédent
               </button>
               
               {/* Bouton Play */}
               <button 
                 onClick={handlePlay} 
                 className={`${styles.controlButton} ${styles.playButton}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                ▶️ Play
+                <Play size={18} />
+                Play
               </button>
               
               {/* Bouton Pause */}
               <button 
                 onClick={handlePause} 
                 className={`${styles.controlButton} ${styles.pauseButton}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                ⏸️ Pause
+                <Pause size={18} />
+                Pause
               </button>
               
               {/* Bouton Suivant */}
@@ -1170,8 +1217,10 @@ export default function RoomPage() {
                 onClick={handleNextVideo} 
                 className={`${styles.controlButton} ${styles.nextButton}`}
                 title="Vidéo suivante"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                Suivant ⏭️
+                Suivant
+                <SkipForward size={18} />
               </button>
             </div>
             
@@ -1198,7 +1247,20 @@ export default function RoomPage() {
                 aria-label="Contrôle de position de la vidéo"
               />
               <div className={styles.statusInfo}>
-                <span><strong>État:</strong> {isPlaying ? '▶️ En lecture' : '⏸️ En pause'}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <strong>État:</strong> 
+                  {isPlaying ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Play size={14} />
+                      En lecture
+                    </span>
+                  ) : (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Pause size={14} />
+                      En pause
+                    </span>
+                  )}
+                </span>
                 <span className={styles.positionInfo}>
                   <strong>Position:</strong> {formatTime(position)} / {currentVideo.durationSec ? formatTime(currentVideo.durationSec) : '??:??'}
                 </span>

@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-
+import { Film, Users, Clipboard, Check } from 'lucide-react';
 
 interface RoomHeaderProps {
   code: string;
@@ -31,13 +31,18 @@ export default function RoomHeader({
     <header className="room-header">
       <div className="header-left">
         <div className="logo">
-          <span className="logo-icon">🎬</span>
+          <span className="logo-icon">
+            <Film size={32} />
+          </span>
           <span className="logo-text">NOVA Stream</span>
         </div>
         <div className="room-info">
           <h1>Salon: <span className="room-code">{code}</span></h1>
           <div className="room-meta">
-            <span className="member-count">👥 {membersCount} membres</span>
+            <span className="member-count">
+              <Users size={16} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} />
+              {membersCount} membres
+            </span>
             <span className="member-id">Votre ID: {memberId}</span>
           </div>
         </div>
@@ -54,14 +59,18 @@ export default function RoomHeader({
           className="copy-button"
           title="Copier le code d'invitation"
         >
-          <span className="copy-icon">{copied ? '✓' : '📋'}</span>
+          <span className="copy-icon">
+            {copied ? <Check size={18} /> : <Clipboard size={18} />}
+          </span>
           <span className="copy-text">
             {copied ? 'Copié!' : 'Copier le code'}
           </span>
         </button>
         
         <button className="invite-button">
-          <span className="invite-icon">👥</span>
+          <span className="invite-icon">
+            <Users size={18} />
+          </span>
           <span className="invite-text">Inviter</span>
         </button>
       </div>
