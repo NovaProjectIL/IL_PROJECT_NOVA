@@ -1,4 +1,4 @@
- import {
+import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
@@ -8,39 +8,9 @@
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 
-@WebSocketGateway('/rooms', {
+@WebSocketGateway({
   cors: {
-<<<<<<< HEAD
     origin: '*',
-=======
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-
-      // Allow localhost on any port
-      if (origin.match(/^http:\/\/localhost:\d+$/)) {
-        return callback(null, true);
-      }
-
-      // Allow 127.0.0.1 on any port
-      if (origin.match(/^http:\/\/127\.0\.0\.1:\d+$/)) {
-        return callback(null, true);
-      }
-
-      // Allow any IP address on port 3000 (for network access)
-      if (origin.match(/^http:\/\/\d+\.\d+\.\d+\.\d+:3000$/)) {
-        return callback(null, true);
-      }
-
-      // Allow specific origins if needed
-      const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error('Not allowed by CORS'));
-    },
->>>>>>> 242179d658c20603fe9c8b0d6eaefcafb1827a93
     credentials: true
   }
 })
@@ -78,7 +48,7 @@ export class ChatGateway {
   // --- TYPING ---
   @SubscribeMessage('typing')
   handleTyping(
-    @ConnectedSocket() client: Socket, 
+    @ConnectedSocket() client: Socket,
     @MessageBody() payload: { isTyping: boolean, codeRoom: string } // <-- Même nommage que RoomsGateway
   ) {
     if (!payload.codeRoom) return;
@@ -87,9 +57,9 @@ export class ChatGateway {
     if (!user) return;
 
     // On convertit en MAJUSCULE comme dans RoomsGateway
-    client.to(payload.codeRoom.toUpperCase()).emit('userTyping', { 
-      username: user.name, 
-      isTyping: payload.isTyping 
+    client.to(payload.codeRoom.toUpperCase()).emit('userTyping', {
+      username: user.name,
+      isTyping: payload.isTyping
     });
   }
 
@@ -97,11 +67,11 @@ export class ChatGateway {
   @SubscribeMessage('sendMessage')
   async handleMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { 
-        message?: string; 
-        gifUrl?: string; 
+    @MessageBody() payload: {
+        message?: string;
+        gifUrl?: string;
         codeRoom: string; // <-- Même nommage
-        userId?: number; 
+        userId?: number;
         username?: string;
     },
   ) {
@@ -133,9 +103,9 @@ export class ChatGateway {
     const roomCode = payload.codeRoom.toUpperCase();
 
     // Arrêt du typing
-    client.to(roomCode).emit('userTyping', { 
-      username: user.name, 
-      isTyping: false 
+    client.to(roomCode).emit('userTyping', {
+      username: user.name,
+      isTyping: false
     });
 
     try {
