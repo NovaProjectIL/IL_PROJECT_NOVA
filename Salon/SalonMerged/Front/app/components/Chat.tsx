@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import { GiphyFetch } from "@giphy/js-fetch-api";
 import { Grid } from "@giphy/react-components";
+import { MessageCircle, Send } from 'lucide-react';
 
 type Message = {
   username: string;
@@ -15,13 +16,13 @@ type Message = {
 type ChatProps = {
   onClose: () => void;
   pseudo: string;
-  userId?: number; 
+  userId?: number;
   onMessageReceived?: () => void;
-  socket: any;      
-  roomCode: string; 
+  socket: any;
+  roomCode: string;
 };
 
-const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1"; 
+const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1";
 const gf = new GiphyFetch(giphyApiKey);
 
 function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socket, roomCode }: ChatProps) {
@@ -42,7 +43,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     const identifyAndLoad = () => {
         // console.log(`🔄 [Chat] Init pour room: ${roomCode}`);
         socket.emit('setUsername', { username: pseudo, userId: userId || 0 });
-        
+
         if (roomCode) {
             socket.emit('requestMessages', { codeRoom: roomCode });
         }
@@ -102,20 +103,20 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
 
   const sendMessage = () => {
     if (!text.trim()) return;
-    
+
     // SÉCURITÉ : On vérifie qu'on a bien le code
     if (!roomCode) {
         console.error("❌ Erreur : roomCode manquant !");
         return;
     }
 
-    socket?.emit("sendMessage", { 
-        codeRoom: roomCode, 
+    socket?.emit("sendMessage", {
+        codeRoom: roomCode,
         message: text.trim(),
         userId: userId,
         username: pseudo
     });
-    
+
     socket?.emit("typing", { codeRoom: roomCode, isTyping: false });
     setText("");
     setPickerMode('none');
@@ -123,9 +124,9 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
 
   const sendGif = (gifUrl: string) => {
     if (!roomCode) return;
-    socket?.emit("sendMessage", { 
-        codeRoom: roomCode, 
-        gifUrl: gifUrl, 
+    socket?.emit("sendMessage", {
+        codeRoom: roomCode,
+        gifUrl: gifUrl,
         userId: userId,
         username: pseudo
     });
@@ -145,7 +146,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
 
   // --- RENDU ---
   const fetchGifs = (offset: number) => {
-    return gifSearch.trim() === "" 
+    return gifSearch.trim() === ""
       ? gf.trending({ offset, limit: 10 })
       : gf.search(gifSearch, { offset, limit: 10 });
   };
@@ -219,3 +220,5 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     </>
   );
 }
+
+export default Chat;
