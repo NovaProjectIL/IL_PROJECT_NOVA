@@ -45,6 +45,8 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
         socket.emit('setUsername', { username: pseudo, userId: userId || 0 });
 
         if (roomCode) {
+            // Rejoindre la room chat pour recevoir les messages en temps réel
+            socket.emit('joinChatRoom', { codeRoom: roomCode });
             socket.emit('requestMessages', { codeRoom: roomCode });
         }
     };

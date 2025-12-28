@@ -41,9 +41,25 @@ async function bootstrap() {
     }
   }
   
-  // ✅ CORS pour frontend Next.js
+  // ✅ CORS pour frontend Next.js (multiple localhost ports)
   app.enableCors({
-    origin: 'http://localhost:3000',
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      // Allow localhost on any port
+      if (origin.match(/^http:\/\/localhost:\d+$/)) {
+        return callback(null, true);
+      }
+
+      // Allow specific origins if needed
+      const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Not allowed by CORS'));
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type, Accept, Authorization',

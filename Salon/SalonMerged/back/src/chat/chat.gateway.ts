@@ -8,11 +8,27 @@ import {
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 
-@WebSocketGateway({ 
-  cors: { 
-    origin: 'http://localhost:3000', 
-    credentials: true 
-  } 
+@WebSocketGateway({
+  cors: {
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      // Allow localhost on any port
+      if (origin.match(/^http:\/\/localhost:\d+$/)) {
+        return callback(null, true);
+      }
+
+      // Allow specific origins if needed
+      const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
+  }
 })
 export class ChatGateway {
   @WebSocketServer() server: Server;
@@ -130,6 +146,19 @@ export class ChatGateway {
     } catch (error) {
         console.error("❌ Chat Erreur BDD:", error.message);
     }
+  }
+
+  // --- REJOINDRE LA ROOM CHAT ---
+  @SubscribeMessage('joinChatRoom')
+  handleJoinChatRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { codeRoom: string }
+  ) {
+    if (!payload.codeRoom) return;
+
+    const roomCode = payload.codeRoom.toUpperCase();
+    client.join(roomCode);
+    console.log(`💬 Chat: Client ${client.id} rejoint la room chat: ${roomCode}`);
   }
 
   // --- HISTORIQUE ---
