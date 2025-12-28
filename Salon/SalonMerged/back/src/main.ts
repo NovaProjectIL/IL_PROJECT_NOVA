@@ -87,21 +87,16 @@ async function bootstrap() {
     next();
   });
   
-<<<<<<< HEAD
+
   await app.listen(3001, '0.0.0.0');
 
   console.log(`\n🚀 Backend running on: http://localhost:3001`);
   console.log(`🌐 Also accessible on network: http://0.0.0.0:3001`);
   console.log(`🌐 CORS enabled for: http://localhost:3000 and local network`);
   console.log(`🔗 Test YouTube API: http://localhost:3001/rooms/youtube-info?videoId=dQw4w9WgXcQ`);
-=======
-  await app.listen(3000);
 
-  console.log(`\n🚀 Backend running on: http://localhost:3000`);
-  console.log(`🌐 CORS enabled for: http://localhost:3000`);
-  console.log(`🔗 Test YouTube API: http://localhost:3000/rooms/youtube-info?videoId=dQw4w9WgXcQ`);
->>>>>>> 242179d658c20603fe9c8b0d6eaefcafb1827a93
-  
+
+
   // Test direct de la clé API (optionnel)
   testYouTubeAPI();
 }
