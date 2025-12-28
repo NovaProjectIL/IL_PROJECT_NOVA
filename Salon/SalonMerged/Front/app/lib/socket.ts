@@ -1,7 +1,11 @@
 // app/lib/socket.ts
 import { io, Socket } from 'socket.io-client';
 
+<<<<<<< HEAD
 const WS_URL = 'http://localhost:3001';
+=======
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000';
+>>>>>>> 242179d658c20603fe9c8b0d6eaefcafb1827a93
 
 class SocketService {
   private socket: Socket | null = null;

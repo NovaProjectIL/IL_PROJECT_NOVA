@@ -10,7 +10,37 @@ import { ChatService } from './chat.service';
 
 @WebSocketGateway('/rooms', {
   cors: {
+<<<<<<< HEAD
     origin: '*',
+=======
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      // Allow localhost on any port
+      if (origin.match(/^http:\/\/localhost:\d+$/)) {
+        return callback(null, true);
+      }
+
+      // Allow 127.0.0.1 on any port
+      if (origin.match(/^http:\/\/127\.0\.0\.1:\d+$/)) {
+        return callback(null, true);
+      }
+
+      // Allow any IP address on port 3000 (for network access)
+      if (origin.match(/^http:\/\/\d+\.\d+\.\d+\.\d+:3000$/)) {
+        return callback(null, true);
+      }
+
+      // Allow specific origins if needed
+      const allowedOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error('Not allowed by CORS'));
+    },
+>>>>>>> 242179d658c20603fe9c8b0d6eaefcafb1827a93
     credentials: true
   }
 })
