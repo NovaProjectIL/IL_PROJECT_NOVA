@@ -1,4 +1,4 @@
- import {
+import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
@@ -8,11 +8,9 @@
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 
-@WebSocketGateway('/rooms', {
+@WebSocketGateway({
+  namespace: '/rooms',
   cors: {
-<<<<<<< HEAD
-    origin: '*',
-=======
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
@@ -40,7 +38,6 @@ import { ChatService } from './chat.service';
 
       return callback(new Error('Not allowed by CORS'));
     },
->>>>>>> 242179d658c20603fe9c8b0d6eaefcafb1827a93
     credentials: true
   }
 })
@@ -182,14 +179,7 @@ export class ChatGateway {
     @MessageBody() payload: { codeRoom: string }
   ) {
     if (!payload.codeRoom) return;
-
-    const roomCode = payload.codeRoom.toUpperCase();
-
-    // Assurer que le client est dans la room chat
-    client.join(roomCode);
-    console.log(`💬 Chat: Client ${client.id} rejoint automatiquement la room chat: ${roomCode}`);
-
-    const messages = await this.chatService.getMessagesByRoom(roomCode);
+    const messages = await this.chatService.getMessagesByRoom(payload.codeRoom.toUpperCase());
     client.emit('loadMessages', messages);
   }
 }
