@@ -21,7 +21,7 @@ export class ChatService {
     let user = await this.userRepo.findOne({ where: { name } });
     if (!user) {
       // Par défaut role = MEMBER selon ton entité
-      user = this.userRepo.create({ name });
+      user = this.userRepo.create({ name: name || "Utilisateur" });
       await this.userRepo.save(user);
     }
     return user;
@@ -29,6 +29,15 @@ export class ChatService {
 
   async findUserById(userId: number): Promise<User | null> {
     return this.userRepo.findOne({ where: { id: userId } });
+  }
+
+  async updateUserName(userId: number, newName: string): Promise<User> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found.`);
+    }
+    user.name = newName;
+    return this.userRepo.save(user);
   }
 
   // --- SAUVEGARDE DU MESSAGE (Le cœur du système) ---
@@ -82,7 +91,8 @@ export class ChatService {
     });
 
     return messages.map((m) => ({
-      username: m.user?.name ?? 'Inconnu', // Gestion du user nullable (SET NULL)
+      username: m.user?.name || 'Utilisateur', // Gestion du user nullable (SET NULL)
+      userId: m.user?.id ?? null,
       message: m.content ?? undefined,
       gifUrl: m.gifUrl ?? undefined,
       createdAt: m.createdAt,

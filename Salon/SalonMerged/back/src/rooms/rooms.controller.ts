@@ -656,10 +656,10 @@ async generateCustomQRCode(
   @Query('bgColor') bgColor: string = 'ffffff'
 ) {
   const room = await this.roomsService.getRoomByCode(codeRoom.toUpperCase());
-  
+
   const baseUrl = process.env.FRONTEND_BASE_URL ?? 'http://localhost:4200';
   const inviteLink = `${baseUrl}/rooms/join/${room.code}`;
-  
+
   // Options pour le QR code
   const qrCode = await QRCode.toDataURL(inviteLink, {
     width: parseInt(size),
@@ -669,7 +669,7 @@ async generateCustomQRCode(
       light: `#${bgColor}`,
     },
   });
-  
+
   return {
     codeRoom: room.code,
     inviteLink,
@@ -678,6 +678,22 @@ async generateCustomQRCode(
     color: `#${color}`,
     backgroundColor: `#${bgColor}`,
     generatedAt: new Date().toISOString(),
+  };
+}
+
+// 🎯 NOUVEL ENDPOINT : Mettre à jour le pseudo d'un membre
+@Post('update-member-name')
+async updateMemberName(@Body() body: { memberId: number; codeRoom: string; newName: string }) {
+  const { memberId, codeRoom, newName } = body;
+
+  const result = await this.roomsService.updateMemberName(memberId, codeRoom.toUpperCase(), newName);
+
+  return {
+    success: true,
+    memberId: result.memberId,
+    oldName: result.oldName,
+    newName: result.newName,
+    roomCode: result.roomCode,
   };
 }
 }

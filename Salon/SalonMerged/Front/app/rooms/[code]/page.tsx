@@ -12,17 +12,20 @@ import { GiphyFetch } from "@giphy/js-fetch-api";
 import { Grid } from "@giphy/react-components";
 
 // --- IMPORTS DES ICÔNES ---
-import { 
-  MessageCircle, 
-  SkipBack, 
-  Play, 
-  Pause, 
-  SkipForward, 
-  Film, 
-  Loader2, 
-  CheckCircle2, 
-  Plus, 
-  Send 
+import {
+  MessageCircle,
+  SkipBack,
+  Play,
+  Pause,
+  SkipForward,
+  Film,
+  Loader2,
+  CheckCircle2,
+  Plus,
+  Send,
+  Edit,
+  Check,
+  X
 } from 'lucide-react';
 
 // ============================================================================
@@ -39,6 +42,7 @@ type Message = {
   message: string | null;
   gifUrl: string | null;
   createdAt: string;
+  userId?: number;
 };
 
 type ChatProps = {
@@ -94,6 +98,7 @@ function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: 
     const handleLoadMessages = (histMessages: any[]) => {
         const formatted = histMessages.map(m => ({
             username: m.username,
+            userId: m.userId,
             message: m.message,
             gifUrl: m.gifUrl,
             createdAt: m.createdAt
@@ -180,7 +185,7 @@ function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: 
     <>
       <div className="chat-header-rave">
         <h4 className="m-0 fw-bold text-white" style={{ letterSpacing: '1px', fontSize: '1.2rem' }}>CHAT ROOM</h4>
-        <button onClick={onClose} className="btn-icon-rave" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <button onClick={onClose} className="btn-icon-rave" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Fermer le chat">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -199,13 +204,12 @@ function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: 
         )}
 
         {messages.map((m, i) => {
-          const isMe = m.username === pseudo;
           return (
-            <div key={i} className={`chat-message-row ${isMe ? "me" : "other"}`}>
-              {!isMe && <span className="username-label">{m.username}</span>}
-              {m.message && <div className={`message-bubble ${isMe ? "message-me" : "message-other"}`}>{m.message}</div>}
+            <div key={i} className="chat-message-row group-chat">
+              <span className="username-label">{m.username}</span>
+              {m.message && <div className="message-bubble message-group">{m.message}</div>}
               {m.gifUrl && (
-                <div className={`mt-2 ${isMe ? 'text-end' : 'text-start'}`}>
+                <div className="mt-2 text-start">
                     <img src={m.gifUrl} alt="GIF" className="gif-image" style={{maxHeight: '150px', maxWidth: '100%'}} />
                 </div>
               )}
@@ -254,11 +258,11 @@ function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: 
         )}
 
         <div className="input-group-rave">
-            <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')}>
+            <button className={`btn-icon-rave ${pickerMode !== 'none' ? 'text-white' : ''}`} onClick={() => setPickerMode(pickerMode === 'none' ? 'emoji' : 'none')} title="Ouvrir le sélecteur d'emojis/GIFs">
               <Plus size={20} />
             </button>
             <input type="text" className="form-control-rave" placeholder="Envoyer un message..." value={text} onChange={handleTyping} onKeyDown={(e) => e.key === "Enter" && sendMessage()} onFocus={() => setPickerMode('none')} />
-            <button className="btn-send-rave" onClick={sendMessage} disabled={!text.trim()}>
+            <button className="btn-send-rave" onClick={sendMessage} disabled={!text.trim()} title="Envoyer le message">
               <Send size={20} />
             </button>
         </div>
@@ -275,7 +279,7 @@ interface ChatWidgetProps {
   userId?: number; // ✅ Ajouté ici aussi
 }
 
-function ChatWidget({ pseudo = "Invité", userId, socket, roomCode }: ChatWidgetProps) {
+function ChatWidget({ pseudo = "", userId, socket, roomCode }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(420);
@@ -372,6 +376,7 @@ export default function RoomPage() {
   const searchParams = useSearchParams();
   const code = params.code as string;
   const memberId = Number(searchParams.get('memberId'));
+  const pseudo = searchParams.get('pseudo') || '';
   
   // === ÉTATS ===
   const [playlist, setPlaylist] = useState<any>(null);
@@ -383,7 +388,6 @@ export default function RoomPage() {
   const [loading, setLoading] = useState(true);
   const [isYTReady, setIsYTReady] = useState(false);
   const [playerInitAttempt, setPlayerInitAttempt] = useState(0);
-  
   const socketRef = useRef<any>(null);
   const playerRef = useRef<any>(null);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
@@ -576,30 +580,32 @@ export default function RoomPage() {
       console.log('📡 Chargement état serveur...');
       const stateRes = await fetch(`${API_URL}/rooms/state?codeRoom=${code}`);
       const stateData = await stateRes.json();
-      
+
       // Vérifier si une synchro est en cours
       if (isSyncingRef.current) {
         console.log('⏳ Synchro en cours, ignore loadRoomData');
         return;
       }
-      
+
       setPlaylist(stateData.playlist);
       setMembers(stateData.members || []);
-      
+
+
+
       if (stateData.playback?.video) {
         setCurrentVideo(stateData.playback.video);
-        
+
         // Calculer la position ajustée
         const adjustedPosition = calculateAdjustedPosition(stateData.playback);
         console.log(' Position ajustée:', adjustedPosition, 'vs original:', stateData.playback.positionSec);
-        
+
         setPosition(adjustedPosition);
         setIsPlaying(stateData.playback.status === 'PLAYING');
-        
+
         // Appliquer au player si prêt
         if (playerRef.current && isPlayerReady && !isSyncingRef.current) {
           const playerPosition = playerRef.current.getCurrentTime?.() || 0;
-          
+
           // Synchroniser seulement si la différence est significative
           if (Math.abs(playerPosition - adjustedPosition) > 2) {
             console.log(' Sync depuis loadRoomData:', adjustedPosition);
@@ -610,7 +616,7 @@ export default function RoomPage() {
     } catch (err) {
       console.error(' Erreur chargement salon:', err);
     }
-  }, [code, calculateAdjustedPosition]);
+  }, [code, calculateAdjustedPosition, memberId]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -1056,7 +1062,7 @@ export default function RoomPage() {
   };
 
   // Trouver le pseudo du membre actuel pour le chat
-  const currentMemberName = members.find(m => m.id === memberId)?.name || "Invité";
+  const currentMemberName = members.find(m => m.id === memberId)?.name || "";
 
   if (loading) return <div className={styles.loading}>Chargement...</div>;
 
@@ -1097,12 +1103,21 @@ export default function RoomPage() {
         <h3>Membres ({members.length}):</h3>
         <div className={styles.membersList}>
           {members.map(member => (
-            <span 
-              key={member.id} 
-              className={`${styles.memberTag} ${member.id === memberId ? styles.currentMember : ''}`}
-            >
-              {member.name} {member.id === memberId && '(Vous)'}
-            </span>
+            member.id === memberId ? (
+              <span
+                key={member.id}
+                className={`${styles.memberTag} ${styles.currentMember}`}
+              >
+                {member.name} (Vous)
+              </span>
+            ) : (
+              <span
+                key={member.id}
+                className={`${styles.memberTag}`}
+              >
+                {member.name}
+              </span>
+            )
           ))}
         </div>
       </div>
@@ -1289,10 +1304,10 @@ export default function RoomPage() {
       />
       
       {/* 🟢 INTÉGRATION DU CHAT */}
-      <ChatWidget 
-        socket={socketRef.current} 
-        roomCode={code} 
-        pseudo={currentMemberName} 
+      <ChatWidget
+        socket={socketRef.current}
+        roomCode={code}
+        pseudo={pseudo || currentMemberName || "Utilisateur"}
         userId={memberId} // ✅ LA PIÈCE MANQUANTE
       />
       

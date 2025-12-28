@@ -132,12 +132,52 @@ export class RoomsService {
     this.logger.log(`✅ Salle créée: ${code} (ID: ${room.id})`);
     
     
-    return { 
-      room, 
-      creator, 
+    return {
+      room,
+      creator,
       chatSession,
-      qrCode: QRCodeRoom,      
-      inviteLink: link,        
+      qrCode: QRCodeRoom,
+      inviteLink: link,
+    };
+  }
+
+  // 🆕 MÉTHODE POUR METTRE À JOUR LE PSEUDO D'UN MEMBRE
+  async updateMemberName(memberId: number, codeRoom: string, newName: string) {
+    this.logger.log(`Mise à jour du pseudo du membre ${memberId} dans ${codeRoom} vers "${newName}"`);
+
+    const room = await this.roomsRepo.findOne({
+      where: { code: codeRoom },
+      relations: ['users'],
+    });
+
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    const user = room.users.find((m) => m.id === memberId);
+
+    if (!user) {
+      throw new NotFoundException('Member not found in this room');
+    }
+
+    // Vérifier si le nouveau nom est déjà pris
+    const nameExists = room.users.some((m) => m.id !== memberId && m.name === newName.trim());
+    if (nameExists) {
+      throw new ConflictException('Display name already used in this room');
+    }
+
+    const oldName = user.name;
+    user.name = newName.trim();
+
+    await this.usersRepo.save(user);
+
+    this.logger.log(`✅ Pseudo mis à jour: ${oldName} -> ${user.name}`);
+
+    return {
+      memberId: user.id,
+      oldName,
+      newName: user.name,
+      roomCode: room.code,
     };
   }
  async joinRoom(memberDisplayName: string | undefined, codeRoom: string) {

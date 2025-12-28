@@ -32,7 +32,7 @@ try {
     const response = await roomsApi.createRoom(createName.trim() || "");
     const { code, creatorId } = response.data;
 
-    router.push(`/rooms/${code}?memberId=${creatorId}`);
+    router.push(`/rooms/${code}?memberId=${creatorId}&pseudo=${encodeURIComponent(createName.trim() || "")}`);
   } catch (err: any) {
     console.error('Erreur création:', err.response?.data);
     setCreateError(err.response?.data?.message || 'Erreur de création');
@@ -63,7 +63,7 @@ const handleJoinRoom = async () => {
     );
     const { code, memberId } = response.data;
 
-    router.push(`/rooms/${code}?memberId=${memberId}`);
+    router.push(`/rooms/${code}?memberId=${memberId}&pseudo=${encodeURIComponent(joinName.trim() || "")}`);
   } catch (err: any) {
     console.error('Erreur rejoindre:', err.response?.data);
     setJoinError(err.response?.data?.message || 'Erreur de connexion');

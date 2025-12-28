@@ -34,7 +34,13 @@ export class ChatGateway {
       if (!user) {
         user = await this.chatService.getOrCreateUser(payload.username);
       }
-      
+
+      // 3. Assurer que le nom n'est pas vide
+      if (!user.name || user.name.trim() === '') {
+        user.name = 'Utilisateur';
+        await this.chatService.updateUserName(user.id, 'Utilisateur');
+      }
+
       client.data.user = user;
       console.log(`💬 Chat: ${user.name} (ID: ${user.id}) identifié sur socket ${client.id}`);
   }
@@ -115,7 +121,8 @@ export class ChatGateway {
 
         // 4. DIFFUSION
         this.server.to(roomCode).emit('receiveMessage', {
-          username: user.name, 
+          username: user.name,
+          userId: user.id,
           message: savedMessage.content,
           gifUrl: savedMessage.gifUrl,
           createdAt: savedMessage.createdAt,

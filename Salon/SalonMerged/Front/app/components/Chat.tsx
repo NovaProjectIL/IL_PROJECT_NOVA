@@ -24,12 +24,13 @@ type ChatProps = {
 const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1"; 
 const gf = new GiphyFetch(giphyApiKey);
 
-export default function Chat({ onClose, pseudo, userId, onMessageReceived, socket, roomCode }: ChatProps) {
+function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socket, roomCode }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [pickerMode, setPickerMode] = useState<'none' | 'emoji' | 'gif'>('none');
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [gifSearch, setGifSearch] = useState("");
+  const [pseudo, setPseudo] = useState(initialPseudo || "");
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);

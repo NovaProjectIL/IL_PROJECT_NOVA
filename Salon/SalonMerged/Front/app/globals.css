@@ -2243,8 +2243,8 @@ body {
   flex-grow: 1;
   height: 100%;
   background: rgba(10, 10, 15, 0.4);
-  backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
   border-left: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: -20px 0 60px rgba(0,0,0,0.7);
   display: flex;
@@ -2562,8 +2562,34 @@ body {
   width: 100%;
   margin-bottom: 8px;
 }
-.chat-message-row.me { align-items: flex-end; }
-.chat-message-row.other { align-items: flex-start; }
+.chat-message-row.me {
+  align-items: flex-end;
+}
+.chat-message-row.other {
+  align-items: flex-start;
+}
+
+.chat-message-row.me .username-label {
+  display: none;
+}
+
+.chat-message-row.other .username-label {
+  margin-left: 15px;
+  margin-right: 0;
+  text-align: left;
+}
+
+.chat-message-row.me .message-time {
+  margin-left: 0;
+  margin-right: 5px;
+  text-align: right;
+}
+
+.chat-message-row.other .message-time {
+  margin-left: 5px;
+  margin-right: 0;
+  text-align: left;
+}
 
 @media (max-width: 768px) {
   .chat-sidebar-container { width: 100%; }
