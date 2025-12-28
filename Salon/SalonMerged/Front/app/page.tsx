@@ -107,11 +107,11 @@ const handleJoinRoom = async () => {
               <Zap size={18} />
               <span>Fonctionnalités</span>
             </a>
-            <a href="#about" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+            <a href="/about" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
               <Sparkles size={18} />
               <span>À propos</span>
             </a>
-            <a href="#contact" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
+            <a href="/contact" className="nav-link" onClick={() => setMobileMenuOpen(false)}>
               <MessageCircle size={18} />
               <span>Contact</span>
             </a>
