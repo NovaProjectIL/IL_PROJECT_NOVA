@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import io from 'socket.io-client';
 import PlaylistComponent from '@/app/components/PlaylistComponent';
 import styles from './RoomPage.module.css';
@@ -23,9 +23,13 @@ import {
   CheckCircle2,
   Plus,
   Send,
+<<<<<<< HEAD
   Edit,
   Check,
   X
+=======
+  LogOut
+>>>>>>> bcb79ea17bf305af1ba41412363dde1be3c25054
 } from 'lucide-react';
 
 // ============================================================================
@@ -372,6 +376,7 @@ declare global {
 }
 
 export default function RoomPage() {
+  const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const code = params.code as string;
@@ -1064,14 +1069,55 @@ export default function RoomPage() {
   // Trouver le pseudo du membre actuel pour le chat
   const currentMemberName = members.find(m => m.id === memberId)?.name || "";
 
+  // Fonction pour quitter le salon
+  const handleQuitRoom = () => {
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+    }
+    router.push('/');
+  };
+
   if (loading) return <div className={styles.loading}>Chargement...</div>;
 
   return (
     <div className={styles.container}>
       <div className={styles.roomHeader}>
         <h1 className={styles.roomTitle}>Salon: {code}</h1>
-        <div className={`${styles.connectionBadge} ${socketRef.current?.connected ? styles.connected : styles.disconnected}`}>
-          {socketRef.current?.connected ? '🟢 Connecté' : '🔴 Déconnecté'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className={`${styles.connectionBadge} ${socketRef.current?.connected ? styles.connected : styles.disconnected}`}>
+            {socketRef.current?.connected ? '🟢 Connecté' : '🔴 Déconnecté'}
+          </div>
+          <button
+            onClick={handleQuitRoom}
+            className={styles.quitButton}
+            title="Quitter le salon"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '600',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 16px rgba(220, 38, 38, 0.6)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
+            }}
+          >
+            <LogOut size={16} />
+            Quitter
+          </button>
         </div>
       </div>
       

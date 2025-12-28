@@ -1,10 +1,18 @@
-/* Variables thème Cerise */
+/* Variables thème Salon Luxe */
 :root {
-  --cherry-lightest: #C52233;
-  --cherry-light: #A51C30;
-  --cherry-medium: #A7333F;
-  --cherry-dark: #74121D;
-  --cherry-darkest: #580C1F;
+  --salon-primary: #1a1a2e;
+  --salon-secondary: #16213e;
+  --salon-accent: #0f3460;
+  --salon-gold: #e8b923;
+  --salon-gold-light: #f4c430;
+  --salon-gold-dark: #d4a017;
+  --salon-neutral: #e6e6e6;
+  --salon-neutral-dark: #b8b8b8;
+  --salon-glass: rgba(255, 255, 255, 0.08);
+  --salon-glass-border: rgba(255, 255, 255, 0.15);
+  --salon-shadow: rgba(0, 0, 0, 0.25);
+  --salon-shadow-light: rgba(0, 0, 0, 0.15);
+  --salon-glow: rgba(232, 185, 35, 0.3);
 }
 
 .container {
@@ -471,9 +479,19 @@
    VARIABLES
    ======================================== */
 :root {
-  --cherry-lightest: #C52233;
-  --cherry-light: #A51C30;
-  --cherry-dark: #74121D;
+  --salon-primary: #1a1a2e;
+  --salon-secondary: #16213e;
+  --salon-accent: #0f3460;
+  --salon-gold: #e8b923;
+  --salon-gold-light: #f4c430;
+  --salon-gold-dark: #d4a017;
+  --salon-neutral: #e6e6e6;
+  --salon-neutral-dark: #b8b8b8;
+  --salon-glass: rgba(255, 255, 255, 0.08);
+  --salon-glass-border: rgba(255, 255, 255, 0.15);
+  --salon-shadow: rgba(0, 0, 0, 0.25);
+  --salon-shadow-light: rgba(0, 0, 0, 0.15);
+  --salon-glow: rgba(232, 185, 35, 0.3);
   --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
   --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.15);
   --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.25);
@@ -483,14 +501,15 @@
    CONTAINER PRINCIPAL
    ======================================== */
 .playlistContainer {
-  background: rgba(255, 255, 255, 0.05);
- 
-  border-radius: 24px;
-  padding: 30px;
-  margin-top: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: var(--shadow-card);
-  transition: all 0.3s var(--transition-smooth);
+  background: var(--salon-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 28px;
+  padding: 32px;
+  margin-top: 32px;
+  border: 1px solid var(--salon-glass-border);
+  box-shadow: 0 8px 32px var(--salon-shadow);
+  transition: all 0.4s var(--transition-smooth);
   position: relative;
   overflow: hidden;
 }
@@ -498,26 +517,41 @@
 .playlistContainer::before {
   content: '';
   position: absolute;
-  top: -50%;
-  right: -20%;
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(197, 34, 51, 0.1) 0%, transparent 70%);
+  top: -30%;
+  right: -15%;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, var(--salon-glow) 0%, transparent 70%);
   border-radius: 50%;
-  filter: blur(60px);
-  animation: rotate 20s linear infinite;
+  filter: blur(40px);
+  animation: salonGlow 15s ease-in-out infinite alternate;
   pointer-events: none;
 }
 
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.playlistContainer::after {
+  content: '';
+  position: absolute;
+  bottom: -20%;
+  left: -10%;
+  width: 250px;
+  height: 250px;
+  background: radial-gradient(circle, rgba(15, 52, 96, 0.15) 0%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(35px);
+  animation: salonGlow 20s ease-in-out infinite alternate-reverse;
+  pointer-events: none;
+}
+
+@keyframes salonGlow {
+  0% { opacity: 0.3; transform: scale(1); }
+  100% { opacity: 0.7; transform: scale(1.1); }
 }
 
 .playlistContainer:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(197, 34, 51, 0.3);
-  box-shadow: var(--shadow-hover);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(232, 185, 35, 0.2);
+  box-shadow: 0 12px 48px rgba(232, 185, 35, 0.1);
+  transform: translateY(-2px);
 }
 
 /* ========================================
@@ -568,48 +602,35 @@
    BADGES
    ======================================== */
 .currentIndexBadge {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--salon-glass);
   padding: 8px 18px;
   border-radius: 50px;
   font-size: 0.9rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.7);
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  color: var(--salon-neutral);
+  border: 2px solid var(--salon-glass-border);
   transition: all 0.3s var(--transition-smooth);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .currentIndexBadge.active {
-  background: linear-gradient(135deg, rgba(33, 150, 243, 0.3), rgba(33, 150, 243, 0.2));
-  border-color: rgba(33, 150, 243, 0.5);
-  color: #90CAF9;
-  box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
-  animation: pulse 2s ease-in-out infinite;
+  background: linear-gradient(135deg, var(--salon-gold) 0%, var(--salon-gold-light) 100%);
+  border-color: var(--salon-gold);
+  color: var(--salon-primary);
+  box-shadow: 0 4px 15px var(--salon-glow);
+  animation: salonPulse 2s ease-in-out infinite;
 }
 
-@keyframes pulse {
+@keyframes salonPulse {
   0%, 100% {
-    box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+    box-shadow: 0 4px 15px var(--salon-glow);
   }
   50% {
-    box-shadow: 0 6px 25px rgba(33, 150, 243, 0.5);
+    box-shadow: 0 6px 25px rgba(232, 185, 35, 0.6);
   }
 }
 
-.reorderingBadge {
-  background: linear-gradient(135deg, #FF9800, #F57C00);
-  color: white;
-  padding: 6px 14px;
-  border-radius: 50px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4);
-  animation: wiggle 1s ease-in-out infinite;
-}
-
-@keyframes wiggle {
-  0%, 100% { transform: rotate(-3deg); }
-  50% { transform: rotate(3deg); }
-}
 
 /* ========================================
    ZONE DE SCROLL
