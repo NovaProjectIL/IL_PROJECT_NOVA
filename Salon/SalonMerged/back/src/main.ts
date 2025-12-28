@@ -41,7 +41,7 @@ async function bootstrap() {
     }
   }
   
-  // ✅ CORS pour frontend Next.js (multiple localhost ports)
+  // ✅ CORS pour frontend Next.js (multiple origins including network IPs)
   app.enableCors({
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl requests)
@@ -49,6 +49,16 @@ async function bootstrap() {
 
       // Allow localhost on any port
       if (origin.match(/^http:\/\/localhost:\d+$/)) {
+        return callback(null, true);
+      }
+
+      // Allow 127.0.0.1 on any port
+      if (origin.match(/^http:\/\/127\.0\.0\.1:\d+$/)) {
+        return callback(null, true);
+      }
+
+      // Allow any IP address on port 3000 (for network access)
+      if (origin.match(/^http:\/\/\d+\.\d+\.\d+\.\d+:3000$/)) {
         return callback(null, true);
       }
 
