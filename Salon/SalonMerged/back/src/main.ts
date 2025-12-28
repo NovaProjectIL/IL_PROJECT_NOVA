@@ -87,11 +87,11 @@ async function bootstrap() {
     next();
   });
   
-  await app.listen(3001);
-  
-  console.log(`\n🚀 Backend running on: http://localhost:3001`);
+  await app.listen(3000);
+
+  console.log(`\n🚀 Backend running on: http://localhost:3000`);
   console.log(`🌐 CORS enabled for: http://localhost:3000`);
-  console.log(`🔗 Test YouTube API: http://localhost:3001/rooms/youtube-info?videoId=dQw4w9WgXcQ`);
+  console.log(`🔗 Test YouTube API: http://localhost:3000/rooms/youtube-info?videoId=dQw4w9WgXcQ`);
   
   // Test direct de la clé API (optionnel)
   testYouTubeAPI();
