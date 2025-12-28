@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Users, Play, MessageCircle, Lock, Zap, Palette, Sparkles, ArrowRight, Menu, X, User } from 'lucide-react';
+import Link from 'next/link';
 import { roomsApi } from './lib/api';
 
 export default function HomePage() {
@@ -381,11 +382,11 @@ const handleJoinRoom = async () => {
           </div>
           
           <div className="footer-links">
-            <a href="#privacy" className="footer-link">Confidentialité</a>
+            <Link href="/confidentialite" className="footer-link">Confidentialité</Link>
             <span className="footer-separator">•</span>
-            <a href="#terms" className="footer-link">Conditions</a>
+            <Link href="/conditions" className="footer-link">Conditions</Link>
             <span className="footer-separator">•</span>
-            <a href="#support" className="footer-link">Support</a>
+            <Link href="/support" className="footer-link">Support</Link>
           </div>
           
           <div className="footer-copyright">
