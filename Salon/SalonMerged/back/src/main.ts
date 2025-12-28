@@ -41,7 +41,7 @@ async function bootstrap() {
     }
   }
   
-  // ✅ CORS pour frontend Next.js (multiple localhost ports)
+  // ✅ CORS pour frontend Next.js (multiple localhost ports et réseau local)
   app.enableCors({
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl requests)
@@ -49,6 +49,16 @@ async function bootstrap() {
 
       // Allow localhost on any port
       if (origin.match(/^http:\/\/localhost:\d+$/)) {
+        return callback(null, true);
+      }
+
+      // Allow 127.0.0.1 on any port
+      if (origin.match(/^http:\/\/127\.0\.0\.1:\d+$/)) {
+        return callback(null, true);
+      }
+
+      // Allow local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+      if (origin.match(/^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)\d+\.\d+:\d+$/)) {
         return callback(null, true);
       }
 
@@ -77,10 +87,11 @@ async function bootstrap() {
     next();
   });
   
-  await app.listen(3001);
-  
+  await app.listen(3001, '0.0.0.0');
+
   console.log(`\n🚀 Backend running on: http://localhost:3001`);
-  console.log(`🌐 CORS enabled for: http://localhost:3000`);
+  console.log(`🌐 Also accessible on network: http://0.0.0.0:3001`);
+  console.log(`🌐 CORS enabled for: http://localhost:3000 and local network`);
   console.log(`🔗 Test YouTube API: http://localhost:3001/rooms/youtube-info?videoId=dQw4w9WgXcQ`);
   
   // Test direct de la clé API (optionnel)

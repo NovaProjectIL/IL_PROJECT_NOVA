@@ -9,7 +9,7 @@ class SocketService {
   // Connecter au WebSocket
   connect() {
     if (typeof window === 'undefined') return null;
-    
+
     if (!this.socket) {
       this.socket = io(`${WS_URL}/rooms`, {
         transports: ['websocket', 'polling'],

@@ -41,7 +41,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     if (!socket) return;
 
     const identifyAndLoad = () => {
-        // console.log(`🔄 [Chat] Init pour room: ${roomCode}`);
+        console.log(`🔄 [Chat] Init pour room: ${roomCode}, socket connected: ${socket.connected}`);
         socket.emit('setUsername', { username: pseudo, userId: userId || 0 });
 
         if (roomCode) {
@@ -51,10 +51,19 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
         }
     };
 
-    if (socket.connected) identifyAndLoad();
-    socket.on('connect', identifyAndLoad);
+    // Émettre immédiatement si déjà connecté, sinon attendre la connexion
+    if (socket.connected) {
+      identifyAndLoad();
+    } else {
+      // Écouter les événements de connexion
+      socket.on('connect', identifyAndLoad);
+    }
+
+    // Ré-identifier en cas de reconnexion
+    socket.on('reconnect', identifyAndLoad);
 
     const handleReceiveMessage = (msg: Message) => {
+      console.log('📨 Message reçu:', msg);
       setMessages((prev) => [...prev, msg]);
       setTypingUsers((prev) => prev.filter((name) => name !== msg.username));
       if (onMessageReceived) onMessageReceived();
@@ -62,6 +71,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     };
 
     const handleLoadMessages = (histMessages: any[]) => {
+        console.log('📚 Messages chargés:', histMessages.length);
         const formatted = histMessages.map(m => ({
             username: m.username,
             message: m.message,
@@ -91,7 +101,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
       socket.off("loadMessages", handleLoadMessages);
       socket.off("userTyping", handleUserTyping);
     };
-  }, [socket, roomCode, pseudo, userId]);
+  }, [socket, roomCode, pseudo, userId, socket?.connected]);
 
   const scrollToBottom = () => {
     setTimeout(() => {
