@@ -112,7 +112,7 @@ interface YouTubePlayer {
   getVideoData?: () => { video_id: string; title: string };
 }
 
-const API_URL = 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';  // Utilise l'env ou localhost par défaut
 console.log('🌐 URL API:', API_URL);
 
 declare global {
