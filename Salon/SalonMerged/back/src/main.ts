@@ -66,8 +66,11 @@ async function bootstrap() {
       const allowedOrigins = [
         'http://localhost:3000', 
         'http://127.0.0.1:3000',
-        'https://novail.vercel.app'  // 🔧 AJOUTÉ : Remplace par TON URL Vercel exacte !
+        'https://novail.vercel.app/',
+        'https://vulgarly-unforcible-loura.ngrok-free.dev'
       ];
+
+      // Allow specific origins if needed
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
