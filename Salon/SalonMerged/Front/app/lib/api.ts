@@ -1,19 +1,45 @@
 // app/lib/api.ts
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3001';
+const API_URL = 'https://vulgarly-unforcible-loura.ngrok-free.dev';
 
 const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
+    // ✅ FIX PRINCIPAL : Contourner l'avertissement ngrok
+    'ngrok-skip-browser-warning': 'true',
   },
-  timeout: 10000, // Timeout de 10 secondes
+  timeout: 10000,
 });
 
 // Intercepteur pour logging des erreurs
 api.interceptors.response.use(
   (response) => response,
+  (error) => {
+    console.error('❌ API Error:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      message: error.message,
+      data: error.response?.data, // ✅ Afficher les données d'erreur
+    });
+    return Promise.reject(error);
+  }
+);
+
+// ✅ FIX BONUS : Intercepteur pour vérifier les réponses HTML
+api.interceptors.response.use(
+  (response) => {
+    // Vérifier si on a reçu du HTML au lieu de JSON
+    if (typeof response.data === 'string' && response.data.startsWith('<!DOCTYPE')) {
+      console.error('⚠️ Réponse HTML détectée au lieu de JSON !');
+      console.error('URL:', response.config.url);
+      console.error('Headers:', response.config.headers);
+      throw new Error('Réponse HTML reçue - vérifier la configuration ngrok');
+    }
+    return response;
+  },
   (error) => {
     console.error('❌ API Error:', {
       url: error.config?.url,
@@ -50,9 +76,8 @@ export const roomsApi = {
   pause: (codeRoom: string, positionSec?: number) => 
     api.post('/rooms/pause', { codeRoom, positionSec }),
   
-  
-   seek: (codeRoom: string, positionSec: number) =>
-     api.post('/rooms/seek', { codeRoom, positionSec }),
+  seek: (codeRoom: string, positionSec: number) =>
+    api.post('/rooms/seek', { codeRoom, positionSec }),
   
   // === Vidéo directe ===
   playDirectVideo: (data: {

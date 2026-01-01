@@ -49,14 +49,13 @@ export class ChatGateway {
   @SubscribeMessage('typing')
   handleTyping(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { isTyping: boolean, codeRoom: string } // <-- Même nommage que RoomsGateway
+    @MessageBody() payload: { isTyping: boolean, codeRoom: string }
   ) {
     if (!payload.codeRoom) return;
 
     const user = client.data.user;
     if (!user) return;
 
-    // On convertit en MAJUSCULE comme dans RoomsGateway
     client.to(payload.codeRoom.toUpperCase()).emit('userTyping', {
       username: user.name,
       isTyping: payload.isTyping
@@ -70,7 +69,7 @@ export class ChatGateway {
     @MessageBody() payload: {
         message?: string;
         gifUrl?: string;
-        codeRoom: string; // <-- Même nommage
+        codeRoom: string;
         userId?: number;
         username?: string;
     },
@@ -99,7 +98,6 @@ export class ChatGateway {
     // Remise en mémoire
     client.data.user = user;
 
-    // IMPORTANT : On normalise le codeRoom en MAJUSCULE pour matcher le client.join() du RoomsGateway
     const roomCode = payload.codeRoom.toUpperCase();
 
     // Arrêt du typing
@@ -109,7 +107,7 @@ export class ChatGateway {
     });
 
     try {
-        // 3. SAUVEGARDE EN BDD VIA VOS ENTITÉS
+        // 3. SAUVEGARDE EN BDD
         const savedMessage = await this.chatService.saveMessage(
           user,
           payload.message,
@@ -117,12 +115,12 @@ export class ChatGateway {
           roomCode
         );
 
-        console.log(`✅ Chat: Message envoyé dans ${roomCode}`);
+        console.log(`✅ Chat: Message envoyé dans ${roomCode} par ${user.name} (ID: ${user.id})`);
 
-        // 4. DIFFUSION
+        // 4. DIFFUSION AVEC userId ✅
         this.server.to(roomCode).emit('receiveMessage', {
           username: user.name,
-          userId: user.id,
+          userId: user.id, // ✅ FIX PRINCIPAL : Inclure l'userId
           message: savedMessage.content,
           gifUrl: savedMessage.gifUrl,
           createdAt: savedMessage.createdAt,

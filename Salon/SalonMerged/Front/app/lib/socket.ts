@@ -1,7 +1,7 @@
 // app/lib/socket.ts
 import { io, Socket } from 'socket.io-client';
 
-const WS_URL = 'http://localhost:3001';
+const WS_URL = 'https://vulgarly-unforcible-loura.ngrok-free.dev';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -11,8 +11,33 @@ class SocketService {
     if (typeof window === 'undefined') return null;
     
     if (!this.socket) {
-      this.socket = io(`${WS_URL}/rooms`, {
+      this.socket = io(WS_URL, {
         transports: ['websocket', 'polling'],
+        // ✅ FIX : Ajouter le header pour ngrok
+        extraHeaders: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+        // ✅ Options de reconnexion robustes
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+      });
+
+      // ✅ FIX BONUS : Logger les événements de connexion
+      this.socket.on('connect', () => {
+        console.log('✅ Socket connecté:', this.socket?.id);
+      });
+
+      this.socket.on('disconnect', (reason) => {
+        console.log('❌ Socket déconnecté:', reason);
+      });
+
+      this.socket.on('error', (error) => {
+        console.error('❌ Socket error:', error);
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error('❌ Socket connection error:', error);
       });
     }
     return this.socket;

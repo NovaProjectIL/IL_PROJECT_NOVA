@@ -11,6 +11,7 @@ type Message = {
   message: string | null;
   gifUrl: string | null;
   createdAt: string;
+  userId?: number; // ✅ AJOUTÉ pour comparaison fiable
 };
 
 type ChatProps = {
@@ -31,10 +32,18 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
   const [pickerMode, setPickerMode] = useState<'none' | 'emoji' | 'gif'>('none');
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [gifSearch, setGifSearch] = useState("");
+  
+  // ✅ FIX: Garder le pseudo initial ET l'userId pour comparaison
   const [pseudo, setPseudo] = useState(initialPseudo || "");
+  const currentUserId = useRef(userId);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ✅ FIX: Mettre à jour le pseudo si l'userId change
+  useEffect(() => {
+    currentUserId.current = userId;
+  }, [userId]);
 
   // --- CONNEXION ---
   useEffect(() => {
@@ -45,21 +54,17 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
         socket.emit('setUsername', { username: pseudo, userId: userId || 0 });
 
         if (roomCode) {
-            // Rejoindre la room chat pour recevoir les messages en temps réel
             socket.emit('joinChatRoom', { codeRoom: roomCode });
             socket.emit('requestMessages', { codeRoom: roomCode });
         }
     };
 
-    // Émettre immédiatement si déjà connecté, sinon attendre la connexion
     if (socket.connected) {
       identifyAndLoad();
     } else {
-      // Écouter les événements de connexion
       socket.on('connect', identifyAndLoad);
     }
 
-    // Ré-identifier en cas de reconnexion
     socket.on('reconnect', identifyAndLoad);
 
     const handleReceiveMessage = (msg: Message) => {
@@ -76,7 +81,8 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
             username: m.username,
             message: m.message,
             gifUrl: m.gifUrl,
-            createdAt: m.createdAt
+            createdAt: m.createdAt,
+            userId: m.userId // ✅ IMPORTANT : Récupérer l'userId
         }));
         setMessages(formatted);
         scrollToBottom();
@@ -112,11 +118,9 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
   };
 
   // --- ACTIONS ---
-
   const sendMessage = () => {
     if (!text.trim()) return;
 
-    // SÉCURITÉ : On vérifie qu'on a bien le code
     if (!roomCode) {
         console.error("❌ Erreur : roomCode manquant !");
         return;
@@ -189,7 +193,11 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
           </div>
         )}
         {messages.map((m, i) => {
-          const isMe = m.username === pseudo;
+          // ✅ FIX PRINCIPAL : Comparer par userId si disponible, sinon par username
+          const isMe = m.userId 
+            ? m.userId === currentUserId.current 
+            : m.username === pseudo;
+          
           return (
             <div key={i} className={`chat-message-row ${isMe ? "me" : "other"}`}>
               {!isMe && <span className="username-label">{m.username}</span>}

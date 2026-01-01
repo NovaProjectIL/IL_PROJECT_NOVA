@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-// Import de TES entités
 import { User } from '../entities/user.entity';
 import { Message } from '../entities/message.entity';
 import { Room } from '../entities/room.entity';
@@ -20,7 +19,6 @@ export class ChatService {
   async getOrCreateUser(name: string): Promise<User> {
     let user = await this.userRepo.findOne({ where: { name } });
     if (!user) {
-      // Par défaut role = MEMBER selon ton entité
       user = this.userRepo.create({ name: name || "Utilisateur" });
       await this.userRepo.save(user);
     }
@@ -40,15 +38,15 @@ export class ChatService {
     return this.userRepo.save(user);
   }
 
-  // --- SAUVEGARDE DU MESSAGE (Le cœur du système) ---
+  // --- SAUVEGARDE DU MESSAGE ---
   async saveMessage(
     user: User,
     content: string | undefined,
     gifUrl: string | undefined,
-    codeRoom: string, // On reçoit le code (ex: GQANZS)
+    codeRoom: string,
   ): Promise<Message> {
     
-    // 1. Trouver la Room via son code (colonne 'code' dans Room entity)
+    // 1. Trouver la Room
     const room = await this.roomRepo.findOne({ 
       where: { code: codeRoom },
       relations: ['chatSession'] 
@@ -58,15 +56,14 @@ export class ChatService {
       throw new NotFoundException(`Room avec le code ${codeRoom} introuvable.`);
     }
 
-    // 2. Vérifier ou créer la ChatSession (Relation OneToOne dans Room)
+    // 2. Vérifier ou créer la ChatSession
     let session = room.chatSession;
     if (!session) {
       session = this.chatSessionRepo.create({ room: room });
       await this.chatSessionRepo.save(session);
     }
 
-    // 3. Créer le message lié à la SESSION et à l'USER
-    // Ton entité Message a bien 'user' et 'chatSession'
+    // 3. Créer le message
     const message = this.messageRepo.create({
       content: content ?? null,
       gifUrl: gifUrl ?? null,
@@ -77,22 +74,21 @@ export class ChatService {
     return this.messageRepo.save(message);
   }
 
-  // --- RÉCUPÉRATION HISTORIQUE ---
+  // --- RÉCUPÉRATION HISTORIQUE AVEC userId ✅ ---
   async getMessagesByRoom(codeRoom: string) {
-    // On cherche les messages liés à la session de la room donnée
     const messages = await this.messageRepo.find({
       where: {
         chatSession: {
-          room: { code: codeRoom } // Jointure automatique TypeORM
+          room: { code: codeRoom }
         }
       },
-      relations: ['user'], // Pour avoir le pseudo de l'auteur
+      relations: ['user'],
       order: { createdAt: 'ASC' },
     });
 
     return messages.map((m) => ({
-      username: m.user?.name || 'Utilisateur', // Gestion du user nullable (SET NULL)
-      userId: m.user?.id ?? null,
+      username: m.user?.name || 'Utilisateur',
+      userId: m.user?.id ?? null, // ✅ FIX PRINCIPAL : Inclure l'userId
       message: m.content ?? undefined,
       gifUrl: m.gifUrl ?? undefined,
       createdAt: m.createdAt,
