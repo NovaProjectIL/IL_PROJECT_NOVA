@@ -10,8 +10,12 @@ import { ChatService } from './chat.service';
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
-    credentials: true
+    // Mets l'URL exacte de ton front Vercel ici (ou un tableau d'URLs si tu veux garder localhost)
+    origin: ["https://novail.vercel.app", "http://localhost:3000"],
+    credentials: true,
+    methods: ["GET", "POST"],
+    // AJOUT DU HEADER ICI 👇
+    allowedHeaders: ["ngrok-skip-browser-warning"] 
   }
 })
 export class ChatGateway {

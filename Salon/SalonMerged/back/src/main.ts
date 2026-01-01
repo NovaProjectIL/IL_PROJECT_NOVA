@@ -64,10 +64,12 @@ async function bootstrap() {
 
       // Allow specific origins if needed
       const allowedOrigins = [
-        'http://localhost:3000', 
+        'http://localhost:3000',
         'http://127.0.0.1:3000',
+        'https://novail.vercel.app',
         'https://novail.vercel.app/',
-        'https://vulgarly-unforcible-loura.ngrok-free.dev'
+        'https://vulgarly-unforcible-loura.ngrok-free.dev',
+        'https://vulgarly-unforcible-loura.ngrok-free.dev/'
       ];
 
       // Allow specific origins if needed
@@ -75,11 +77,12 @@ async function bootstrap() {
         return callback(null, true);
       }
 
+      console.log('❌ CORS REJETÉ - Origin:', origin);
       return callback(new Error('Not allowed by CORS'));
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
-    allowedHeaders: 'Content-Type, Accept, Authorization',
+    allowedHeaders: 'Content-Type, Accept, Authorization, ngrok-skip-browser-warning',
   });
   
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
