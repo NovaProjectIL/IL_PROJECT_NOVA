@@ -1,20 +1,18 @@
 // app/lib/socket.ts
 import { io, Socket } from 'socket.io-client';
 
-// CORRECTION : Utiliser la variable d'env, sinon ça ne marchera jamais sur Vercel
-const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const WS_URL = 'http://localhost:3001';
 
 class SocketService {
   private socket: Socket | null = null;
 
+  // Connecter au WebSocket
   connect() {
     if (typeof window === 'undefined') return null;
     
     if (!this.socket) {
-      // On se connecte à l'URL dynamique (Ngrok ou Localhost selon l'env)
-      this.socket = io(WS_URL, { // Note: j'ai retiré le /rooms ici, socket.io gère ça mieux via les namespaces si besoin, sinon laisse juste l'URL de base
+      this.socket = io(`${WS_URL}/rooms`, {
         transports: ['websocket', 'polling'],
-        withCredentials: true,
       });
     }
     return this.socket;
