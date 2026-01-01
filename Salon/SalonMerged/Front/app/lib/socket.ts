@@ -15,10 +15,6 @@ class SocketService {
       this.socket = io(WS_URL, { // Note: j'ai retiré le /rooms ici, socket.io gère ça mieux via les namespaces si besoin, sinon laisse juste l'URL de base
         transports: ['websocket', 'polling'],
         withCredentials: true,
-        // C'EST ICI LA CLÉ POUR NGROK 👇
-        extraHeaders: {
-          "ngrok-skip-browser-warning": "true"
-        }
       });
     }
     return this.socket;
