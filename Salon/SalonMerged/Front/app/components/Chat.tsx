@@ -230,14 +230,69 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
       <div className="chat-input-rave position-relative">
         {pickerMode !== 'none' && (
             <div className="picker-overlay">
-                <div className="picker-tabs">
-                    <button className={`picker-tab ${pickerMode === 'emoji' ? 'active' : ''}`} onClick={() => setPickerMode('emoji')}>Emojis</button>
-                    <button className={`picker-tab ${pickerMode === 'gif' ? 'active' : ''}`} onClick={() => setPickerMode('gif')}>GIFs</button>
-                    <button className="btn-close-custom" onClick={() => setPickerMode('none')}>X</button>
+                <div className="picker-header">
+                    <div className="picker-tabs">
+                        <button className={`picker-tab ${pickerMode === 'emoji' ? 'active' : ''}`} onClick={() => setPickerMode('emoji')}>
+                            😀 Emojis
+                        </button>
+                        <button className={`picker-tab ${pickerMode === 'gif' ? 'active' : ''}`} onClick={() => setPickerMode('gif')}>
+                            🎬 GIFs
+                        </button>
+                    </div>
+                    <button className="btn-close-custom" onClick={() => setPickerMode('none')} aria-label="Close picker">
+                        ✕
+                    </button>
                 </div>
-                <div className="flex-grow-1 position-relative overflow-hidden h-100">
-                  {pickerMode === 'emoji' && <EmojiPicker onEmojiClick={(e) => setText((prev) => prev + e.emoji)} width="100%" height="100%" theme={Theme.DARK} previewConfig={{ showPreview: false }} style={{background: 'transparent', border: 'none'}} />}
-                  {pickerMode === 'gif' && <div className="h-100 d-flex flex-column"><div className="px-3 pb-2"><input type="text" className="form-control bg-dark text-white border-secondary form-control-sm rounded-pill" placeholder="Rechercher un GIF..." value={gifSearch} onChange={(e) => setGifSearch(e.target.value)} autoFocus /></div><div className="flex-grow-1 overflow-auto px-2 pb-2 d-flex justify-content-center"><Grid fetchGifs={fetchGifs} width={340} columns={3} gutter={6} noLink={true} key={gifSearch} onGifClick={(gif, e) => { e.preventDefault(); sendGif(gif.images.original.url); }} /></div></div>}
+                <div className="picker-content">
+                  {pickerMode === 'emoji' && (
+                    <div className="emoji-container">
+                      <EmojiPicker
+                        onEmojiClick={(e) => {
+                          setText((prev) => prev + e.emoji);
+                          setPickerMode('none'); // Auto-close after selection
+                        }}
+                        width="100%"
+                        height="100%"
+                        theme={Theme.DARK}
+                        previewConfig={{ showPreview: false }}
+                        style={{ background: 'transparent', border: 'none' }}
+                        searchPlaceHolder="Search emojis..."
+
+                      />
+                    </div>
+                  )}
+                  {pickerMode === 'gif' && (
+                    <div className="gif-container">
+                      <div className="gif-search-wrapper">
+                        <div className="search-input-container">
+                          <span className="search-icon">🔍</span>
+                          <input
+                            type="text"
+                            className="gif-search-input"
+                            placeholder="Search GIFs..."
+                            value={gifSearch}
+                            onChange={(e) => setGifSearch(e.target.value)}
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <div className="gif-grid-wrapper">
+                        <Grid
+                          fetchGifs={fetchGifs}
+                          width={340}
+                          columns={4}
+                          gutter={8}
+                          noLink={true}
+                          key={gifSearch}
+                          onGifClick={(gif, e) => {
+                            e.preventDefault();
+                            sendGif(gif.images.original.url);
+                            setPickerMode('none'); // Auto-close after selection
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
             </div>
         )}
