@@ -121,29 +121,31 @@ async createRoom(@Body() body: CreateRoomDto) {
 @Post("join")
 async joinRoom(@Body() body: CreateMemberDto) {
   const { displayName, codeRoom } = body;
-  
+
   // ⬇️ Important: utilisez la bonne méthode du service
   const { room, user } = await this.roomsService.joinRoom(displayName, codeRoom.toUpperCase());
-  
+
   // ⬇️ DEBUG
   console.log('🔍 Room in join:', {
     code: room.code,
     hasQRcode: !!room.QRcode,
     hasLink: !!room.link
   });
-  
+
   return {
     roomId: room.id,
     code: room.code,
+    memberId: user.id, // ✅ FIX: Return memberId for the joining user
+    memberName: user.name, // ✅ FIX: Return memberName
     creatorId: user.role === 'CREATOR' ? user.id : null,
     creatorName: user.role === 'CREATOR' ? user.name : null,
-   
+
     QRcode: room.QRcode,
     link: room.link,
-   
-    qrCode: room.QRcode,    
-    inviteLink: room.link,  
-    inviteCode: room.code,   
+
+    qrCode: room.QRcode,
+    inviteLink: room.link,
+    inviteCode: room.code,
   };
 }
 
