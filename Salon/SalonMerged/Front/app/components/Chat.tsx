@@ -194,10 +194,22 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
         )}
         {messages.map((m, i) => {
           // ✅ FIX PRINCIPAL : Comparer par userId si disponible, sinon par username
-          const isMe = m.userId 
-            ? m.userId === currentUserId.current 
+          const isMe = m.userId
+            ? m.userId === currentUserId.current
             : m.username === pseudo;
-          
+
+          // System message if userId is null
+          const isSystem = m.userId === null;
+
+          if (isSystem) {
+            return (
+              <div key={i} className="chat-message-row system">
+                <div className="system-message">{m.message}</div>
+                <span className="message-time">{formatTime(m.createdAt)}</span>
+              </div>
+            );
+          }
+
           return (
             <div key={i} className={`chat-message-row ${isMe ? "me" : "other"}`}>
               {!isMe && <span className="username-label">{m.username}</span>}

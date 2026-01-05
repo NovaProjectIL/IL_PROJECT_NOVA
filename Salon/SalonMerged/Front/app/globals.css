@@ -2568,6 +2568,9 @@ body {
 .chat-message-row.other {
   align-items: flex-start;
 }
+.chat-message-row.system {
+  align-items: center;
+}
 
 .chat-message-row.me .username-label {
   display: none;
@@ -2589,6 +2592,25 @@ body {
   margin-left: 5px;
   margin-right: 0;
   text-align: left;
+}
+
+.chat-message-row.system .message-time {
+  text-align: center;
+  margin-top: 4px;
+}
+
+.system-message {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  max-width: 80%;
+  margin: 0 auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
 @media (max-width: 768px) {

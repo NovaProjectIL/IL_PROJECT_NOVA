@@ -50,10 +50,11 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.join(roomCode);
     
     this.logger.log(`👤 ${client.id} (membre ${memberId}) rejoint room: ${roomCode}`);
-    
+
+    let roomState: any;
     try {
       // Récupérer l'état complet de la room
-      const roomState = await this.roomsService.stateRoom(roomCode);
+      roomState = await this.roomsService.stateRoom(roomCode);
       
       // IMPORTANT: Calculer la position actuelle si en lecture
       let currentPosition = roomState.playbackState?.positionSec || 0;
@@ -130,7 +131,21 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       memberId,
       timestamp: new Date(),
     });
-    
+
+    // Envoyer une notification dans le chat
+    if (roomState) {
+      const user = roomState.users.find(u => u.id === memberId);
+      if (user) {
+        this.server.to(roomCode).emit('receiveMessage', {
+          username: 'System',
+          userId: null, // Indique un message système
+          message: `${user.name} has joined the room`,
+          gifUrl: null,
+          createdAt: new Date(),
+        });
+      }
+    }
+
     return { success: true, room: roomCode };
   }
 
