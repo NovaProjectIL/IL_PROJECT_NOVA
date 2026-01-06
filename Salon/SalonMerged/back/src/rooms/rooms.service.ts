@@ -129,7 +129,7 @@ export class RoomsService {
     });
     await this.usersRepo.save(creator);
 
-    this.logger.log(`✅ Salle créée: ${code} (ID: ${room.id})`);
+    this.logger.log(` Salle créée: ${code} (ID: ${room.id})`);
     
     
     return {
@@ -141,7 +141,7 @@ export class RoomsService {
     };
   }
 
-  // 🆕 MÉTHODE POUR METTRE À JOUR LE PSEUDO D'UN MEMBRE
+  // MÉTHODE POUR METTRE À JOUR LE PSEUDO D'UN MEMBRE
   async updateMemberName(memberId: number, codeRoom: string, newName: string) {
     this.logger.log(`Mise à jour du pseudo du membre ${memberId} dans ${codeRoom} vers "${newName}"`);
 
@@ -171,7 +171,7 @@ export class RoomsService {
 
     await this.usersRepo.save(user);
 
-    this.logger.log(`✅ Pseudo mis à jour: ${oldName} -> ${user.name}`);
+    this.logger.log(`Pseudo mis à jour: ${oldName} -> ${user.name}`);
 
     return {
       memberId: user.id,
@@ -180,7 +180,8 @@ export class RoomsService {
       roomCode: room.code,
     };
   }
- async joinRoom(memberDisplayName: string | undefined, codeRoom: string) {
+
+  async joinRoom(memberDisplayName: string | undefined, codeRoom: string) {
     this.logger.log(`Tentative de rejoindre la salle: ${codeRoom}`);
     
     const room = await this.roomsRepo.findOne({ where: { code: codeRoom } });
@@ -210,7 +211,7 @@ export class RoomsService {
     });
     await this.usersRepo.save(user);
 
-    this.logger.log(`✅ ${finalName} a rejoint la salle ${codeRoom}`);
+    this.logger.log(` ${finalName} a rejoint la salle ${codeRoom}`);
     
     return { room, user };
   }
@@ -301,7 +302,7 @@ export class RoomsService {
     });
 
     if (remainingCount === 0) {
-      this.logger.log(`🗑️ Suppression de la salle ${codeRoom} (plus de membres)`);
+      this.logger.log(` Suppression de la salle ${codeRoom} (plus de membres)`);
       await this.roomsRepo.remove(room);
       return {
         roomDeleted: true,
@@ -314,7 +315,7 @@ export class RoomsService {
     room.lastActivityAt = new Date();
     await this.roomsRepo.save(room);
 
-    this.logger.log(`👋 ${user.name} a quitté la salle ${codeRoom}`);
+    this.logger.log(` ${user.name} a quitté la salle ${codeRoom}`);
     
     return {
       roomDeleted: false,
@@ -349,7 +350,7 @@ export class RoomsService {
     // Cascade will remove all related entities
     await this.roomsRepo.remove(room);
 
-    this.logger.log(`✅ Salle ${codeRoom} supprimée par ${user.name}`);
+    this.logger.log(` Salle ${codeRoom} supprimée par ${user.name}`);
     
     return {
       roomDeleted: true,
@@ -399,13 +400,13 @@ export class RoomsService {
     
     await this.playbackRepo.save(playback);
 
-    this.logger.log(`✅ Vidéo directe lancée: ${title}`);
+    this.logger.log(` Vidéo directe lancée: ${title}`);
     
     return { room, user, video, playback };
   }
 
   async play(codeRoom: string, positionSec?: number) {
-    this.logger.log(`▶️ Lecture dans ${codeRoom} à ${positionSec || 0}s`);
+    this.logger.log(` Lecture dans ${codeRoom} à ${positionSec || 0}s`);
     
     const room = await this.roomsRepo.findOne({
       where: { code: codeRoom },
@@ -431,7 +432,7 @@ export class RoomsService {
   }
 
   async pause(codeRoom: string, positionSec?: number) {
-    this.logger.log(`⏸️ Pause dans ${codeRoom} à ${positionSec || 0}s`);
+    this.logger.log(` Pause dans ${codeRoom} à ${positionSec || 0}s`);
     
     const room = await this.roomsRepo.findOne({
       where: { code: codeRoom },
@@ -457,7 +458,7 @@ export class RoomsService {
   }
 
   async seek(codeRoom: string, positionSec: number) {
-    this.logger.log(`🎯 Seek dans ${codeRoom} à ${positionSec}s`);
+    this.logger.log(` Seek dans ${codeRoom} à ${positionSec}s`);
     
     const room = await this.roomsRepo.findOne({
       where: { code: codeRoom },
@@ -479,7 +480,7 @@ export class RoomsService {
   }
 
   async handleVideoEnded(codeRoom: string) {
-    this.logger.log(`⏹️ Fin de vidéo détectée dans ${codeRoom}`);
+    this.logger.log(` Fin de vidéo détectée dans ${codeRoom}`);
     
     const room = await this.roomsRepo.findOne({
       where: { code: codeRoom },
@@ -602,18 +603,19 @@ export class RoomsService {
   }
 
   async getRoomByCode(codeRoom: string) {
-  const room = await this.roomsRepo.findOne({
-    where: { code: codeRoom },
-    relations: ['playbackState', 'playbackState.video'],
-  });
-  
-  if (!room) {
-    throw new NotFoundException('Room not found');
+    const room = await this.roomsRepo.findOne({
+      where: { code: codeRoom },
+      relations: ['playbackState', 'playbackState.video'],
+    });
+    
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+    
+    return room;
   }
-  
-  return room;
-}
-  // 🆕 MÉTHODE POUR RÉCUPÉRER L'ÉTAT DE PLAYBACK (pour WebSocket)
+
+  // MÉTHODE POUR RÉCUPÉRER L'ÉTAT DE PLAYBACK (pour WebSocket)
   async getPlaybackState(roomId: number) {
     this.logger.log(`Récupération état playback pour room ${roomId}`);
     
@@ -644,7 +646,7 @@ export class RoomsService {
     };
   }
 
-  // 🆕 MÉTHODE POUR METTRE À JOUR L'ÉTAT DE PLAYBACK
+  // MÉTHODE POUR METTRE À JOUR L'ÉTAT DE PLAYBACK
   async updatePlaybackState(
     roomId: number, 
     updateData: { 
@@ -674,7 +676,7 @@ export class RoomsService {
     }
     
     const saved = await this.playbackRepo.save(playbackState);
-    this.logger.log(`✅ Playback state mis à jour pour room ${roomId}:`, {
+    this.logger.log(`Playback state mis à jour pour room ${roomId}:`, {
       status: saved.status,
       position: saved.positionSec,
     });
@@ -682,7 +684,7 @@ export class RoomsService {
     return saved;
   }
 
-  // 🆕 MÉTHODE POUR RÉCUPÉRER UNE ROOM PAR ID (pour WebSocket)
+  // MÉTHODE POUR RÉCUPÉRER UNE ROOM PAR ID (pour WebSocket)
   async getRoomById(roomId: number) {
     const room = await this.roomsRepo.findOne({
       where: { id: roomId },
@@ -696,59 +698,59 @@ export class RoomsService {
     return room;
   }
 
-  // 🆕 MÉTHODE POUR METTRE À JOUR L'ACTIVITÉ DE LA ROOM
+  // MÉTHODE POUR METTRE À JOUR L'ACTIVITÉ DE LA ROOM
   async updateRoomActivity(roomId: number) {
     await this.roomsRepo.update(roomId, {
       lastActivityAt: new Date(),
     });
   }
-// Dans rooms.service.ts
-async removeUserFromRoom(memberId: number, codeRoom: string) {
-  this.logger.log(`Suppression du membre ${memberId} de la salle ${codeRoom}`);
-  
-  const room = await this.roomsRepo.findOne({
-    where: { code: codeRoom },
-    relations: ['users'],
-  });
 
-  if (!room) {
-    throw new NotFoundException('Room not found');
-  }
+  async removeUserFromRoom(memberId: number, codeRoom: string) {
+    this.logger.log(`Suppression du membre ${memberId} de la salle ${codeRoom}`);
+    
+    const room = await this.roomsRepo.findOne({
+      where: { code: codeRoom },
+      relations: ['users'],
+    });
 
-  const user = room.users.find((m) => m.id === memberId);
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
 
-  if (!user) {
-    throw new NotFoundException('Member not found in this room');
-  }
+    const user = room.users.find((m) => m.id === memberId);
 
-  // Supprimer physiquement l'utilisateur de la base de données
-  await this.usersRepo.remove(user);
-  
-  // Vérifier s'il reste des membres
-  const remainingCount = await this.usersRepo.count({
-    where: { room: { id: room.id } }
-  });
+    if (!user) {
+      throw new NotFoundException('Member not found in this room');
+    }
 
-  if (remainingCount === 0) {
-    this.logger.log(`Suppression de la salle ${codeRoom} (plus de membres)`);
-    await this.roomsRepo.remove(room);
+    // Supprimer physiquement l'utilisateur de la base de données
+    await this.usersRepo.remove(user);
+    
+    // Vérifier s'il reste des membres
+    const remainingCount = await this.usersRepo.count({
+      where: { room: { id: room.id } }
+    });
+
+    if (remainingCount === 0) {
+      this.logger.log(`Suppression de la salle ${codeRoom} (plus de membres)`);
+      await this.roomsRepo.remove(room);
+      return {
+        roomDeleted: true,
+        roomId: room.id,
+        removedMemberId: user.id,
+        removedMemberName: user.name,
+      };
+    }
+
+    room.lastActivityAt = new Date();
+    await this.roomsRepo.save(room);
+
     return {
-      roomDeleted: true,
+      roomDeleted: false,
       roomId: room.id,
       removedMemberId: user.id,
       removedMemberName: user.name,
     };
   }
-
-  room.lastActivityAt = new Date();
-  await this.roomsRepo.save(room);
-
-  return {
-    roomDeleted: false,
-    roomId: room.id,
-    removedMemberId: user.id,
-    removedMemberName: user.name,
-  };
-}
   
 }

@@ -25,51 +25,51 @@ export class RoomsController {
     const seconds = parseInt(match[3] || '0');
     return (hours * 3600) + (minutes * 60) + seconds;
   }
-  // Ajoute après parseISODuration()
-private async estimateVideoDuration(videoId: string): Promise<number> {
-  try {
-    const response = await axios.get(
-      `https://www.youtube.com/watch?v=${videoId}`,
-      {
-        timeout: 5000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
+  private async estimateVideoDuration(videoId: string): Promise<number> {
+    try {
+      const response = await axios.get(
+        `https://www.youtube.com/watch?v=${videoId}`,
+        {
+          timeout: 5000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        }
+      );
+      
+      const html = response.data as string;
+      
+      // Cherche la durée dans différents patterns
+      const patterns = [
+        /"approxDurationMs":"(\d+)"/,
+        /"lengthSeconds":"(\d+)"/,
+        /"duration":"PT(\d+)M(\d+)S"/,
+        /"duration":"PT(\d+)H(\d+)M(\d+)S"/,
+      ];
+      
+      for (const pattern of patterns) {
+        const match = html.match(pattern);
+        if (match) {
+          if (pattern.toString().includes('DurationMs')) {
+            return Math.floor(parseInt(match[1]) / 1000);
+          } else if (pattern.toString().includes('lengthSeconds')) {
+            return parseInt(match[1]);
+          } else if (pattern.toString().includes('PT')) {
+            // Format PT1H2M3S
+            const hours = match[1] ? parseInt(match[1]) : 0;
+            const minutes = match[2] ? parseInt(match[2]) : 0;
+            const seconds = match[3] ? parseInt(match[3]) : 0;
+            return (hours * 3600) + (minutes * 60) + seconds;
+          }
         }
       }
-    );
-    
-    const html = response.data as string;
-    
-    // Cherche la durée dans différents patterns
-    const patterns = [
-      /"approxDurationMs":"(\d+)"/,
-      /"lengthSeconds":"(\d+)"/,
-      /"duration":"PT(\d+)M(\d+)S"/,
-      /"duration":"PT(\d+)H(\d+)M(\d+)S"/,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match) {
-        if (pattern.toString().includes('DurationMs')) {
-          return Math.floor(parseInt(match[1]) / 1000);
-        } else if (pattern.toString().includes('lengthSeconds')) {
-          return parseInt(match[1]);
-        } else if (pattern.toString().includes('PT')) {
-          // Format PT1H2M3S
-          const hours = match[1] ? parseInt(match[1]) : 0;
-          const minutes = match[2] ? parseInt(match[2]) : 0;
-          const seconds = match[3] ? parseInt(match[3]) : 0;
-          return (hours * 3600) + (minutes * 60) + seconds;
-        }
-      }
+      
+      return 180; // Fallback
+    } catch {
+      return 180; // Fallback
     }
-    
-    return 180; // Fallback
-  } catch {
-    return 180; // Fallback
   }
-}
 
   /**
    * POST /rooms
@@ -81,98 +81,73 @@ private async estimateVideoDuration(videoId: string): Promise<number> {
    *  - creator member id and name
    */
 
-@Post()
-async createRoom(@Body() body: CreateRoomDto) {
-  const { displayName } = body;
+  @Post()
+  async createRoom(@Body() body: CreateRoomDto) {
+    const { displayName } = body;
+    
+
+    const serviceResult = await this.roomsService.createRoom(displayName);
+    
+
+    const { room, creator, chatSession, qrCode, inviteLink } = serviceResult;
   
+    console.log('Service result structure:', {
+      hasRoom: !!room,
+      hasCreator: !!creator,
+      hasChatSession: !!chatSession,
+      hasQrCode: !!qrCode,
+      qrCodeLength: qrCode?.length,
+      hasInviteLink: !!inviteLink,
+      inviteLinkValue: inviteLink
+    });
+    
+    // Retournez TOUTES les propriétés
+    return {
+      roomId: room.id,
+      code: room.code,
+      creatorId: creator.id,
+      creatorName: creator.name,
+      chatSession: {
+        id: chatSession.id,
+      },
+      // INCLUEZ CES PROPRIÉTÉS
+      qrCode: qrCode || room.QRcode,       // Utilisez qrCode du service ou de la room
+      inviteLink: inviteLink || room.link,  // Utilisez inviteLink du service ou de la room
+      // Optionnel: ajoutez aussi inviteCode pour cohérence
+      inviteCode: room.code,
+    };
+  }
 
-  const serviceResult = await this.roomsService.createRoom(displayName);
-  
+  @Post("join")
+  async joinRoom(@Body() body: CreateMemberDto) {
+    const { displayName, codeRoom } = body;
 
-  const { room, creator, chatSession, qrCode, inviteLink } = serviceResult;
- 
-  console.log('🔍 Service result structure:', {
-    hasRoom: !!room,
-    hasCreator: !!creator,
-    hasChatSession: !!chatSession,
-    hasQrCode: !!qrCode,
-    qrCodeLength: qrCode?.length,
-    hasInviteLink: !!inviteLink,
-    inviteLinkValue: inviteLink
-  });
-  
-  // ⬇️ Retournez TOUTES les propriétés
-  return {
-    roomId: room.id,
-    code: room.code,
-    creatorId: creator.id,
-    creatorName: creator.name,
-    chatSession: {
-      id: chatSession.id,
-    },
-    // ⬇️⬇️⬇️ INCLUEZ CES PROPRIÉTÉS
-    qrCode: qrCode || room.QRcode,       // Utilisez qrCode du service ou de la room
-    inviteLink: inviteLink || room.link,  // Utilisez inviteLink du service ou de la room
-    // ⬇️ Optionnel: ajoutez aussi inviteCode pour cohérence
-    inviteCode: room.code,
-  };
-}
+    // Important: utilisez la bonne méthode du service
+    const { room, user } = await this.roomsService.joinRoom(displayName, codeRoom.toUpperCase());
 
-@Post("join")
-async joinRoom(@Body() body: CreateMemberDto) {
-  const { displayName, codeRoom } = body;
+    // DEBUG
+    console.log('Room in join:', {
+      code: room.code,
+      hasQRcode: !!room.QRcode,
+      hasLink: !!room.link
+    });
 
-  // ⬇️ Important: utilisez la bonne méthode du service
-  const { room, user } = await this.roomsService.joinRoom(displayName, codeRoom.toUpperCase());
+    return {
+      roomId: room.id,
+      code: room.code,
+      memberId: user.id, 
+      memberName: user.name,
+      creatorId: user.role === 'CREATOR' ? user.id : null,
+      creatorName: user.role === 'CREATOR' ? user.name : null,
 
-  // ⬇️ DEBUG
-  console.log('🔍 Room in join:', {
-    code: room.code,
-    hasQRcode: !!room.QRcode,
-    hasLink: !!room.link
-  });
+      QRcode: room.QRcode,
+      link: room.link,
 
-  return {
-    roomId: room.id,
-    code: room.code,
-    memberId: user.id, // ✅ FIX: Return memberId for the joining user
-    memberName: user.name, // ✅ FIX: Return memberName
-    creatorId: user.role === 'CREATOR' ? user.id : null,
-    creatorName: user.role === 'CREATOR' ? user.name : null,
-
-    QRcode: room.QRcode,
-    link: room.link,
-
-    qrCode: room.QRcode,
-    inviteLink: room.link,
-    inviteCode: room.code,
-  };
-}
-
-@Post('seek')
-async seek(@Body() body: { codeRoom: string; positionSec: number }) {
-  const { codeRoom, positionSec } = body;
-  const { room, playback } = await this.roomsService.seek(codeRoom.toUpperCase(), positionSec);
-
-  return {
-    roomId: room.id,
-    code: room.code,
-    playback: {
-      status: playback.status,
-      positionSec: playback.positionSec,
-      playbackRate: playback.playbackRate,
-      serverTimeRef: playback.serverTimeRef,
-      sourceType: playback.sourceType,
-      video: playback.video ? {
-        youtubeId: playback.video.youtubeId,
-        title: playback.video.title,
-        channelTitle: playback.video.channelTitle,
-        durationSec: playback.video.durationSec,
-        thumbnailUrl: playback.video.thumbnailUrl,
-      } : null,
-    },
-  };
-}
+      qrCode: room.QRcode,
+      inviteLink: room.link,
+      inviteCode: room.code,
+    };
+  }
 
 
   @Post("invite")
@@ -302,21 +277,22 @@ async seek(@Body() body: { codeRoom: string; positionSec: number }) {
     };
   }
 
-@Post("leave")
-async leaveRoom(@Body() body: DeleteMemberDto) {
-  const { memberId, codeRoom } = body;
-  
-  // Cette méthode supprime PHYSIQUEMENT l'utilisateur
-  const { roomDeleted, roomId, removedMemberId, removedMemberName } = 
-    await this.roomsService.removeUserFromRoom(memberId, codeRoom.toUpperCase());
+  @Post("leave")
+  async leaveRoom(@Body() body: DeleteMemberDto) {
+    const { memberId, codeRoom } = body;
+    
+    // Cette méthode supprime PHYSIQUEMENT l'utilisateur
+    const { roomDeleted, roomId, removedMemberId, removedMemberName } = 
+      await this.roomsService.removeUserFromRoom(memberId, codeRoom.toUpperCase());
 
-  return {
-    roomDeleted,
-    roomId,
-    removedMemberId,
-    removedMemberName,
-  };
-}
+    return {
+      roomDeleted,
+      roomId,
+      removedMemberId,
+      removedMemberName,
+    };
+  }
+
   @Post("End")
   async endRoom(@Body() body: EndRoomDto) {
     const { memberId, codeRoom } = body;
@@ -467,235 +443,260 @@ async leaveRoom(@Body() body: DeleteMemberDto) {
     };
   }
 
-  @Get('health')
-async healthCheck() {
-  return {
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    service: 'YouTube Watch Party API'
-  };
-}
+  @Post('seek')
+  async seek(@Body() body: { codeRoom: string; positionSec: number }) {
+    const { codeRoom, positionSec } = body;
+    const { room, playback } = await this.roomsService.seek(codeRoom.toUpperCase(), positionSec);
 
-  // 🎯 NOUVEL ENDPOINT : Récupération des infos YouTube
-@Get('youtube-info')
-async getYouTubeInfo(@Query('videoId') videoId: string) {
-  console.log('🔄 Récupération infos YouTube pour:', videoId);
-  
-  if (!videoId || videoId.length !== 11) {
+    return {
+      roomId: room.id,
+      code: room.code,
+      playback: {
+        status: playback.status,
+        positionSec: playback.positionSec,
+        playbackRate: playback.playbackRate,
+        serverTimeRef: playback.serverTimeRef,
+        sourceType: playback.sourceType,
+        video: playback.video ? {
+          youtubeId: playback.video.youtubeId,
+          title: playback.video.title,
+          channelTitle: playback.video.channelTitle,
+          durationSec: playback.video.durationSec,
+          thumbnailUrl: playback.video.thumbnailUrl,
+        } : null,
+      },
+    };
+  }
+
+  @Get('health')
+  async healthCheck() {
+    return {
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      service: 'YouTube Watch Party API'
+    };
+  }
+
+  // NOUVEL ENDPOINT : Récupération des infos YouTube
+  @Get('youtube-info')
+  async getYouTubeInfo(@Query('videoId') videoId: string) {
+    console.log('Récupération infos YouTube pour:', videoId);
+    
+    if (!videoId || videoId.length !== 11) {
+      return {
+        success: false,
+        title: `Vidéo ${videoId}`,
+        author: 'YouTube',
+        thumbnail: `https://img.youtube.com/vi/${videoId}/0.jpg`,
+        durationSec: 180,
+      };
+    }
+
+    // 1. ESSAYE YouTube Data API v3 (avec ta clé)
+    const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+    
+    if (YOUTUBE_API_KEY) {
+      try {
+        console.log('Tentative YouTube Data API v3...');
+        const youtubeResponse = await axios.get(
+          `https://www.googleapis.com/youtube/v3/videos`,
+          {
+            params: {
+              part: 'snippet,contentDetails,statistics',
+              id: videoId,
+              key: YOUTUBE_API_KEY
+            },
+            timeout: 5000
+          }
+        );
+        
+        if (youtubeResponse.data.items?.length > 0) {
+          const item = youtubeResponse.data.items[0];
+          const title = item.snippet.title;
+          const author = item.snippet.channelTitle;
+          const thumbnail = item.snippet.thumbnails?.maxres?.url || 
+                          item.snippet.thumbnails?.high?.url || 
+                          item.snippet.thumbnails?.medium?.url || 
+                          `https://img.youtube.com/vi/${videoId}/0.jpg`;
+          
+          // DURÉE RÉELLE !
+          const durationISO = item.contentDetails?.duration || 'PT0M';
+          const durationSec = this.parseISODuration(durationISO);
+          
+          console.log('   YouTube Data API réussi!');
+          console.log('   Titre:', title);
+          console.log('   Durée:', durationSec, 'sec =', Math.floor(durationSec/60), 'min', durationSec%60, 'sec');
+          
+          return {
+            success: true,
+            title: title,
+            author: author,
+            thumbnail: thumbnail,
+            durationSec: durationSec,
+          };
+        }
+      } catch (error: any) {
+        console.log(' YouTube API échoué:', error.message);
+      }
+    } else {
+      console.log('Pas de clé YouTube API, utilisation méthodes alternatives');
+    }
+
+    // 2. ESSAYE OEmbed
+    try {
+      console.log('Tentative oEmbed...');
+      const oembedResponse = await axios.get(
+        `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+        { timeout: 5000 }
+      );
+      
+      if (oembedResponse.data?.title) {
+        console.log('oEmbed réussi');
+        const durationSec = await this.estimateVideoDuration(videoId);
+        
+        return {
+          success: true,
+          title: oembedResponse.data.title,
+          author: oembedResponse.data.author_name || 'YouTube',
+          thumbnail: oembedResponse.data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/0.jpg`,
+          durationSec: durationSec,
+        };
+      }
+    } catch (oembedError: any) {
+      console.log('oEmbed échoué');
+    }
+
+    // 3. FALLBACK
+    console.log('Toutes méthodes échouées, fallback');
+    const durationSec = await this.estimateVideoDuration(videoId);
+    
     return {
       success: false,
       title: `Vidéo ${videoId}`,
       author: 'YouTube',
       thumbnail: `https://img.youtube.com/vi/${videoId}/0.jpg`,
-      durationSec: 180,
+      durationSec: durationSec,
     };
   }
 
-  // 1. ESSAYE YouTube Data API v3 (avec ta clé)
-  const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-  
-  if (YOUTUBE_API_KEY) {
-    try {
-      console.log('📡 Tentative YouTube Data API v3...');
-      const youtubeResponse = await axios.get(
-        `https://www.googleapis.com/youtube/v3/videos`,
-        {
-          params: {
-            part: 'snippet,contentDetails,statistics',
-            id: videoId,
-            key: YOUTUBE_API_KEY
-          },
-          timeout: 5000
-        }
-      );
-      
-      if (youtubeResponse.data.items?.length > 0) {
-        const item = youtubeResponse.data.items[0];
-        const title = item.snippet.title;
-        const author = item.snippet.channelTitle;
-        const thumbnail = item.snippet.thumbnails?.maxres?.url || 
-                         item.snippet.thumbnails?.high?.url || 
-                         item.snippet.thumbnails?.medium?.url || 
-                         `https://img.youtube.com/vi/${videoId}/0.jpg`;
-        
-        // DURÉE RÉELLE !
-        const durationISO = item.contentDetails?.duration || 'PT0M';
-        const durationSec = this.parseISODuration(durationISO);
-        
-        console.log('✅ YouTube Data API réussi!');
-        console.log('   Titre:', title);
-        console.log('   Durée:', durationSec, 'sec =', Math.floor(durationSec/60), 'min', durationSec%60, 'sec');
-        
-        return {
-          success: true,
-          title: title,
-          author: author,
-          thumbnail: thumbnail,
-          durationSec: durationSec,
-        };
-      }
-    } catch (error: any) {
-      console.log('❌ YouTube API échoué:', error.message);
-    }
-  } else {
-    console.log('⚠️ Pas de clé YouTube API, utilisation méthodes alternatives');
+  // NOUVEL ENDPOINT : Play (pour WebSocket)
+  @Post('play')
+  async play(@Body() body: { codeRoom: string; positionSec?: number }) {
+    const { codeRoom, positionSec } = body;
+    const { room, playback } = await this.roomsService.play(codeRoom.toUpperCase(), positionSec);
+
+    return {
+      roomId: room.id,
+      code: room.code,
+      playback: {
+        status: playback.status,
+        positionSec: playback.positionSec,
+        playbackRate: playback.playbackRate,
+        serverTimeRef: playback.serverTimeRef,
+        sourceType: playback.sourceType,
+        video: playback.video ? {
+          youtubeId: playback.video.youtubeId,
+          title: playback.video.title,
+          channelTitle: playback.video.channelTitle,
+          durationSec: playback.video.durationSec,
+          thumbnailUrl: playback.video.thumbnailUrl,
+        } : null,
+      },
+    };
   }
 
-  // 2. ESSAYE OEmbed
-  try {
-    console.log('📡 Tentative oEmbed...');
-    const oembedResponse = await axios.get(
-      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
-      { timeout: 5000 }
-    );
+  // NOUVEL ENDPOINT : Pause (pour WebSocket)
+  @Post('pause')
+  async pause(@Body() body: { codeRoom: string; positionSec?: number }) {
+    const { codeRoom, positionSec } = body;
+    const { room, playback } = await this.roomsService.pause(codeRoom.toUpperCase(), positionSec);
+
+    return {
+      roomId: room.id,
+      code: room.code,
+      playback: {
+        status: playback.status,
+        positionSec: playback.positionSec,
+        playbackRate: playback.playbackRate,
+        serverTimeRef: playback.serverTimeRef,
+        sourceType: playback.sourceType,
+        video: playback.video ? {
+          youtubeId: playback.video.youtubeId,
+          title: playback.video.title,
+          channelTitle: playback.video.channelTitle,
+          durationSec: playback.video.durationSec,
+          thumbnailUrl: playback.video.thumbnailUrl,
+        } : null,
+      },
+    };
+  }
+
+  // NOUVEL ENDPOINT : Générer QR Code
+  @Get('qr-code')
+  async generateQRCode(@Query('codeRoom') codeRoom: string) {
+    const room = await this.roomsService.getRoomByCode(codeRoom.toUpperCase());
     
-    if (oembedResponse.data?.title) {
-      console.log('✅ oEmbed réussi');
-      const durationSec = await this.estimateVideoDuration(videoId);
-      
-      return {
-        success: true,
-        title: oembedResponse.data.title,
-        author: oembedResponse.data.author_name || 'YouTube',
-        thumbnail: oembedResponse.data.thumbnail_url || `https://img.youtube.com/vi/${videoId}/0.jpg`,
-        durationSec: durationSec,
-      };
-    }
-  } catch (oembedError: any) {
-    console.log('❌ oEmbed échoué');
+    const baseUrl = process.env.FRONTEND_BASE_URL ?? 'http://localhost:4200';
+    const inviteLink = `${baseUrl}/rooms/join/${room.code}`;
+    
+    // Générer QR code à la volée
+    const qrCode = await QRCode.toDataURL(inviteLink);
+    
+    return {
+      codeRoom: room.code,
+      inviteLink,
+      qrCode,
+      generatedAt: new Date().toISOString(),
+    };
   }
 
-  // 3. FALLBACK
-  console.log('⚠️ Toutes méthodes échouées, fallback');
-  const durationSec = await this.estimateVideoDuration(videoId);
-  
-  return {
-    success: false,
-    title: `Vidéo ${videoId}`,
-    author: 'YouTube',
-    thumbnail: `https://img.youtube.com/vi/${videoId}/0.jpg`,
-    durationSec: durationSec,
-  };
-}
-  // 🎯 NOUVEL ENDPOINT : Play (pour WebSocket)
- // 🎯 NOUVEL ENDPOINT : Play (pour WebSocket) - CORRIGÉ
-@Post('play')
-async play(@Body() body: { codeRoom: string; positionSec?: number }) {
-  const { codeRoom, positionSec } = body;
-  const { room, playback } = await this.roomsService.play(codeRoom.toUpperCase(), positionSec);
+  // NOUVEL ENDPOINT : Générer QR code avec options
+  @Get('qr-code/custom')
+  async generateCustomQRCode(
+    @Query('codeRoom') codeRoom: string,
+    @Query('size') size: string = '300',
+    @Query('color') color: string = '000000',
+    @Query('bgColor') bgColor: string = 'ffffff'
+  ) {
+    const room = await this.roomsService.getRoomByCode(codeRoom.toUpperCase());
 
-  return {
-    roomId: room.id,
-    code: room.code,
-    playback: {
-      status: playback.status,
-      positionSec: playback.positionSec,
-      playbackRate: playback.playbackRate,
-      serverTimeRef: playback.serverTimeRef,
-      sourceType: playback.sourceType,
-      video: playback.video ? {
-        youtubeId: playback.video.youtubeId,
-        title: playback.video.title,
-        channelTitle: playback.video.channelTitle,
-        durationSec: playback.video.durationSec,
-        thumbnailUrl: playback.video.thumbnailUrl,
-      } : null,
-    },
-  };
-}
+    const baseUrl = process.env.FRONTEND_BASE_URL ?? 'http://localhost:4200';
+    const inviteLink = `${baseUrl}/rooms/join/${room.code}`;
 
-  // 🎯 NOUVEL ENDPOINT : Pause (pour WebSocket)
-  // 🎯 NOUVEL ENDPOINT : Pause (pour WebSocket) - CORRIGÉ
-@Post('pause')
-async pause(@Body() body: { codeRoom: string; positionSec?: number }) {
-  const { codeRoom, positionSec } = body;
-  const { room, playback } = await this.roomsService.pause(codeRoom.toUpperCase(), positionSec);
+    // Options pour le QR code
+    const qrCode = await QRCode.toDataURL(inviteLink, {
+      width: parseInt(size),
+      margin: 2,
+      color: {
+        dark: `#${color}`,
+        light: `#${bgColor}`,
+      },
+    });
 
-  return {
-    roomId: room.id,
-    code: room.code,
-    playback: {
-      status: playback.status,
-      positionSec: playback.positionSec,
-      playbackRate: playback.playbackRate,
-      serverTimeRef: playback.serverTimeRef,
-      sourceType: playback.sourceType,
-      video: playback.video ? {
-        youtubeId: playback.video.youtubeId,
-        title: playback.video.title,
-        channelTitle: playback.video.channelTitle,
-        durationSec: playback.video.durationSec,
-        thumbnailUrl: playback.video.thumbnailUrl,
-      } : null,
-    },
-  };
-}
-// 🎯 NOUVEL ENDPOINT : Générer QR Code
-@Get('qr-code')
-async generateQRCode(@Query('codeRoom') codeRoom: string) {
-  const room = await this.roomsService.getRoomByCode(codeRoom.toUpperCase());
-  
-  const baseUrl = process.env.FRONTEND_BASE_URL ?? 'http://localhost:4200';
-  const inviteLink = `${baseUrl}/rooms/join/${room.code}`;
-  
-  // Générer QR code à la volée
-  const qrCode = await QRCode.toDataURL(inviteLink);
-  
-  return {
-    codeRoom: room.code,
-    inviteLink,
-    qrCode,
-    generatedAt: new Date().toISOString(),
-  };
-}
+    return {
+      codeRoom: room.code,
+      inviteLink,
+      qrCode,
+      size: parseInt(size),
+      color: `#${color}`,
+      backgroundColor: `#${bgColor}`,
+      generatedAt: new Date().toISOString(),
+    };
+  }
 
-// 🎯 NOUVEL ENDPOINT : Générer QR code avec options
-@Get('qr-code/custom')
-async generateCustomQRCode(
-  @Query('codeRoom') codeRoom: string,
-  @Query('size') size: string = '300',
-  @Query('color') color: string = '000000',
-  @Query('bgColor') bgColor: string = 'ffffff'
-) {
-  const room = await this.roomsService.getRoomByCode(codeRoom.toUpperCase());
+  // NOUVEL ENDPOINT : Mettre à jour le pseudo d'un membre
+  @Post('update-member-name')
+  async updateMemberName(@Body() body: { memberId: number; codeRoom: string; newName: string }) {
+    const { memberId, codeRoom, newName } = body;
 
-  const baseUrl = process.env.FRONTEND_BASE_URL ?? 'http://localhost:4200';
-  const inviteLink = `${baseUrl}/rooms/join/${room.code}`;
+    const result = await this.roomsService.updateMemberName(memberId, codeRoom.toUpperCase(), newName);
 
-  // Options pour le QR code
-  const qrCode = await QRCode.toDataURL(inviteLink, {
-    width: parseInt(size),
-    margin: 2,
-    color: {
-      dark: `#${color}`,
-      light: `#${bgColor}`,
-    },
-  });
-
-  return {
-    codeRoom: room.code,
-    inviteLink,
-    qrCode,
-    size: parseInt(size),
-    color: `#${color}`,
-    backgroundColor: `#${bgColor}`,
-    generatedAt: new Date().toISOString(),
-  };
-}
-
-// 🎯 NOUVEL ENDPOINT : Mettre à jour le pseudo d'un membre
-@Post('update-member-name')
-async updateMemberName(@Body() body: { memberId: number; codeRoom: string; newName: string }) {
-  const { memberId, codeRoom, newName } = body;
-
-  const result = await this.roomsService.updateMemberName(memberId, codeRoom.toUpperCase(), newName);
-
-  return {
-    success: true,
-    memberId: result.memberId,
-    oldName: result.oldName,
-    newName: result.newName,
-    roomCode: result.roomCode,
-  };
-}
+    return {
+      success: true,
+      memberId: result.memberId,
+      oldName: result.oldName,
+      newName: result.newName,
+      roomCode: result.roomCode,
+    };
+  }
 }

@@ -6,7 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { RoomsModule } from './rooms/rooms.module';
 import { PlaylistModule } from './playlist/playlist.module';
 
-// ✅ Import du module qu'on vient de créer ci-dessus
+// Import du module qu'on vient de créer ci-dessus
 import { ChatModule } from './chat/chat.module'; 
 import { ChatSession } from './entities/chat-session.entity';
 // (Ajoute aussi les autres entités si elles manquent dans forRoot)
@@ -42,7 +42,7 @@ import { YouTubeVideo } from './entities/youtube-video.entity';
     }),
     RoomsModule,
     PlaylistModule,
-    ChatModule, // 👈 C'est ici qu'on active le Chat
+    ChatModule, // C'est ici qu'on active le Chat
   ],
 })
 export class AppModule {}

@@ -463,11 +463,11 @@ export class PlaylistService {
     const playlist = room.playlist;
     if (!playlist) throw new NotFoundException('Playlist non trouvée pour cette salle');
 
-    // ✅ CORRECTION: Trier les entrées AVANT de vérifier
+    // CORRECTION: Trier les entrées AVANT de vérifier
     const entries = (playlist.entries ?? []).sort((a, b) => a.position - b.position);
     if (entries.length === 0) throw new NotFoundException('Aucune entrée dans la playlist');
 
-    console.log('📊 goToNext - État:', {
+    console.log('goToNext - État:', {
       currentIndex: playlist.currentIndex,
       totalEntries: entries.length,
       canGoNext: playlist.currentIndex < entries.length - 1
@@ -482,7 +482,7 @@ export class PlaylistService {
     await this.playlistsRepo.update(playlist.id, { currentIndex: newIndex });
     playlist.currentIndex = newIndex;
 
-    console.log('✅ goToNext - Nouvel index:', newIndex);
+    console.log('goToNext - Nouvel index:', newIndex);
 
     // Met à jour l'état de lecture avec les entrées triées
     playlist.entries = entries; // Important: assigner les entrées triées
@@ -512,11 +512,11 @@ export class PlaylistService {
     const playlist = room.playlist;
     if (!playlist) throw new NotFoundException('Playlist non trouvée pour cette salle');
 
-    // ✅ CORRECTION: Trier les entrées AVANT de vérifier
+    // CORRECTION: Trier les entrées AVANT de vérifier
     const entries = (playlist.entries ?? []).sort((a, b) => a.position - b.position);
     if (entries.length === 0) throw new NotFoundException('Aucune entrée dans la playlist');
 
-    console.log('📊 goToPrevious - État:', {
+    console.log('goToPrevious - État:', {
       currentIndex: playlist.currentIndex,
       totalEntries: entries.length,
       canGoPrevious: playlist.currentIndex > 0
@@ -529,7 +529,7 @@ export class PlaylistService {
     await this.playlistsRepo.update(playlist.id, { currentIndex: newIndex });
     playlist.currentIndex = newIndex;
 
-    console.log('✅ goToPrevious - Nouvel index:', newIndex);
+    console.log('goToPrevious - Nouvel index:', newIndex);
 
     // Met à jour l'état de lecture avec les entrées triées
     playlist.entries = entries; // Important: assigner les entrées triées
