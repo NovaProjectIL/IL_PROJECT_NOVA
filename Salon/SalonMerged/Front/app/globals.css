@@ -3199,3 +3199,253 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* =================================================================
+   📱 MOBILE & RESPONSIVE FIXES (Ajouter à la fin du fichier)
+   ================================================================= */
+
+/* --- TABLETTES ET ÉCRANS MOYENS (max-width: 1024px) --- */
+@media (max-width: 1024px) {
+  .room-main {
+    max-width: 100%;
+    grid-template-columns: 1fr 320px; /* Réduit la sidebar */
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .header-wrapper {
+    padding: 0 1.5rem;
+  }
+}
+
+/* --- MOBILES (max-width: 768px) --- */
+@media (max-width: 768px) {
+  
+  /* 1. RESET GLOBAL & TYPO */
+  html {
+    font-size: 14px; /* Réduit légèrement la taille globale */
+  }
+  
+  body {
+    background-attachment: scroll; /* Fix pour iOS qui gère mal le 'fixed' avec cover */
+  }
+
+  /* 2. HEADER LANDING PAGE */
+  .header-wrapper {
+    height: auto;
+    padding: 1rem;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .nav-menu {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .nav-link {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+  }
+
+  /* 3. HERO SECTION */
+  .hero-section {
+    padding: 100px 1rem 60px;
+  }
+
+  .title-line {
+    font-size: 2.5rem; /* Réduit le titre géant */
+  }
+
+  .badge {
+    margin-bottom: 20px;
+  }
+
+  /* 4. CARDS CONTAINER (Correction critique) */
+  /* Le minmax(450px) cassait les mobiles. On passe en 1 colonne fluide */
+  .cards-container {
+    grid-template-columns: 1fr; 
+    gap: 24px;
+    padding: 0 1rem;
+  }
+
+  .nova-card {
+    padding: 24px; /* Moins de padding interne */
+    min-height: auto;
+  }
+
+  .card-icon {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .card-title {
+    font-size: 1.5rem;
+  }
+
+  /* 5. ROOM HEADER (Interface Vidéo) */
+  .room-header {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    position: relative;
+  }
+
+  .header-left, .header-right {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .logo-text {
+    font-size: 1.2rem;
+  }
+
+  .room-meta {
+    display: none; /* On cache les détails secondaires sur mobile pour gagner de la place */
+  }
+
+  /* 6. ROOM LAYOUT (Vidéo + Sidebar) */
+  .room-main {
+    display: flex;
+    flex-direction: column; /* Empile la vidéo au-dessus de la playlist */
+    padding: 0.5rem;
+    gap: 1.5rem;
+  }
+
+  .video-section {
+    width: 100%;
+  }
+
+  /* Rendre la sidebar visible sous la vidéo au lieu d'à côté */
+  .sidebar {
+    width: 100%;
+    max-height: 500px; /* Limite la hauteur de la playlist sur mobile */
+    overflow-y: auto;
+  }
+
+  /* 7. CONTROLS BAR (Lecteur) */
+  .control-bar {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .control-buttons {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .progress-section {
+    width: 100%;
+  }
+
+  /* 8. FORMULAIRES & INPUTS */
+  .input-code {
+    font-size: 1.1rem;
+    letter-spacing: 4px;
+  }
+  
+  .nova-btn {
+    font-size: 0.95rem;
+    padding: 14px 20px;
+  }
+
+  /* 9. CONTACT PAGE */
+  .contact-grid {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr; /* Inputs l'un sous l'autre */
+  }
+  
+  .contact-info, .contact-form-container {
+    padding: 24px;
+  }
+}
+
+/* --- PETITS MOBILES (max-width: 480px) --- */
+@media (max-width: 480px) {
+  
+  /* Ajustements fins pour petits écrans */
+  .logo-circle {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .logo-text {
+    font-size: 20px;
+  }
+
+  .video-player-container {
+    border-radius: 12px;
+  }
+
+  .search-buttons {
+    flex-direction: column;
+  }
+
+  /* Footer compact */
+  .footer-links {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}
+
+/* =================================================================
+   🔧 CHATBOX RESPONSIVE FIX
+   ================================================================= */
+@media (max-width: 768px) {
+  
+  .chat-sidebar-container {
+    width: 100%; /* Prend toute la largeur sur mobile */
+    height: 100%; /* S'assure de prendre toute la hauteur */
+    top: 0;
+    right: 0;
+    /* Quand fermé, on le pousse complètement à droite */
+    transform: translateX(100%); 
+  }
+
+  /* Le bouton pour ouvrir le chat */
+  .chat-trigger-side {
+    width: 40px;
+    height: 100px;
+    top: auto;
+    bottom: 80px; /* On le place en bas pour être accessible au pouce */
+    transform: translateY(0);
+    border-radius: 20px 0 0 20px;
+  }
+  
+  .chat-trigger-text {
+    font-size: 0.8rem;
+  }
+
+  /* Header du chat */
+  .chat-header-rave {
+    padding: 0 15px;
+    height: 60px;
+  }
+
+  /* Zone de saisie */
+  .chat-input-rave {
+    padding: 15px;
+    position: sticky;
+    bottom: 0;
+  }
+
+  /* Masquer le resize handle sur mobile car inutile */
+  .resize-handle {
+    display: none;
+  }
+  
+  /* Ajuster la taille des bulles */
+  .message-bubble {
+    max-width: 90%;
+    font-size: 0.9rem;
+  }
+}
