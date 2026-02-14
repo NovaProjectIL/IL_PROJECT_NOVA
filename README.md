@@ -143,8 +143,3 @@ The project workload is approximately 60–70 hours per student per semester.
 
 ---
 
-## License
-
-This project is developed for academic purposes.
-
-If you want, I can also tailor a version more optimized for recruiters (more impact-focused and technical positioning).
