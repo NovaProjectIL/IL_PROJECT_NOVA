@@ -11,7 +11,8 @@ type Message = {
   message: string | null;
   gifUrl: string | null;
   createdAt: string;
-  userId?: number; // ✅ AJOUTÉ pour comparaison fiable
+  userId?: number;
+  timecode?: number | null; // ← NOUVEAU
 };
 
 type ChatProps = {
@@ -21,38 +22,41 @@ type ChatProps = {
   onMessageReceived?: () => void;
   socket: any;
   roomCode: string;
+  getCurrentTime?: () => number; // ← NOUVEAU
+  onSeek?: (timecode: number) => void; // ← NOUVEAU
 };
 
 const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1";
 const gf = new GiphyFetch(giphyApiKey);
 
-function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socket, roomCode }: ChatProps) {
+function formatTimecode(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socket, roomCode, getCurrentTime, onSeek }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [pickerMode, setPickerMode] = useState<'none' | 'emoji' | 'gif'>('none');
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [gifSearch, setGifSearch] = useState("");
   
-  // ✅ FIX: Garder le pseudo initial ET l'userId pour comparaison
   const [pseudo, setPseudo] = useState(initialPseudo || "");
   const currentUserId = useRef(userId);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ✅ FIX: Mettre à jour le pseudo si l'userId change
   useEffect(() => {
     currentUserId.current = userId;
   }, [userId]);
 
-  // --- CONNEXION ---
   useEffect(() => {
     if (!socket) return;
 
     const identifyAndLoad = () => {
-        console.log(`🔄 [Chat] Init pour room: ${roomCode}, socket connected: ${socket.connected}`);
         socket.emit('setUsername', { username: pseudo, userId: userId || 0 });
-
         if (roomCode) {
             socket.emit('joinChatRoom', { codeRoom: roomCode });
             socket.emit('requestMessages', { codeRoom: roomCode });
@@ -68,7 +72,6 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     socket.on('reconnect', identifyAndLoad);
 
     const handleReceiveMessage = (msg: Message) => {
-      console.log('📨 Message reçu:', msg);
       setMessages((prev) => [...prev, msg]);
       setTypingUsers((prev) => prev.filter((name) => name !== msg.username));
       if (onMessageReceived) onMessageReceived();
@@ -76,13 +79,13 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     };
 
     const handleLoadMessages = (histMessages: any[]) => {
-        console.log('📚 Messages chargés:', histMessages.length);
         const formatted = histMessages.map(m => ({
             username: m.username,
             message: m.message,
             gifUrl: m.gifUrl,
             createdAt: m.createdAt,
-            userId: m.userId // ✅ IMPORTANT : Récupérer l'userId
+            userId: m.userId,
+            timecode: m.timecode ?? null, // ← NOUVEAU
         }));
         setMessages(formatted);
         scrollToBottom();
@@ -117,20 +120,19 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     }, 100);
   };
 
-  // --- ACTIONS ---
+  // ← MODIFIÉ : capture du timecode à l'envoi
   const sendMessage = () => {
     if (!text.trim()) return;
+    if (!roomCode) return;
 
-    if (!roomCode) {
-        console.error("❌ Erreur : roomCode manquant !");
-        return;
-    }
+    const timecode = getCurrentTime ? Math.floor(getCurrentTime()) : null;
 
     socket?.emit("sendMessage", {
         codeRoom: roomCode,
         message: text.trim(),
         userId: userId,
-        username: pseudo
+        username: pseudo,
+        timecode: timecode, // ← NOUVEAU
     });
 
     socket?.emit("typing", { codeRoom: roomCode, isTyping: false });
@@ -140,11 +142,13 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
 
   const sendGif = (gifUrl: string) => {
     if (!roomCode) return;
+    const timecode = getCurrentTime ? Math.floor(getCurrentTime()) : null;
     socket?.emit("sendMessage", {
         codeRoom: roomCode,
         gifUrl: gifUrl,
         userId: userId,
-        username: pseudo
+        username: pseudo,
+        timecode: timecode, // ← NOUVEAU
     });
     setPickerMode('none');
   };
@@ -160,7 +164,6 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     }
   };
 
-  // --- RENDU ---
   const fetchGifs = (offset: number) => {
     return gifSearch.trim() === ""
       ? gf.trending({ offset, limit: 10 })
@@ -193,12 +196,9 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
           </div>
         )}
         {messages.map((m, i) => {
-          // ✅ FIX PRINCIPAL : Comparer par userId si disponible, sinon par username
           const isMe = m.userId
             ? m.userId === currentUserId.current
             : m.username === pseudo;
-
-          // System message if userId is null
           const isSystem = m.userId === null;
 
           if (isSystem) {
@@ -213,8 +213,56 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
           return (
             <div key={i} className={`chat-message-row ${isMe ? "me" : "other"}`}>
               {!isMe && <span className="username-label">{m.username}</span>}
-              {m.message && <div className={`message-bubble ${isMe ? "message-me" : "message-other"}`}>{m.message}</div>}
-              {m.gifUrl && <div className={`mt-2 ${isMe ? 'text-end' : 'text-start'}`}><img src={m.gifUrl} alt="GIF" className="gif-image" style={{maxHeight: '150px', maxWidth: '100%'}} /></div>}
+              {m.message && (
+                <div className={`message-bubble ${isMe ? "message-me" : "message-other"}`}>
+                  {m.message}
+                  {/* ← NOUVEAU : badge timecode cliquable */}
+                  {m.timecode != null && m.timecode > 0 && (
+                    <span
+                      onClick={() => onSeek?.(m.timecode!)}
+                      style={{
+                        display: 'inline-block',
+                        marginLeft: '8px',
+                        backgroundColor: 'rgba(255,255,255,0.25)',
+                        color: '#fff',
+                        borderRadius: '6px',
+                        padding: '2px 7px',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        fontWeight: '700',
+                        letterSpacing: '0.5px',
+                      }}
+                      title="Aller à ce moment de la vidéo"
+                    >
+                      ⏱ {formatTimecode(m.timecode)}
+                    </span>
+                  )}
+                </div>
+              )}
+              {m.gifUrl && (
+                <div className={`mt-2 ${isMe ? 'text-end' : 'text-start'}`}>
+                  <img src={m.gifUrl} alt="GIF" className="gif-image" style={{maxHeight: '150px', maxWidth: '100%'}} />
+                  {/* ← Badge timecode sur GIF aussi */}
+                  {m.timecode != null && m.timecode > 0 && (
+                    <span
+                      onClick={() => onSeek?.(m.timecode!)}
+                      style={{
+                        display: 'block',
+                        marginTop: '4px',
+                        color: 'rgba(255,255,255,0.6)',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        fontWeight: '700',
+                      }}
+                      title="Aller à ce moment"
+                    >
+                      ⏱ {formatTimecode(m.timecode)}
+                    </span>
+                  )}
+                </div>
+              )}
               <span className="message-time">{formatTime(m.createdAt)}</span>
             </div>
           );
@@ -249,7 +297,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
                       <EmojiPicker
                         onEmojiClick={(e) => {
                           setText((prev) => prev + e.emoji);
-                          setPickerMode('none'); // Auto-close after selection
+                          setPickerMode('none');
                         }}
                         width="100%"
                         height="100%"
@@ -257,7 +305,6 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
                         previewConfig={{ showPreview: false }}
                         style={{ background: 'transparent', border: 'none' }}
                         searchPlaceHolder="Search emojis..."
-
                       />
                     </div>
                   )}
@@ -287,7 +334,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
                           onGifClick={(gif, e) => {
                             e.preventDefault();
                             sendGif(gif.images.original.url);
-                            setPickerMode('none'); // Auto-close after selection
+                            setPickerMode('none');
                           }}
                         />
                       </div>

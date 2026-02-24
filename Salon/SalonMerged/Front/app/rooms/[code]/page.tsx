@@ -31,9 +31,11 @@ interface ChatWidgetProps {
   socket: any;
   roomCode: string;
   userId?: number;
+  getCurrentTime?: () => number; // ← NOUVEAU
+  onSeek?: (timecode: number) => void; // ← NOUVEAU
 }
 
-function ChatWidget({ pseudo = "", userId, socket, roomCode }: ChatWidgetProps) {
+function ChatWidget({ pseudo = "", userId, socket, roomCode, getCurrentTime, onSeek }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(420);
@@ -86,7 +88,9 @@ function ChatWidget({ pseudo = "", userId, socket, roomCode }: ChatWidgetProps) 
             userId={userId}
             onMessageReceived={handleMessageReceived} 
             socket={socket} 
-            roomCode={roomCode} 
+            roomCode={roomCode}
+            getCurrentTime={getCurrentTime}
+            onSeek={onSeek}  
           />
         </div>
       </div>
@@ -1001,6 +1005,8 @@ export default function RoomPage() {
         roomCode={code}
         pseudo={pseudo || currentMemberName || "Utilisateur"}
         userId={memberId}
+        getCurrentTime={() => playerRef.current?.getCurrentTime?.() ?? 0}  // ← NOUVEAU
+        onSeek={(timecode) => handleSeek(timecode)} 
       />
       
     </div>
