@@ -5,11 +5,18 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
+import { UseGuards, UsePipes, ValidationPipe, Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
 import { RoomsService } from './rooms.service';
+import { RoomStateService, RoomGlobalStatus } from './room-state.service';
 import { PlayStatus } from '../entities/playback-state.entity';
-import { ChatModule } from '../chat/chat.module';
+import { WsRoomMemberGuard } from './guards/ws-room-member.guard';
+import { 
+  JoinRoomDto, 
+  PlaybackControlDto, 
+  SeekDto, 
+  BaseRoomDto 
+} from './dto/ws-events.dto';
 
 @WebSocketGateway({
   cors: {
@@ -17,58 +24,46 @@ import { ChatModule } from '../chat/chat.module';
     credentials: true,
   },
 })
-
+@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
   
   private logger = new Logger('RoomsGateway');
+  private loadingTimers = new Map<string, NodeJS.Timeout>();
+  private readonly LOADING_TIMEOUT_MS = 8000;
 
-  constructor(private readonly roomsService: RoomsService) {}
+  constructor(
+    private readonly roomsService: RoomsService,
+    private readonly roomStateService: RoomStateService,
+  ) {}
 
   handleConnection(client: Socket) {
     this.logger.log(`Client connecté: ${client.id}`);
   }
 
   handleDisconnect(client: Socket) {
-    this.logger.log(`Client déconnecté: ${client.id}`);
+    const roomCode = this.roomStateService.removeClient(client.id);
+    if (roomCode) {
+      this.logger.log(`Client ${client.id} déconnecté de la room ${roomCode}`);
+      this.checkAndResumeIfAllReady(roomCode);
+    }
   }
 
   @SubscribeMessage('join-room')
-  async handleJoinRoom(client: Socket, data: { codeRoom: string; memberId: number }) {
+  async handleJoinRoom(client: Socket, data: JoinRoomDto) {
     const { codeRoom, memberId } = data;
     const roomCode = codeRoom.toUpperCase();
     
-    // Quitter toutes les rooms précédentes
-    const rooms = Array.from(client.rooms);
-    rooms.forEach(room => {
-      if (room !== client.id) {
-        client.leave(room);
-      }
-    });
-    
-    // Rejoindre la nouvelle room
     client.join(roomCode);
+    this.roomStateService.addClient(roomCode, client.id, memberId);
     
     this.logger.log(`${client.id} (membre ${memberId}) rejoint room: ${roomCode}`);
 
-    let roomState: any;
     try {
-      // Récupérer l'état complet de la room
-      roomState = await this.roomsService.stateRoom(roomCode);
+      const roomState = await this.roomsService.stateRoom(roomCode);
+      const currentPosition = this.roomStateService.getAdjustedTimestamp(roomCode) || roomState.playbackState?.positionSec || 0;
       
-      // IMPORTANT: Calculer la position actuelle si en lecture
-      let currentPosition = roomState.playbackState?.positionSec || 0;
-      
-      if (roomState.playbackState?.status === PlayStatus.PLAYING && roomState.playbackState.serverTimeRef) {
-        const elapsedMs = Date.now() - new Date(roomState.playbackState.serverTimeRef).getTime();
-        const elapsedSec = elapsedMs / 1000;
-        currentPosition = (roomState.playbackState.positionSec || 0) + elapsedSec;
-        
-        this.logger.log(`Position calculée pour nouveau membre: ${currentPosition.toFixed(2)}s (élapsed: ${elapsedSec.toFixed(2)}s)`);
-      }
-      
-      // Envoyer l'état EXACT au nouveau client
       client.emit('room-initial-state', {
         playback: {
           status: roomState.playbackState?.status || PlayStatus.PAUSED,
@@ -78,221 +73,182 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
           video: roomState.playbackState?.video ? {
             youtubeId: roomState.playbackState.video.youtubeId,
             title: roomState.playbackState.video.title,
-            channelTitle: roomState.playbackState.video.channelTitle,
             durationSec: roomState.playbackState.video.durationSec,
-            thumbnailUrl: roomState.playbackState.video.thumbnailUrl,
           } : null,
         },
         playlist: roomState.playlist ? {
           currentIndex: roomState.playlist.currentIndex,
           entries: roomState.entries?.map(entry => ({
             id: entry.id,
-            position: entry.position,
-            video: entry.video ? {
-              youtubeId: entry.video.youtubeId,
-              title: entry.video.title,
-              channelTitle: entry.video.channelTitle,
-              durationSec: entry.video.durationSec,
-              thumbnailUrl: entry.video.thumbnailUrl,
-            } : null,
+            video: entry.video,
           })) || [],
         } : null,
-        users: roomState.users?.map(user => ({
-          id: user.id,
-          name: user.name,
-          role: user.role,
-        })) || [],
-        timestamp: new Date(),
-        message: 'État initial de la room reçu'
+        users: roomState.users?.map(user => ({ id: user.id, name: user.name })) || [],
       });
-      
-      this.logger.log(`État initial envoyé à ${memberId}:`, {
-        status: roomState.playbackState?.status,
-        position: currentPosition.toFixed(2),
-        video: roomState.playbackState?.video?.youtubeId || 'aucune'
-      });
-      
     } catch (error) {
-      this.logger.error(`Erreur envoi état initial à ${memberId}:`, error);
-      client.emit('room-initial-state', {
-        playback: {
-          status: PlayStatus.PAUSED,
-          positionSec: 0,
-          playbackRate: 1.0,
-          serverTimeRef: new Date(),
-          video: null,
-        },
-        timestamp: new Date(),
-        message: 'État par défaut (erreur récupération)'
-      });
-    }
-    
-    // Informer les autres utilisateurs du nouvel arrivant
-    client.to(roomCode).emit('user-joined', {
-      memberId,
-      timestamp: new Date(),
-    });
-
-    // Envoyer une notification dans le chat
-    if (roomState) {
-      const user = roomState.users.find(u => u.id === memberId);
-      if (user) {
-        this.server.to(roomCode).emit('receiveMessage', {
-          username: 'System',
-          userId: null, // Indique un message système
-          message: `${user.name} has joined the room`,
-          gifUrl: null,
-          createdAt: new Date(),
-        });
-      }
+      this.logger.error(`Erreur join-room:`, error);
     }
 
-    return { success: true, room: roomCode };
-  }
-
- // DANS rooms.gateway.ts
-
-  @SubscribeMessage('play')
-  async handlePlay(client: Socket, data: { codeRoom: string; positionSec?: number }) {
-    const { codeRoom, positionSec } = data;
-    const roomCode = codeRoom.toUpperCase();
-    
-    this.logger.log(`Play demandé dans ${roomCode} avec position: ${positionSec}`);
-    
-    try {
-      // RÉCUPÉRER LE PLAYBACK ACTUEL DEPUIS LA DB
-      const room = await this.roomsService.getRoomByCode(roomCode);
-      const currentPlayback = await this.roomsService.getPlaybackState(room.id);
-      
-      // CALCULER LA VRAIE POSITION ACTUELLE
-      let actualPosition = positionSec; // Position envoyée par le client
-      
-      // Si le client n'a pas envoyé de position, calculer depuis le dernier état
-      if (actualPosition === undefined || actualPosition === null) {
-        actualPosition = currentPlayback.positionSec || 0;
-        
-        // Si c'était déjà en PLAYING, calculer le temps écoulé
-        if (currentPlayback.status === PlayStatus.PLAYING && currentPlayback.serverTimeRef) {
-          const elapsedMs = Date.now() - new Date(currentPlayback.serverTimeRef).getTime();
-          const elapsedSec = elapsedMs / 1000;
-          actualPosition = (currentPlayback.positionSec || 0) + elapsedSec;
-          
-          this.logger.log(`Position recalculée: ${actualPosition.toFixed(2)}s (élapsed: ${elapsedSec.toFixed(2)}s)`);
-        }
-      }
-      
-      // METTRE À JOUR EN BASE DE DONNÉES
-      await this.roomsService.play(roomCode, actualPosition);
-      
-      // BROADCAST LA VRAIE POSITION À TOUS LES CLIENTS
-      this.server.to(roomCode).emit('playback-updated', {
-        action: 'play',
-        playback: { 
-          status: PlayStatus.PLAYING,
-          positionSec: actualPosition,
-          serverTimeRef: new Date(),
-        },
-        timestamp: new Date(),
-      });
-      
-      this.logger.log(`Play broadcast à tous les clients: position ${actualPosition.toFixed(2)}s`);
-      
-    } catch (error) {
-      this.logger.error('Erreur mise à jour état play:', error);
-      
-      // En cas d'erreur, utiliser la position fournie ou 0
-      this.server.to(roomCode).emit('playback-updated', {
-        action: 'play',
-        playback: { 
-          status: PlayStatus.PLAYING,
-          positionSec: positionSec || 0,
-          serverTimeRef: new Date(),
-        },
-        timestamp: new Date(),
-      });
-    }
-    
     return { success: true };
   }
 
-  @SubscribeMessage('seek')
-  async handleSeek(client: Socket, data: { codeRoom: string; positionSec: number; wasPlaying?: boolean }) {
-    const { codeRoom, positionSec, wasPlaying } = data;
-    const roomCode = codeRoom.toUpperCase();
+  @UseGuards(WsRoomMemberGuard)
+  @SubscribeMessage('loading-video')
+  async handleLoadingVideo(client: Socket, data: BaseRoomDto) {
+    const roomCode = data.codeRoom.toUpperCase();
+    this.logger.log(`Room ${roomCode} entre en phase de CHARGEMENT (via ${client.id})`);
+
+    this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.LOADING);
+    this.roomStateService.setClientReady(roomCode, client.id, false);
     
-    this.logger.log(`Seek dans ${roomCode} à ${positionSec}s (wasPlaying: ${wasPlaying})`);
-    
-    try {
-      await this.roomsService.seek(roomCode, positionSec);
-    } catch (error) {
-      this.logger.error('Erreur mise à jour état seek:', error);
-    }
-    
-    // Ne pas changer l'état play/pause lors du seek
+    this.startLoadingTimeout(roomCode);
+
     this.server.to(roomCode).emit('playback-updated', {
-      action: 'seek',
-      playback: { 
-        positionSec,
-        serverTimeRef: new Date(),
-        // Ne pas envoyer le status pour ne pas changer play/pause
-      },
-      timestamp: new Date(),
+      action: 'pause',
+      playback: { status: PlayStatus.PAUSED },
+      loading: true,
+      message: 'Attente des autres participants...'
     });
+
+    return { success: true };
+  }
+
+  @UseGuards(WsRoomMemberGuard)
+  @SubscribeMessage('client-ready')
+  async handleClientReady(client: Socket, data: BaseRoomDto) {
+    const roomCode = data.codeRoom.toUpperCase();
+    this.roomStateService.setClientReady(roomCode, client.id, true);
+    
+    this.logger.log(`Client ${client.id} est PRÊT dans ${roomCode}`);
+
+    this.checkAndResumeIfAllReady(roomCode);
     
     return { success: true };
   }
 
-  @SubscribeMessage('video-change')
-  handleVideoChange(client: Socket, data: { codeRoom: string; videoId: string }) {
-    const { codeRoom, videoId } = data;
-    const roomCode = codeRoom.toUpperCase();
-    
-    this.logger.log(`Changement vidéo dans ${roomCode} -> ${videoId}`);
-    
-    this.server.to(roomCode).emit('video-changed', {
-      videoId,
-      timestamp: new Date(),
-    });
-    
-    return { success: true };
-  }
+  private async checkAndResumeIfAllReady(roomCode: string) {
+    if (this.roomStateService.areAllClientsReady(roomCode)) {
+      this.clearLoadingTimeout(roomCode);
+      this.logger.log(`TOUS les clients sont prêts dans ${roomCode}. Reprise de la lecture.`);
 
-  @SubscribeMessage('request-sync')
-  async handleRequestSync(client: Socket, data: { codeRoom: string }) {
-    const { codeRoom } = data;
-    const roomCode = codeRoom.toUpperCase();
-    
-    this.logger.log(`Demande de synchronisation de ${client.id} dans ${roomCode}`);
-    
-    try {
-      const roomState = await this.roomsService.stateRoom(roomCode);
+      const adjustedPos = this.roomStateService.getAdjustedTimestamp(roomCode);
       
-      let currentPosition = roomState.playbackState?.positionSec || 0;
-      
-      if (roomState.playbackState?.status === PlayStatus.PLAYING && roomState.playbackState.serverTimeRef) {
-        const elapsedMs = Date.now() - new Date(roomState.playbackState.serverTimeRef).getTime();
-        const elapsedSec = elapsedMs / 1000;
-        currentPosition = (roomState.playbackState.positionSec || 0) + elapsedSec;
-      }
-      
-      client.emit('room-sync', {
+      await this.roomsService.play(roomCode, adjustedPos);
+      this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PLAYING, adjustedPos);
+
+      this.server.to(roomCode).emit('playback-updated', {
+        action: 'play',
         playback: {
-          status: roomState.playbackState?.status || PlayStatus.PAUSED,
-          positionSec: currentPosition,
+          status: PlayStatus.PLAYING,
+          positionSec: adjustedPos,
           serverTimeRef: new Date(),
-          video: roomState.playbackState?.video ? {
-            youtubeId: roomState.playbackState.video.youtubeId,
-            title: roomState.playbackState.video.title,
-          } : null,
         },
-        timestamp: new Date(),
+        loading: false,
+        message: 'Tout le monde est prêt !'
       });
-      
-      this.logger.log(`État actuel envoyé à ${client.id}`);
-    } catch (error) {
-      this.logger.error(`Erreur envoi état actuel:`, error);
     }
+  }
+
+  @UseGuards(WsRoomMemberGuard)
+  @SubscribeMessage('play')
+  async handlePlay(client: Socket, data: PlaybackControlDto) {
+    const roomCode = data.codeRoom.toUpperCase();
+    this.clearLoadingTimeout(roomCode);
+    const pos = data.positionSec || this.roomStateService.getAdjustedTimestamp(roomCode);
     
-    return { success: true };
+    await this.roomsService.play(roomCode, pos);
+    this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PLAYING, pos);
+
+    this.server.to(roomCode).emit('playback-updated', {
+      action: 'play',
+      playback: { status: PlayStatus.PLAYING, positionSec: pos, serverTimeRef: new Date() },
+    });
+  }
+
+  @UseGuards(WsRoomMemberGuard)
+  @SubscribeMessage('pause')
+  async handlePause(client: Socket, data: PlaybackControlDto) {
+    const roomCode = data.codeRoom.toUpperCase();
+    this.clearLoadingTimeout(roomCode);
+    const pos = data.positionSec || this.roomStateService.getAdjustedTimestamp(roomCode);
+    
+    await this.roomsService.pause(roomCode, pos);
+    this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PAUSED, pos);
+
+    this.server.to(roomCode).emit('playback-updated', {
+      action: 'pause',
+      playback: { status: PlayStatus.PAUSED, positionSec: pos },
+    });
+  }
+
+  @UseGuards(WsRoomMemberGuard)
+  @SubscribeMessage('seek')
+  async handleSeek(client: Socket, data: SeekDto) {
+    const roomCode = data.codeRoom.toUpperCase();
+    this.logger.log(`Seek validé dans ${roomCode} à ${data.positionSec}s. Réinitialisation des états.`);
+
+    try {
+      this.roomStateService.prepareForSeek(roomCode, data.positionSec);
+      await this.roomsService.seek(roomCode, data.positionSec);
+      
+      this.startLoadingTimeout(roomCode);
+
+      this.server.to(roomCode).emit('playback-updated', {
+        action: 'seek',
+        playback: { 
+          positionSec: data.positionSec, 
+          serverTimeRef: new Date(),
+          status: PlayStatus.PAUSED
+        },
+        loading: true,
+        message: 'Saut temporel... Synchronisation en cours.'
+      });
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Erreur lors du seek dans ${roomCode}:`, error);
+      return { success: false, error: 'Erreur interne lors du saut temporel' };
+    }
+  }
+
+  private startLoadingTimeout(roomCode: string) {
+    this.clearLoadingTimeout(roomCode);
+
+    const timer = setTimeout(() => {
+      this.handleLoadingTimeout(roomCode);
+    }, this.LOADING_TIMEOUT_MS);
+
+    this.loadingTimers.set(roomCode, timer);
+  }
+
+  private clearLoadingTimeout(roomCode: string) {
+    if (this.loadingTimers.has(roomCode)) {
+      clearTimeout(this.loadingTimers.get(roomCode));
+      this.loadingTimers.delete(roomCode);
+    }
+  }
+
+  private async handleLoadingTimeout(roomCode: string) {
+    this.logger.warn(`TIMEOUT de chargement dans ${roomCode} (8s écoulées). Abandon de l'attente.`);
+    this.loadingTimers.delete(roomCode);
+
+    const roomState = this.roomStateService.getOrCreateRoomState(roomCode);
+    if (roomState.status === RoomGlobalStatus.LOADING) {
+      const adjustedPos = this.roomStateService.getAdjustedTimestamp(roomCode);
+      
+      await this.roomsService.play(roomCode, adjustedPos);
+      this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PLAYING, adjustedPos);
+
+      this.server.to(roomCode).emit('playback-updated', {
+        action: 'play',
+        playback: {
+          status: PlayStatus.PLAYING,
+          positionSec: adjustedPos,
+          serverTimeRef: new Date(),
+        },
+        loading: false,
+        message: 'Délai d\'attente dépassé. Reprise forcée.'
+      });
+    }
   }
 }
