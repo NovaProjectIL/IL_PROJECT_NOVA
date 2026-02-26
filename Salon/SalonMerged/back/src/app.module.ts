@@ -5,6 +5,8 @@ import { ConfigModule } from '@nestjs/config';
 // ... tes autres imports ...
 import { RoomsModule } from './rooms/rooms.module';
 import { PlaylistModule } from './playlist/playlist.module';
+import { MarkersModule } from './markers/markers.module';
+
 
 // Import du module qu'on vient de créer ci-dessus
 import { ChatModule } from './chat/chat.module'; 
@@ -17,6 +19,7 @@ import { Playlist } from './entities/playlist.entity';
 import { PlaylistEntry } from './entities/playlist-entry.entity';
 import { PlaybackState } from './entities/playback-state.entity';
 import { YouTubeVideo } from './entities/youtube-video.entity';
+import { Marker } from './entities/marker.entity';
 
 @Module({
   imports: [
@@ -37,12 +40,14 @@ import { YouTubeVideo } from './entities/youtube-video.entity';
         PlaybackState,
         YouTubeVideo,
         ChatSession,
+        Marker,
       ],
       synchronize: process.env.DB_SYNC === 'true',
     }),
     RoomsModule,
     PlaylistModule,
-    ChatModule, // C'est ici qu'on active le Chat
+    ChatModule,
+    MarkersModule,
   ],
 })
 export class AppModule {}
