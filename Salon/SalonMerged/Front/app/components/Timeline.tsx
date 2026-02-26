@@ -12,6 +12,19 @@ const categoryColors = {
   QUESTION: '#4444ff'    // Bleu pour les questions
 };
 
+interface Marker {
+  id: number;
+  timeSec: number;
+  label: string;
+  category: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
+  createdBy?: {
+    id: number;
+    name: string;
+  };
+  color?: string;
+}
+
+
 interface TimelineProps {
   duration: number;        // Durée totale de la vidéo en secondes
   currentTime: number;      // Position actuelle de la vidéo en secondes
@@ -207,7 +220,7 @@ export default function Timeline({
                   width: '24px',
                   height: '24px',
                   // Utilise la catégorie pour déterminer la couleur
-                  backgroundColor: categoryColors[marker.category] || '#ffaa00',
+                 backgroundColor: categoryColors[marker.category as keyof typeof categoryColors] || '#ffaa00',
                   borderRadius: '50%',
                   border: '2px solid white',
                   cursor: 'pointer',
@@ -227,7 +240,7 @@ export default function Timeline({
           // CAS 2: Cluster (plusieurs marqueurs regroupés)
           else {
             // Calculer la position moyenne du cluster
-            const avgPosition = cluster.markers.reduce((sum, m) => sum + m.timeSec, 0) / cluster.markers.length;
+           const avgPosition = cluster.markers.reduce((sum: number, m: Marker) => sum + m.timeSec, 0) / cluster.markers.length;
             const position = (avgPosition / duration) * 100;
             
             return (
@@ -258,7 +271,7 @@ export default function Timeline({
                   // Aller au premier marqueur du cluster
                   onSeek(cluster.markers[0].timeSec);
                 }}
-                title={`${cluster.markers.length} marqueurs: ${cluster.markers.map(m => m.label).join(', ')}`}
+                title={`${cluster.markers.length} marqueurs: ${cluster.markers.map((m: Marker) => m.label).join(', ')}`}
               >
                 {cluster.markers.length}
               </div>

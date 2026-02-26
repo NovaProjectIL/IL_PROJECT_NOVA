@@ -1,7 +1,15 @@
 'use client';
-
 import { useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
+
+const Player = ReactPlayer as any; // ← bypass broken typings entirely
+
+interface OnProgressProps {
+  played: number;
+  playedSeconds: number;
+  loaded: number;
+  loadedSeconds: number;
+}
 
 interface VideoPlayerProps {
   youtubeId: string;
@@ -22,27 +30,23 @@ export default function VideoPlayer({
   onPlay,
   onPause,
   onSeek,
-  onDuration
+  onDuration,
 }: VideoPlayerProps) {
-  const playerRef = useRef<ReactPlayer>(null);
+  const playerRef = useRef<any>(null);
   const [isReady, setIsReady] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
 
-  // Quand la prop currentTime change (seek externe)
   useEffect(() => {
     if (isReady && !isSeeking && playerRef.current) {
-      const player = playerRef.current;
-      const currentPlayerTime = player.getCurrentTime();
-      
+      const currentPlayerTime: number = playerRef.current.getCurrentTime();
       if (Math.abs(currentPlayerTime - currentTime) > 0.5) {
-        player.seekTo(currentTime, 'seconds');
+        playerRef.current.seekTo(currentTime, 'seconds');
       }
     }
   }, [currentTime, isReady, isSeeking]);
 
   return (
     <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9' }}>
-      {/* Safe Zone - Zone cliquable transparente au-dessus de la vidéo */}
       <div
         style={{
           position: 'absolute',
@@ -52,38 +56,30 @@ export default function VideoPlayer({
           height: '100%',
           zIndex: 10,
           cursor: 'pointer',
-          // Rendre visible pour le développement (à enlever plus tard)
-          backgroundColor: 'rgba(255,0,0,0.1)'
+          backgroundColor: 'rgba(255,0,0,0.1)',
         }}
-        onClick={() => {
-          if (isPlaying) {
-            onPause();
-          } else {
-            onPlay();
-          }
-        }}
+        onClick={() => (isPlaying ? onPause() : onPlay())}
         title="Cliquez pour play/pause"
       />
-      
-      {/* ReactPlayer sans contrôles natifs */}
-      <ReactPlayer
+
+      <Player
         ref={playerRef}
         url={`https://www.youtube.com/watch?v=${youtubeId}`}
         width="100%"
         height="100%"
         playing={isPlaying}
-        controls={false}  // ← Désactive les contrôles natifs
+        controls={false}
         progressInterval={1000}
         onReady={() => setIsReady(true)}
         onPlay={onPlay}
         onPause={onPause}
-        onSeek={(seconds) => {
+        onSeek={(seconds: number) => {
           setIsSeeking(false);
           onSeek(seconds);
         }}
-        onProgress={({ playedSeconds }) => {
+        onProgress={(state: OnProgressProps) => {
           if (!isSeeking) {
-            onProgress(playedSeconds);
+            onProgress(state.playedSeconds);
           }
         }}
         onDuration={onDuration}
@@ -92,9 +88,9 @@ export default function VideoPlayer({
             playerVars: {
               modestbranding: 1,
               rel: 0,
-              showinfo: 0
-            }
-          }
+              showinfo: 0,
+            },
+          },
         }}
       />
     </div>
