@@ -6,22 +6,17 @@ import io from 'socket.io-client';
 import PlaylistComponent from '@/app/components/PlaylistComponent';
 import Chat from '@/app/components/Chat';
 import styles from './RoomPage.module.css';
-
-// ✅ FIX : Importer l'API configurée
+import Timeline from '@/app/components/Timeline';
+import VideoPlayer from '@/app/components/VideoPlayer';
 import { roomsApi, playlistApi } from '@/app/lib/api';
 
 // --- IMPORTS DES ICÔNES ---
 import {
-  MessageCircle,
   SkipBack,
   Play,
   Pause,
   SkipForward,
   Film,
-  Loader2,
-  CheckCircle2,
-  Plus,
-  Send,
   LogOut
 } from 'lucide-react';
 
@@ -31,8 +26,8 @@ interface ChatWidgetProps {
   socket: any;
   roomCode: string;
   userId?: number;
-  getCurrentTime?: () => number; // ← NOUVEAU
-  onSeek?: (timecode: number) => void; // ← NOUVEAU
+  getCurrentTime?: () => number;
+  onSeek?: (timecode: number) => void;
 }
 
 function ChatWidget({ pseudo = "", userId, socket, roomCode, getCurrentTime, onSeek }: ChatWidgetProps) {
@@ -102,32 +97,8 @@ function ChatWidget({ pseudo = "", userId, socket, roomCode, getCurrentTime, onS
 // PARTIE 2 : PAGE PRINCIPALE (RoomPage)
 // ============================================================================
 
-interface YouTubePlayerEvent {
-  target: any;
-  data?: number;
-}
-
-interface YouTubePlayer {
-  playVideo: () => void;
-  pauseVideo: () => void;
-  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
-  getCurrentTime: () => number;
-  getDuration: () => number;
-  getPlayerState: () => number;
-  destroy: () => void;
-  getVideoData?: () => { video_id: string; title: string };
-}
-
-// ✅ FIX : Utiliser la même URL que dans api.ts
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://vulgarly-unforcible-loura.ngrok-free.dev';
-console.log('🌐 URL API:', API_URL);
-
-declare global {
-  interface Window {
-    YT: any;
-    onYouTubeIframeAPIReady: () => void;
-  }
-}
+console.log('URL API:', API_URL);
 
 export default function RoomPage() {
   const router = useRouter();
@@ -145,27 +116,16 @@ export default function RoomPage() {
   const [position, setPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isYTReady, setIsYTReady] = useState(false);
-  const [playerInitAttempt, setPlayerInitAttempt] = useState(0);
   const socketRef = useRef<any>(null);
-  const playerRef = useRef<any>(null);
-  const [isPlayerReady, setIsPlayerReady] = useState(false);
   const isSyncingRef = useRef(false);
 
   // Fonction pour passer à la vidéo suivante
   const handleNextVideo = async () => {
-    console.log('⏭️ Bouton Suivant cliqué');
-    console.log('État playlist:', {
-      currentIndex: playlist?.currentIndex,
-      totalVideos: playlist?.entries?.length
-    });
+    console.log('Bouton Suivant cliqué');
     
     try {
-      // ✅ FIX : Utiliser l'API axios
       const response = await playlistApi.nextVideo(code);
       const data = response.data;
-      
-      console.log('✅ Données next reçues:', data);
       
       setPlaylist({
         ...playlist,
@@ -176,8 +136,6 @@ export default function RoomPage() {
       if (data.currentIndex >= 0 && data.entries?.length > 0) {
         const currentEntry = data.entries[data.currentIndex];
         if (currentEntry?.video) {
-          console.log('🎬 Changement vers:', currentEntry.video.title);
-          
           socketRef.current?.emit('changeVideo', {
             roomCode: code,
             video: currentEntry.video,
@@ -188,7 +146,7 @@ export default function RoomPage() {
         }
       }
     } catch (error: any) {
-      console.error('❌ Erreur handleNextVideo:', error);
+      console.error('Erreur handleNextVideo:', error);
       if (error.response?.status === 409) {
         alert('Vous êtes déjà à la dernière vidéo');
       }
@@ -197,18 +155,11 @@ export default function RoomPage() {
 
   // Fonction pour revenir à la vidéo précédente
   const handlePreviousVideo = async () => {
-    console.log('⏮️ Bouton Précédent cliqué');
-    console.log('État playlist:', {
-      currentIndex: playlist?.currentIndex,
-      totalVideos: playlist?.entries?.length
-    });
+    console.log('Bouton Précédent cliqué');
     
     try {
-      // ✅ FIX : Utiliser l'API axios
       const response = await playlistApi.previousVideo(code);
       const data = response.data;
-      
-      console.log('✅ Données previous reçues:', data);
       
       setPlaylist({
         ...playlist,
@@ -219,8 +170,6 @@ export default function RoomPage() {
       if (data.currentIndex >= 0 && data.entries?.length > 0) {
         const currentEntry = data.entries[data.currentIndex];
         if (currentEntry?.video) {
-          console.log('🎬 Changement vers:', currentEntry.video.title);
-          
           socketRef.current?.emit('changeVideo', {
             roomCode: code,
             video: currentEntry.video,
@@ -231,7 +180,7 @@ export default function RoomPage() {
         }
       }
     } catch (error: any) {
-      console.error('❌ Erreur handlePreviousVideo:', error);
+      console.error('Erreur handlePreviousVideo:', error);
       if (error.response?.status === 409) {
         alert('Vous êtes déjà à la première vidéo');
       }
@@ -239,10 +188,9 @@ export default function RoomPage() {
   };
 
   const handleReorder = async (entryId: number, oldPosition: number, newPosition: number) => {
-    console.log('🔄 Réorganisation:', { entryId, oldPosition, newPosition });
+    console.log('Réorganisation:', { entryId, oldPosition, newPosition });
     
     try {
-      // ✅ FIX : Utiliser l'API axios
       const response = await playlistApi.reorderPlaylist({
         codeRoom: code,
         memberId,
@@ -251,12 +199,10 @@ export default function RoomPage() {
         newPosition
       });
       
-      console.log('✅ Playlist réorganisée:', response.data);
       await loadRoomData();
-      
       return response.data;
     } catch (err: any) {
-      console.error('❌ Erreur réorganisation:', err);
+      console.error('Erreur réorganisation:', err);
       alert('Erreur lors de la réorganisation: ' + err.message);
       throw err;
     }
@@ -281,17 +227,15 @@ export default function RoomPage() {
     return position;
   }, []);
 
-  // ✅ FIX : Utiliser l'API axios au lieu de fetch
   const loadRoomData = useCallback(async () => {
     try {
-      console.log('📡 Chargement état serveur...');
+      console.log('Chargement état serveur...');
       
-      // ✅ FIX PRINCIPAL : Utiliser roomsApi au lieu de fetch()
       const stateRes = await roomsApi.getRoomState(code);
       const stateData = stateRes.data;
 
       if (isSyncingRef.current) {
-        console.log('⏳ Synchro en cours, ignore loadRoomData');
+        console.log('Synchro en cours, ignore loadRoomData');
         return;
       }
 
@@ -302,24 +246,15 @@ export default function RoomPage() {
         setCurrentVideo(stateData.playback.video);
 
         const adjustedPosition = calculateAdjustedPosition(stateData.playback);
-        console.log('⏱️ Position ajustée:', adjustedPosition, 'vs original:', stateData.playback.positionSec);
+        console.log('Position ajustée:', adjustedPosition);
 
         setPosition(adjustedPosition);
         setIsPlaying(stateData.playback.status === 'PLAYING');
-
-        if (playerRef.current && isPlayerReady && !isSyncingRef.current) {
-          const playerPosition = playerRef.current.getCurrentTime?.() || 0;
-
-          if (Math.abs(playerPosition - adjustedPosition) > 2) {
-            console.log('🔄 Sync depuis loadRoomData:', adjustedPosition);
-            playerRef.current.seekTo(adjustedPosition, true);
-          }
-        }
       }
     } catch (err) {
-      console.error('❌ Erreur chargement salon:', err);
+      console.error('Erreur chargement salon:', err);
     }
-  }, [code, calculateAdjustedPosition, isPlayerReady]);
+  }, [code, calculateAdjustedPosition]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -333,176 +268,24 @@ export default function RoomPage() {
   }, [code, loadRoomData]);
 
   useEffect(() => {
-    if (window.YT) {
-      setIsYTReady(true);
-      return;
-    }
-    
-    if (document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-      const interval = setInterval(() => {
-        if (window.YT) {
-          setIsYTReady(true);
-          clearInterval(interval);
-        }
-      }, 100);
-      
-      return () => clearInterval(interval);
-    }
-    
-    const tag = document.createElement('script');
-    tag.src = 'https://www.youtube.com/iframe_api';
-    tag.async = true;
-    
-    window.onYouTubeIframeAPIReady = () => {
-      console.log('🎬 YouTube API prête');
-      setIsYTReady(true);
-    };
-    
-    const firstScriptTag = document.getElementsByTagName('script')[0];
-    if (firstScriptTag?.parentNode) {
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-    } else {
-      document.head.appendChild(tag);
-    }
-    
-    return () => {
-      window.onYouTubeIframeAPIReady = () => {};
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!currentVideo || !isYTReady) {
-      console.log('⏳ En attente: ', {
-        hasVideo: !!currentVideo,
-        youtubeId: currentVideo?.youtubeId,
-        isYTReady
-      });
-      return;
-    }
-    
-    console.log('▶️ Création du player pour:', currentVideo.youtubeId);
-    
-    if (playerRef.current && playerRef.current.destroy) {
-      playerRef.current.destroy();
-      playerRef.current = null;
-      setIsPlayerReady(false);
-    }
-    
-    if (!window.YT || !window.YT.Player) {
-      console.error('❌ window.YT.Player non disponible');
-      return;
-    }
-    
-    try {
-      playerRef.current = new window.YT.Player('youtube-player', {
-        videoId: currentVideo.youtubeId,
-        playerVars: {
-          autoplay: isPlaying ? 1 : 0,
-          controls: 1,
-          modestbranding: 1,
-          rel: 0,
-          enablejsapi: 1,
-          playsinline: 1,
-        },
-        events: {
-          onReady: (event: any) => {
-            setIsPlayerReady(true);
-            
-            if (position > 0) {
-              setTimeout(() => {
-                event.target.seekTo(position, true);
-              }, 500);
-            }
-            
-            if (isPlaying) {
-              setTimeout(() => {
-                event.target.playVideo();
-              }, 600);
-            }
-          },
-          onStateChange: (event: any) => {
-            if (isSyncingRef.current) return;
-            
-            const state = event.data;
-            const currentPos = event.target.getCurrentTime();
-            
-            if (state === 1) {
-              if (!isPlaying) {
-                setIsPlaying(true);
-                socketRef.current?.emit('play', { 
-                  codeRoom: code, 
-                  positionSec: currentPos
-                });
-              }
-            } 
-            else if (state === 2) {
-              if (isPlaying) {
-                setIsPlaying(false);
-                socketRef.current?.emit('pause', { 
-                  codeRoom: code, 
-                  positionSec: currentPos
-                });
-              }
-            }
-          },
-          onError: (event: any) => {
-            console.error('❌ Erreur YouTube player');
-          }
-        }
-      });
-    } catch (error) {
-      console.error('❌ Erreur création player:', error);
-    }
-    
-    return () => {
-      if (playerRef.current && playerRef.current.destroy) {
-        console.log('🗑️ Destruction du player');
-        playerRef.current.destroy();
-        playerRef.current = null;
-        setIsPlayerReady(false);
-      }
-    };
-  }, [currentVideo?.youtubeId, isYTReady, playerInitAttempt]);
-
-  useEffect(() => {
-    if (!isPlayerReady || !playerRef.current) return;
-    
-    const interval = setInterval(() => {
-      if (playerRef.current?.getCurrentTime) {
-        const currentTime = playerRef.current.getCurrentTime();
-        setPosition(currentTime);
-      }
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, [isPlayerReady]);
-
-  useEffect(() => {
     if (!code) return;
     
-    console.log('🔌 Initialisation Socket.io pour:', code);
+    console.log('Initialisation Socket.io pour:', code);
     
     socketRef.current = io(API_URL, {
       transports: ['websocket', 'polling'],
-      // ✅ IMPORTANT : Header ngrok pour Socket.IO
       extraHeaders: {
         'ngrok-skip-browser-warning': 'true',
       },
     });
     
     socketRef.current.on('connect', () => {
-      console.log('✅ Socket.io connecté');
+      console.log('Socket.io connecté');
       socketRef.current.emit('join-room', { codeRoom: code, memberId });
     });
     
     socketRef.current.on('playback-updated', async (data: any) => {
-      console.log('📡 Socket reçu:', data.action, 'position:', data.playback?.positionSec);
-      
-      if (!playerRef.current || !isPlayerReady) {
-        console.log('⏳ Player pas prêt, chargement état...');
-        await loadRoomData();
-        return;
-      }
+      console.log('Socket reçu:', data.action, 'position:', data.playback?.positionSec);
       
       isSyncingRef.current = true;
       
@@ -514,125 +297,66 @@ export default function RoomPage() {
           const now = Date.now();
           const elapsedSeconds = (now - serverTime) / 1000;
           targetPosition = targetPosition + elapsedSeconds;
-          console.log('⏱️ Position ajustée:', targetPosition, 'elapsed:', elapsedSeconds);
         }
         
-        if (targetPosition > 0) {
-          console.log('🎯 Seek socket vers:', targetPosition);
-          playerRef.current.seekTo(targetPosition, true);
-          setPosition(targetPosition);
-        }
+        setPosition(targetPosition);
         
         if (data.action === 'play') {
-          console.log('▶️ Play socket');
-          playerRef.current.playVideo();
           setIsPlaying(true);
         } else if (data.action === 'pause') {
-          console.log('⏸️ Pause socket');
-          playerRef.current.pauseVideo();
           setIsPlaying(false);
         }
         
       } catch (error) {
-        console.error('❌ Erreur synchronisation socket:', error);
+        console.error('Erreur synchronisation socket:', error);
       } finally {
         setTimeout(() => {
           isSyncingRef.current = false;
-          console.log('✅ Synchronisation terminée');
         }, 150);
       }
     });
     
     socketRef.current.on('error', (error: any) => {
-      console.error('❌ Erreur Socket:', error);
+      console.error('Erreur Socket:', error);
     });
     
     return () => {
-      console.log('🔌 Déconnexion Socket.io');
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
     };
-  }, [code, memberId, isPlayerReady]);
+  }, [code, memberId]);
 
   const handlePlay = () => {
-    console.log('▶️ Bouton Play cliqué');
+    console.log('Bouton Play cliqué');
+    setIsPlaying(true);
     
-    if (playerRef.current && isPlayerReady) {
-      try {
-        const currentPos = playerRef.current.getCurrentTime();
-        console.log('⏱️ Position actuelle:', currentPos);
-        
-        playerRef.current.playVideo();
-        setIsPlaying(true);
-        setPosition(currentPos);
-        
-        socketRef.current?.emit('play', { 
-          codeRoom: code, 
-          positionSec: currentPos
-        });
-        
-        console.log('✅ Événement play envoyé');
-      } catch (error) {
-        console.error('❌ Erreur handlePlay:', error);
-      }
-    } else {
-      console.error('❌ Player non prêt');
-    }
+    socketRef.current?.emit('play', { 
+      codeRoom: code, 
+      positionSec: position
+    });
   };
   
   const handlePause = () => {
-    console.log('⏸️ Bouton Pause cliqué');
+    console.log('Bouton Pause cliqué');
+    setIsPlaying(false);
     
-    if (playerRef.current && isPlayerReady) {
-      try {
-        const currentPos = playerRef.current.getCurrentTime();
-        console.log('⏱️ Position actuelle:', currentPos);
-        
-        playerRef.current.pauseVideo();
-        setIsPlaying(false);
-        setPosition(currentPos);
-        
-        socketRef.current?.emit('pause', { 
-          codeRoom: code, 
-          positionSec: currentPos
-        });
-        
-        console.log('✅ Événement pause envoyé');
-      } catch (error) {
-        console.error('❌ Erreur handlePause:', error);
-      }
-    } else {
-      console.error('❌ Player non prêt');
-    }
+    socketRef.current?.emit('pause', { 
+      codeRoom: code, 
+      positionSec: position
+    });
   };
 
   const handleSeek = (newPosition: number) => {
-    console.log('🎯 Seek manuel à:', newPosition);
+    console.log('Seek manuel à:', newPosition);
     
-    if (playerRef.current && isPlayerReady) {
-      try {
-        isSyncingRef.current = true;
-        
-        playerRef.current.seekTo(newPosition, true);
-        setPosition(newPosition);
-        
-        socketRef.current?.emit('seek', { 
-          codeRoom: code, 
-          positionSec: newPosition,
-          wasPlaying: isPlaying
-        });
-        
-        setTimeout(() => {
-          isSyncingRef.current = false;
-          console.log('✅ Mode synchro désactivé après seek');
-        }, 500);
-        
-      } catch (error) {
-        console.error('❌ Erreur handleSeek:', error);
-        isSyncingRef.current = false;
-      }
-    }
+    setPosition(newPosition);
+    
+    socketRef.current?.emit('seek', { 
+      codeRoom: code, 
+      positionSec: newPosition,
+      wasPlaying: isPlaying
+    });
   };
 
   // Recherche vidéo
@@ -651,12 +375,10 @@ export default function RoomPage() {
     }
 
     try {
-      // ✅ FIX : Utiliser l'API axios
       const youtubeRes = await roomsApi.getYouTubeInfo(videoId);
       const youtubeData = youtubeRes.data;
       
       if (playDirect) {
-        // ✅ FIX : Utiliser l'API axios
         await roomsApi.playDirectVideo({
           codeRoom: code,
           memberId,
@@ -667,7 +389,6 @@ export default function RoomPage() {
           youtubeVThumbnailUrl: youtubeData.thumbnail,
         });
       } else {
-        // ✅ FIX : Utiliser l'API axios
         await playlistApi.addToPlaylist({
           codeRoom: code,
           memberId,
@@ -677,21 +398,20 @@ export default function RoomPage() {
           youtubeVDurationSec: youtubeData.durationSec || 180,
           youtubeVThumbnailUrl: youtubeData.thumbnail,
         });
-        alert('✅ Vidéo ajoutée');
+        alert('Vidéo ajoutée');
       }
       
       setSearchUrl('');
       await loadRoomData();
       
     } catch (err: any) {
-      console.error('❌ Erreur recherche vidéo:', err);
+      console.error('Erreur recherche vidéo:', err);
       alert('Erreur: ' + (err.response?.data?.message || err.message));
     }
   };
 
   const handlePlayVideo = async (index: number) => {
     try {
-      // ✅ FIX : Utiliser l'API axios
       await playlistApi.changeIndex(memberId, code, index);
       
       socketRef.current?.emit('video-change', { 
@@ -701,7 +421,7 @@ export default function RoomPage() {
       
       await loadRoomData();
     } catch (err: any) {
-      console.error('❌ Erreur lecture vidéo:', err);
+      console.error('Erreur lecture vidéo:', err);
       alert('Erreur: ' + (err.response?.data?.message || err.message));
     }
   };
@@ -709,11 +429,10 @@ export default function RoomPage() {
   const handleDelete = async (entryId: number) => {
     if (!confirm('Supprimer ?')) return;
     try {
-      // ✅ FIX : Utiliser l'API axios
       await playlistApi.deleteFromPlaylist(memberId, code, entryId);
       await loadRoomData();
     } catch (err: any) {
-      console.error('❌ Erreur suppression:', err);
+      console.error('Erreur suppression:', err);
       alert('Erreur: ' + (err.response?.data?.message || err.message));
     }
   };
@@ -741,7 +460,7 @@ export default function RoomPage() {
         <h1 className={styles.roomTitle}>Salon: {code}</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className={`${styles.connectionBadge} ${socketRef.current?.connected ? styles.connected : styles.disconnected}`}>
-            {socketRef.current?.connected ? '🟢 Connecté' : '🔴 Déconnecté'}
+            {socketRef.current?.connected ? 'Connecté' : 'Déconnecté'}
           </div>
           <button
             onClick={handleQuitRoom}
@@ -833,65 +552,28 @@ export default function RoomPage() {
           </h3>
           <p>Chaîne: {currentVideo.channelTitle || currentVideo.author}</p>
           
-          {/* Player YouTube */}
+          {/* Player YouTube avec React-Player */}
           <div className={styles.playerContainer}>
-            <div 
-              id="youtube-player" 
-              className={styles.youtubePlayer}
-            ></div>
-            
-            {!isYTReady && (
-              <div className={styles.playerOverlay}>
-                <div className={styles.overlayContent}>
-                  <div className={styles.overlayText} style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-                    <Loader2 size={20} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                    Chargement du player YouTube...
-                  </div>
-                  <div className={styles.videoId}>Vidéo: {currentVideo.youtubeId}</div>
-                </div>
-              </div>
-            )}
-            
-            {isYTReady && !isPlayerReady && (
-              <div className={styles.playerOverlay}>
-                <div className={styles.overlayContent}>
-                  <div className={styles.overlayText} style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-                    <Film size={20} />
-                    Initialisation du player...
-                  </div>
-                  <button 
-                    onClick={() => {
-                      setPlayerInitAttempt(prev => prev + 1);
-                      console.log('🔄 Réessai d\'initialisation');
-                    }}
-                    className={styles.retryButton}
-                  >
-                    Réessayer
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* État de synchronisation */}
-          <div className={`${styles.syncStatus} ${isPlayerReady ? styles.syncReady : styles.syncLoading}`}>
-            {isYTReady ? (
-              isPlayerReady ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                  <CheckCircle2 size={16} />
-                  Player prêt - Synchronisation activée
-                </span>
-              ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                  <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                  Player en cours d'initialisation...
-                </span>
-              )
-            ) : (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                Chargement de l'API YouTube...
-              </span>
+            {currentVideo && (
+              <VideoPlayer
+                youtubeId={currentVideo.youtubeId}
+                isPlaying={isPlaying}
+                currentTime={position}
+                onProgress={(time) => setPosition(time)}
+                onPlay={handlePlay}
+                onPause={handlePause}
+                onSeek={(time) => {
+                  setPosition(time);
+                  socketRef.current?.emit('seek', { 
+                    codeRoom: code, 
+                    positionSec: time,
+                    wasPlaying: isPlaying
+                  });
+                }}
+                onDuration={(duration) => {
+                  console.log('Durée:', duration);
+                }}
+              />
             )}
           </div>
           
@@ -937,27 +619,13 @@ export default function RoomPage() {
               </button>
             </div>
             
-            {/* Barre de progression */}
+            {/* Barre de progression avec marqueurs */}
             <div className={styles.progressSection}>
-              <div className={styles.timeLabels}>
-                <span>{formatTime(position)}</span>
-                <span>
-                  {currentVideo.durationSec ? formatTime(currentVideo.durationSec) : '??:??'}
-                </span>
-              </div>
-              <label htmlFor="video-progress-bar" className="sr-only">
-                Barre de progression de la vidéo
-              </label>
-              <input
-                id="video-progress-bar"
-                type="range"
-                min="0"
-                max={currentVideo.durationSec || 1}
-                value={position}
-                onChange={(e) => handleSeek(Number(e.target.value))}
-                className={styles.progressBar}
-                title={`Position: ${formatTime(position)}`}
-                aria-label="Contrôle de position de la vidéo"
+              <Timeline 
+                duration={currentVideo?.durationSec || 0}
+                currentTime={position}
+                onSeek={handleSeek}
+                roomCode={code}
               />
               <div className={styles.statusInfo}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1000,12 +668,13 @@ export default function RoomPage() {
         isLoading={loading}
       />
       
+      {/* Chat */}
       <ChatWidget
         socket={socketRef.current}
         roomCode={code}
         pseudo={pseudo || currentMemberName || "Utilisateur"}
         userId={memberId}
-        getCurrentTime={() => playerRef.current?.getCurrentTime?.() ?? 0}  // ← NOUVEAU
+        getCurrentTime={() => position}
         onSeek={(timecode) => handleSeek(timecode)} 
       />
       
