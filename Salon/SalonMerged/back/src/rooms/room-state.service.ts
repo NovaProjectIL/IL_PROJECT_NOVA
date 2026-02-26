@@ -1,38 +1,43 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+// Les 3 états possibles d'un salon : on regarde, on a mis pause, ou on attend que ça charge.
 export enum RoomGlobalStatus {
   PLAYING = 'PLAYING',
   PAUSED = 'PAUSED',
   LOADING = 'LOADING',
 }
 
+// Les infos qu'on garde sur chaque utilisateur connecté au salon.
 export interface ClientState {
-  clientId: string;
-  memberId: number;
-  isReady: boolean;
-  joinedAt: Date;
+  clientId: string; // L'identifiant de sa connexion socket.
+  memberId: number; // Son ID dans la base de données.
+  isReady: boolean; // Est-ce que son lecteur YouTube a fini de charger ?
+  joinedAt: Date;   // À quelle heure il est arrivé.
 }
 
+// La structure d'un salon dans la mémoire du serveur.
 export interface RoomState {
   roomCode: string;
   status: RoomGlobalStatus;
-  currentTimestamp: number;
-  lastUpdateServerTime: number;
-  clients: Map<string, ClientState>;
+  currentTimestamp: number;    // À quelle seconde on en est dans la vidéo.
+  lastUpdateServerTime: number; // L'heure exacte du serveur au moment du dernier changement.
+  clients: Map<string, ClientState>; // La liste de tous les gens connectés ici.
 }
 
 @Injectable()
 export class RoomStateService {
   private readonly logger = new Logger(RoomStateService.name);
+  // On stocke tous les salons dans une "Map" (une sorte de gros dictionnaire en mémoire).
   private rooms = new Map<string, RoomState>();
 
   /**
-   * Récupère ou initialise l'état d'une room
+   * Si le salon n'existe pas encore en mémoire, on le crée.
+   * C'est ici qu'on prépare l'endroit où on va stocker les gens et le temps de la vidéo.
    */
   getOrCreateRoomState(roomCode: string): RoomState {
     const code = roomCode.toUpperCase();
     if (!this.rooms.has(code)) {
-      this.logger.log(`Initialisation de l'état en mémoire pour la room: ${code}`);
+      this.logger.log(`On prépare la mémoire pour le nouveau salon : ${code}`);
       this.rooms.set(code, {
         roomCode: code,
         status: RoomGlobalStatus.PAUSED,
@@ -45,22 +50,21 @@ export class RoomStateService {
   }
 
   /**
-   * Met à jour le statut global de la room
+   * On change l'état du salon (ex: on passe de PAUSE à LECTURE).
+   * On note aussi à quelle seconde de la vidéo ça s'est passé.
    */
   updateStatus(roomCode: string, status: RoomGlobalStatus, timestamp?: number) {
     const state = this.getOrCreateRoomState(roomCode);
     state.status = status;
-    state.lastUpdateServerTime = Date.now();
+    state.lastUpdateServerTime = Date.now(); // On note l'heure actuelle du serveur.
     
     if (timestamp !== undefined) {
       state.currentTimestamp = timestamp;
     }
-    
-    this.logger.debug(`Statut mis à jour pour ${roomCode}: ${status} à ${state.currentTimestamp}s`);
   }
 
   /**
-   * Met à jour le timestamp actuel
+   * Juste pour mettre à jour la seconde de la vidéo sans changer le statut.
    */
   updateTimestamp(roomCode: string, timestamp: number) {
     const state = this.getOrCreateRoomState(roomCode);
@@ -69,7 +73,10 @@ export class RoomStateService {
   }
 
   /**
-   * Calcule le timestamp actuel en tenant compte du temps écoulé si en lecture
+   * C'EST LE CALCUL MAGIQUE :
+   * Si la vidéo joue, on calcule la vraie seconde actuelle.
+   * On prend la dernière seconde enregistrée + le temps qui a passé depuis le dernier clic.
+   * Ça permet à tout le monde d'être synchro à la milliseconde près.
    */
   getAdjustedTimestamp(roomCode: string): number {
     const state = this.getOrCreateRoomState(roomCode);
@@ -81,7 +88,8 @@ export class RoomStateService {
   }
 
   /**
-   * Ajoute ou met à jour un client dans la room
+   * Quand quelqu'un se connecte, on l'ajoute à la liste du salon.
+   * Par défaut, il n'est pas encore "prêt" (il doit charger la vidéo).
    */
   addClient(roomCode: string, clientId: string, memberId: number) {
     const state = this.getOrCreateRoomState(roomCode);
@@ -91,22 +99,15 @@ export class RoomStateService {
       isReady: false,
       joinedAt: new Date(),
     });
-    this.logger.log(`Client ${clientId} (membre ${memberId}) ajouté à ${roomCode}`);
   }
 
   /**
-   * Supprime un client de la room
+   * Quand quelqu'un ferme son onglet, on le retire du salon.
    */
   removeClient(clientId: string) {
     for (const [roomCode, state] of this.rooms.entries()) {
       if (state.clients.has(clientId)) {
         state.clients.delete(clientId);
-        this.logger.log(`Client ${clientId} supprimé de ${roomCode}`);
-        
-        // Optionnel: Si la room est vide en mémoire, on peut la nettoyer après un certain temps
-        if (state.clients.size === 0) {
-          // On pourrait ajouter un timer de nettoyage ici
-        }
         return roomCode;
       }
     }
@@ -114,19 +115,18 @@ export class RoomStateService {
   }
 
   /**
-   * Marque un client comme prêt
+   * Le client nous dit : "C'est bon, j'ai fini de charger la vidéo !".
    */
   setClientReady(roomCode: string, clientId: string, isReady: boolean) {
     const state = this.getOrCreateRoomState(roomCode);
     const client = state.clients.get(clientId);
     if (client) {
       client.isReady = isReady;
-      this.logger.debug(`Client ${clientId} dans ${roomCode} prêt: ${isReady}`);
     }
   }
 
   /**
-   * Vérifie si tous les clients d'une room sont prêts
+   * On vérifie si absolument TOUT LE MONDE dans le salon a fini de charger.
    */
   areAllClientsReady(roomCode: string): boolean {
     const state = this.getOrCreateRoomState(roomCode);
@@ -139,7 +139,7 @@ export class RoomStateService {
   }
 
   /**
-   * Récupère la liste des membres ID connectés
+   * Donne la liste des IDs des gens qui sont en train de regarder.
    */
   getConnectedMembers(roomCode: string): number[] {
     const state = this.getOrCreateRoomState(roomCode);
@@ -147,7 +147,8 @@ export class RoomStateService {
   }
 
   /**
-   * Prépare la room pour un saut temporel (seek)
+   * Quand on change de vidéo ou qu'on saute dans le temps :
+   * On remet tout le monde en "pas prêt" et on attend qu'ils chargent le nouveau moment.
    */
   prepareForSeek(roomCode: string, timestamp: number) {
     const state = this.getOrCreateRoomState(roomCode);
@@ -155,16 +156,14 @@ export class RoomStateService {
     state.currentTimestamp = timestamp;
     state.lastUpdateServerTime = Date.now();
     
-    // Tout le monde doit re-confirmer qu'il est prêt au nouvel emplacement
     for (const client of state.clients.values()) {
       client.isReady = false;
     }
-    
-    this.logger.log(`Room ${roomCode} préparée pour seek à ${timestamp}s. Ready states réinitialisés.`);
   }
 
   /**
-   * Vérifie si un client fait partie d'une room
+   * Est-ce que cette connexion (clientId) appartient bien à ce salon ?
+   * Très important pour la sécurité !
    */
   isClientInRoom(roomCode: string, clientId: string): boolean {
     const code = roomCode.toUpperCase();
@@ -173,24 +172,20 @@ export class RoomStateService {
   }
 
   /**
-   * Réinitialise l'état de la room (ex: nouvelle vidéo)
+   * On vide tout et on recommence (utile pour une nouvelle vidéo).
    */
   resetRoomState(roomCode: string) {
     const state = this.getOrCreateRoomState(roomCode);
     state.status = RoomGlobalStatus.PAUSED;
     state.currentTimestamp = 0;
     state.lastUpdateServerTime = Date.now();
-    
-    // On remet tout le monde en "non prêt" pour le chargement de la nouvelle vidéo
     for (const client of state.clients.values()) {
       client.isReady = false;
     }
-    
-    this.logger.log(`État réinitialisé pour la room: ${roomCode}`);
   }
 
   /**
-   * Récupère l'état complet pour synchronisation
+   * Petit résumé rapide de ce qui se passe dans le salon.
    */
   getFullState(roomCode: string) {
     const state = this.getOrCreateRoomState(roomCode);

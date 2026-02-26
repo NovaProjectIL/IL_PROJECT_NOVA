@@ -19,18 +19,18 @@ import {
 } from './dto/ws-events.dto';
 
 @WebSocketGateway({
-  cors: {
-    origin: '*',
-    credentials: true,
-  },
+  cors: { origin: '*', credentials: true },
 })
+// On active la validation automatique pour tous les messages arrivant ici.
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
   
   private logger = new Logger('RoomsGateway');
+  // On garde une liste des "chronomètres" de chargement pour chaque salon.
   private loadingTimers = new Map<string, NodeJS.Timeout>();
+  // On attend maximum 8 secondes que les gens chargent la vidéo.
   private readonly LOADING_TIMEOUT_MS = 8000;
 
   constructor(
@@ -39,13 +39,15 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {}
 
   handleConnection(client: Socket) {
-    this.logger.log(`Client connecté: ${client.id}`);
+    this.logger.log(`Nouvelle connexion : ${client.id}`);
   }
 
   handleDisconnect(client: Socket) {
+    // Si quelqu'un part, on le retire de la liste en mémoire.
     const roomCode = this.roomStateService.removeClient(client.id);
     if (roomCode) {
-      this.logger.log(`Client ${client.id} déconnecté de la room ${roomCode}`);
+      this.logger.log(`L'utilisateur ${client.id} a quitté le salon ${roomCode}`);
+      // On vérifie si son départ permet aux autres de reprendre la vidéo (s'il était le dernier à bloquer).
       this.checkAndResumeIfAllReady(roomCode);
     }
   }
@@ -55,15 +57,20 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { codeRoom, memberId } = data;
     const roomCode = codeRoom.toUpperCase();
     
+    // On fait entrer l'utilisateur dans le canal socket du salon.
     client.join(roomCode);
+    // On l'ajoute aussi dans notre gestionnaire de mémoire.
     this.roomStateService.addClient(roomCode, client.id, memberId);
     
-    this.logger.log(`${client.id} (membre ${memberId}) rejoint room: ${roomCode}`);
+    this.logger.log(`[JOIN] ${client.id} est entré dans ${roomCode}`);
 
     try {
+      // On récupère l'état actuel du salon pour lui envoyer.
       const roomState = await this.roomsService.stateRoom(roomCode);
+      // On calcule à quelle seconde il doit se caler pour être synchro.
       const currentPosition = this.roomStateService.getAdjustedTimestamp(roomCode) || roomState.playbackState?.positionSec || 0;
       
+      // On lui envoie toutes les infos pour qu'il puisse afficher la vidéo.
       client.emit('room-initial-state', {
         playback: {
           status: roomState.playbackState?.status || PlayStatus.PAUSED,
@@ -86,28 +93,31 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         users: roomState.users?.map(user => ({ id: user.id, name: user.name })) || [],
       });
     } catch (error) {
-      this.logger.error(`Erreur join-room:`, error);
+      this.logger.error(`Erreur lors de l'entrée dans le salon :`, error);
     }
 
     return { success: true };
   }
 
-  @UseGuards(WsRoomMemberGuard)
+  @UseGuards(WsRoomMemberGuard) // SEULS LES MEMBRES peuvent faire ça !
   @SubscribeMessage('loading-video')
   async handleLoadingVideo(client: Socket, data: BaseRoomDto) {
     const roomCode = data.codeRoom.toUpperCase();
-    this.logger.log(`Room ${roomCode} entre en phase de CHARGEMENT (via ${client.id})`);
+    this.logger.log(`[LOAD] Le salon ${roomCode} attend un chargement...`);
 
+    // On passe le salon en mode "Chargement" et on dit que ce client n'est pas prêt.
     this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.LOADING);
     this.roomStateService.setClientReady(roomCode, client.id, false);
     
+    // On lance le chrono des 8 secondes de sécurité.
     this.startLoadingTimeout(roomCode);
 
+    // On dit à tout le monde de mettre pause en attendant.
     this.server.to(roomCode).emit('playback-updated', {
       action: 'pause',
       playback: { status: PlayStatus.PAUSED },
       loading: true,
-      message: 'Attente des autres participants...'
+      message: 'On attend que tout le monde ait chargé la vidéo...'
     });
 
     return { success: true };
@@ -117,25 +127,33 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('client-ready')
   async handleClientReady(client: Socket, data: BaseRoomDto) {
     const roomCode = data.codeRoom.toUpperCase();
+    // Le client nous dit qu'il a fini de charger.
     this.roomStateService.setClientReady(roomCode, client.id, true);
     
-    this.logger.log(`Client ${client.id} est PRÊT dans ${roomCode}`);
+    this.logger.log(`[READY] ${client.id} est prêt dans ${roomCode}`);
 
+    // On vérifie si on peut relancer la vidéo pour tout le groupe.
     this.checkAndResumeIfAllReady(roomCode);
     
     return { success: true };
   }
 
+  /**
+   * Fonction interne : si tout le monde est prêt, on relance !
+   */
   private async checkAndResumeIfAllReady(roomCode: string) {
     if (this.roomStateService.areAllClientsReady(roomCode)) {
+      // Tout le monde est prêt ! On arrête le chrono de sécurité.
       this.clearLoadingTimeout(roomCode);
-      this.logger.log(`TOUS les clients sont prêts dans ${roomCode}. Reprise de la lecture.`);
+      this.logger.log(`[SYNC] Tout le monde est prêt dans ${roomCode}. On relance !`);
 
       const adjustedPos = this.roomStateService.getAdjustedTimestamp(roomCode);
       
+      // On met à jour la BDD et la mémoire.
       await this.roomsService.play(roomCode, adjustedPos);
       this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PLAYING, adjustedPos);
 
+      // On envoie le signal "PLAY" à tout le monde.
       this.server.to(roomCode).emit('playback-updated', {
         action: 'play',
         playback: {
@@ -144,7 +162,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
           serverTimeRef: new Date(),
         },
         loading: false,
-        message: 'Tout le monde est prêt !'
+        message: 'Tout le monde est prêt, bon visionnage !'
       });
     }
   }
@@ -153,7 +171,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('play')
   async handlePlay(client: Socket, data: PlaybackControlDto) {
     const roomCode = data.codeRoom.toUpperCase();
-    this.clearLoadingTimeout(roomCode);
+    this.clearLoadingTimeout(roomCode); // Si quelqu'un appuie sur Play, on arrête d'attendre.
     const pos = data.positionSec || this.roomStateService.getAdjustedTimestamp(roomCode);
     
     await this.roomsService.play(roomCode, pos);
@@ -185,14 +203,17 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('seek')
   async handleSeek(client: Socket, data: SeekDto) {
     const roomCode = data.codeRoom.toUpperCase();
-    this.logger.log(`Seek validé dans ${roomCode} à ${data.positionSec}s. Réinitialisation des états.`);
+    this.logger.log(`[SEEK] Nouveau saut à ${data.positionSec}s dans le salon ${roomCode}`);
 
     try {
+      // On prépare tout le monde pour le nouveau moment de la vidéo.
       this.roomStateService.prepareForSeek(roomCode, data.positionSec);
       await this.roomsService.seek(roomCode, data.positionSec);
       
+      // On lance le chrono de sécurité car un saut demande souvent un re-chargement.
       this.startLoadingTimeout(roomCode);
 
+      // On force la pause et on affiche le message de chargement.
       this.server.to(roomCode).emit('playback-updated', {
         action: 'seek',
         playback: { 
@@ -201,23 +222,24 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
           status: PlayStatus.PAUSED
         },
         loading: true,
-        message: 'Saut temporel... Synchronisation en cours.'
+        message: 'Synchronisation en cours après le saut...'
       });
 
       return { success: true };
     } catch (error) {
-      this.logger.error(`Erreur lors du seek dans ${roomCode}:`, error);
-      return { success: false, error: 'Erreur interne lors du saut temporel' };
+      this.logger.error(`Erreur lors du saut temporel :`, error);
+      return { success: false, error: 'Erreur interne.' };
     }
   }
 
+  // --- GESTION DU CHRONO DE SÉCURITÉ ---
+
   private startLoadingTimeout(roomCode: string) {
     this.clearLoadingTimeout(roomCode);
-
+    // On déclenche la reprise forcée dans 8 secondes.
     const timer = setTimeout(() => {
       this.handleLoadingTimeout(roomCode);
     }, this.LOADING_TIMEOUT_MS);
-
     this.loadingTimers.set(roomCode, timer);
   }
 
@@ -229,7 +251,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private async handleLoadingTimeout(roomCode: string) {
-    this.logger.warn(`TIMEOUT de chargement dans ${roomCode} (8s écoulées). Abandon de l'attente.`);
+    this.logger.warn(`[TIMEOUT] Trop d'attente pour ${roomCode}. On force la reprise !`);
     this.loadingTimers.delete(roomCode);
 
     const roomState = this.roomStateService.getOrCreateRoomState(roomCode);
@@ -239,6 +261,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.roomsService.play(roomCode, adjustedPos);
       this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PLAYING, adjustedPos);
 
+      // On force tout le monde à lire, même ceux qui n'ont pas fini de charger.
       this.server.to(roomCode).emit('playback-updated', {
         action: 'play',
         playback: {
@@ -247,7 +270,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
           serverTimeRef: new Date(),
         },
         loading: false,
-        message: 'Délai d\'attente dépassé. Reprise forcée.'
+        message: 'Délai d\'attente dépassé (certains rament). Reprise forcée !'
       });
     }
   }
