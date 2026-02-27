@@ -56,7 +56,7 @@ export default function VideoPlayer({
           height: '100%',
           zIndex: 10,
           cursor: 'pointer',
-          backgroundColor: 'rgba(255,0,0,0.1)',
+          backgroundColor: 'transparent',  // au lieu de 'rgba(255,0,0,0.1)'
         }}
         onClick={() => (isPlaying ? onPause() : onPlay())}
         title="Cliquez pour play/pause"
