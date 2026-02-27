@@ -17,7 +17,7 @@ import {
   SkipForward,
   Film,
   LogOut,
-  Plus,          // ← ajouté
+  Plus,
 } from 'lucide-react';
 
 // --- Composant ChatWidget ---
@@ -184,11 +184,23 @@ export default function RoomPage() {
     try {
       const stateRes = await roomsApi.getRoomState(code);
       const stateData = stateRes.data;
-      if (isSyncingRef.current) return;
-      setPlaylist(stateData.playlist);
-      setMembers(stateData.members || []);
+
+      // ✅ CORRECTION : On met à jour currentVideo ET la playlist AVANT
+      // de vérifier isSyncingRef, car la vidéo doit toujours s'afficher
+      // même si un événement socket est en cours de traitement.
       if (stateData.playback?.video) {
         setCurrentVideo(stateData.playback.video);
+      }
+
+      // ✅ CORRECTION : On ne bloque le reste de la mise à jour
+      // (position, isPlaying, playlist, members) que si une synchro
+      // socket est en cours, pour éviter les conflits de position.
+      if (isSyncingRef.current) return;
+
+      setPlaylist(stateData.playlist);
+      setMembers(stateData.members || []);
+
+      if (stateData.playback?.video) {
         setPosition(calculateAdjustedPosition(stateData.playback));
         setIsPlaying(stateData.playback.status === 'PLAYING');
       }
@@ -212,7 +224,7 @@ export default function RoomPage() {
 
     socketRef.current = io(API_URL, {
       transports: ['websocket', 'polling'],
-      ...({ extraHeaders: { 'ngrok-skip-browser-warning': 'true' } } as any), // ← cast to bypass strict ConnectOpts
+      ...({ extraHeaders: { 'ngrok-skip-browser-warning': 'true' } } as any),
     });
 
     socketRef.current.on('connect', () => {
@@ -224,7 +236,6 @@ export default function RoomPage() {
       if (data.playback?.video) {
         setCurrentVideo(data.playback.video);
         setIsPlaying(data.playback.status === 'PLAYING');
-        // On ne met à jour la position que si on n'est pas déjà en train de synchroniser
         if (!isSyncingRef.current) {
           setPosition(data.playback.positionSec || 0);
         }
@@ -244,7 +255,7 @@ export default function RoomPage() {
         if (data.playback?.video) {
           setCurrentVideo(data.playback.video);
         }
-        
+
         let targetPosition = data.playback?.positionSec || 0;
         if (data.action === 'play' && data.playback?.serverTimeRef) {
           const serverTime = new Date(data.playback.serverTimeRef).getTime();
@@ -253,7 +264,7 @@ export default function RoomPage() {
         setPosition(targetPosition);
         if (data.action === 'play') setIsPlaying(true);
         else if (data.action === 'pause') setIsPlaying(false);
-        else if (data.action === 'seek') setIsPlaying(false); // Souvent pause après seek pour charger
+        else if (data.action === 'seek') setIsPlaying(false);
       } catch (error) {
         console.error('Erreur synchronisation socket:', error);
       } finally {

@@ -47,20 +47,10 @@ export default function VideoPlayer({
 
   return (
     <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9' }}>
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          zIndex: 10,
-          cursor: 'pointer',
-          backgroundColor: 'transparent',  // au lieu de 'rgba(255,0,0,0.1)'
-        }}
-        onClick={() => (isPlaying ? onPause() : onPlay())}
-        title="Cliquez pour play/pause"
-      />
+      {/* ✅ CORRECTION : Le div overlay a été SUPPRIMÉ.
+          Il masquait la vidéo et bloquait les interactions natives YouTube.
+          Le contrôle play/pause est désormais géré par les boutons dédiés
+          dans la barre de contrôle (handlePlay / handlePause). */}
 
       <Player
         ref={playerRef}
@@ -68,7 +58,7 @@ export default function VideoPlayer({
         width="100%"
         height="100%"
         playing={isPlaying}
-        controls={false}
+        controls={true} // ✅ CORRECTION : était false, empêchait l'affichage de la vidéo
         progressInterval={1000}
         onReady={() => setIsReady(true)}
         onPlay={onPlay}

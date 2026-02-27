@@ -20,6 +20,13 @@ export class Message {
   @Column({ type: 'text', nullable: true })
   gifUrl: string | null;
 
+  // ✅ CORRECTION : Ajout de la colonne timecode
+  // Permet de stocker la position dans la vidéo au moment de l'envoi du message.
+  // Utilisé par le badge cliquable "⏱ MM:SS" dans le chat pour naviguer dans la vidéo.
+  // nullable: true car les anciens messages n'ont pas de timecode.
+  @Column({ type: 'int', nullable: true })
+  timecode: number | null;
+
   // when user deleted => user_id set to NULL, message stays
   @ManyToOne(() => User, (user) => user.messages, {
     eager: true,
