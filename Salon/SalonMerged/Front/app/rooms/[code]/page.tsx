@@ -219,9 +219,32 @@ export default function RoomPage() {
       socketRef.current.emit('join-room', { codeRoom: code, memberId });
     });
 
+    socketRef.current.on('room-initial-state', (data: any) => {
+      console.log('État initial reçu via socket:', data);
+      if (data.playback?.video) {
+        setCurrentVideo(data.playback.video);
+        setIsPlaying(data.playback.status === 'PLAYING');
+        // On ne met à jour la position que si on n'est pas déjà en train de synchroniser
+        if (!isSyncingRef.current) {
+          setPosition(data.playback.positionSec || 0);
+        }
+      }
+      if (data.playlist) {
+        setPlaylist(data.playlist);
+      }
+      if (data.users) {
+        setMembers(data.users);
+      }
+    });
+
     socketRef.current.on('playback-updated', async (data: any) => {
       isSyncingRef.current = true;
       try {
+        console.log('Playback updated via socket:', data);
+        if (data.playback?.video) {
+          setCurrentVideo(data.playback.video);
+        }
+        
         let targetPosition = data.playback?.positionSec || 0;
         if (data.action === 'play' && data.playback?.serverTimeRef) {
           const serverTime = new Date(data.playback.serverTimeRef).getTime();
@@ -230,6 +253,7 @@ export default function RoomPage() {
         setPosition(targetPosition);
         if (data.action === 'play') setIsPlaying(true);
         else if (data.action === 'pause') setIsPlaying(false);
+        else if (data.action === 'seek') setIsPlaying(false); // Souvent pause après seek pour charger
       } catch (error) {
         console.error('Erreur synchronisation socket:', error);
       } finally {
