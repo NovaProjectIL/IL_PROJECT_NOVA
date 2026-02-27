@@ -4,7 +4,13 @@ import { RoomsService } from './rooms.service';
 import { RoomsController } from './rooms.controller';
 import { RoomStateService } from './room-state.service';
 import { Room } from '../entities/room.entity';
-// ... (rest of imports)
+import { User } from '../entities/user.entity';
+import { Playlist } from '../entities/playlist.entity';
+import { PlaylistEntry } from '../entities/playlist-entry.entity';
+import { PlaybackState } from '../entities/playback-state.entity';
+import { YouTubeVideo } from '../entities/youtube-video.entity';
+import { ChatSession } from '../entities/chat-session.entity';
+import { PlaylistModule } from '../playlist/playlist.module';
 import { RoomsGateway } from './rooms.gateway';
 import { ChatModule } from '../chat/chat.module';
 
