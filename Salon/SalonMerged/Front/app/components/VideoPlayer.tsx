@@ -77,8 +77,21 @@ export default function VideoPlayer({
     setIsLoading(false);
   };
 
-  // Use embed URL format which is more reliable for YouTube embeds
-  const videoUrl = `https://www.youtube.com/embed/${youtubeId}`;
+  // ✅ FIX: Vérifier que youtubeId existe et utiliser l'URL watch (pas embed)
+  if (!youtubeId) {
+    return (
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', backgroundColor: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#888', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>▶️</div>
+          <p>Aucune vidéo sélectionnée</p>
+          <p style={{ fontSize: '12px', marginTop: '8px' }}>Ajoutez une vidéo YouTube pour commencer</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ FIX: Utiliser l'URL watch standard (ReactPlayer la supporte nativement)
+  const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
 
   return (
     <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', backgroundColor: '#000' }}>

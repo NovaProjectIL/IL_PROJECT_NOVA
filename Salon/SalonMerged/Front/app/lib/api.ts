@@ -150,18 +150,9 @@ export const playlistApi = {
 // ==================== MARKERS API ====================
 export const markersApi = {
   // === GET : Récupérer tous les marqueurs d'une room ===
-  // Support BOTH roomId (numero) AND roomCode (string)
-  getMarkers: (roomIdentifier: number | string) => {
-    // Si c'est un nombre, c'est un roomId (chemin)
-    // Si c'est un string, c'est un roomCode (paramètre query)
-    if (typeof roomIdentifier === 'number') {
-      return api.get(`/rooms/${roomIdentifier}/markers`);
-    } else {
-      // Pour roomCode, on utilise l'ancienne route avec paramètre query
-      // À long terme, le backend devrait supporter /rooms/:code/markers
-      return api.get('/rooms/markers', { params: { codeRoom: roomIdentifier } });
-    }
-  },
+  // ✅ FIX: Support BOTH roomId (numero) AND roomCode (string) via unified endpoint
+  getMarkers: (roomIdentifier: number | string) => 
+    api.get(`/rooms/${roomIdentifier}/markers`),
   
   // === POST : Créer un nouveau marqueur ===
   createMarker: (roomIdentifier: number | string, data: {
@@ -171,13 +162,7 @@ export const markersApi = {
     category?: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
     videoId: string;       // youtubeId
     createdById: number;   // userId
-  }) => {
-    if (typeof roomIdentifier === 'number') {
-      return api.post(`/rooms/${roomIdentifier}/markers`, data);
-    } else {
-      return api.post('/rooms/markers', { ...data, codeRoom: roomIdentifier });
-    }
-  },
+  }) => api.post(`/rooms/${roomIdentifier}/markers`, data),
   
   // === PATCH : Mettre à jour un marqueur ===
   updateMarker: (roomIdentifier: number | string, markerId: number, data: {
@@ -186,22 +171,11 @@ export const markersApi = {
     content?: string;
     category?: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
     version: number;  // Obligatoire pour optimistic locking
-  }) => {
-    if (typeof roomIdentifier === 'number') {
-      return api.patch(`/rooms/${roomIdentifier}/markers/${markerId}`, data);
-    } else {
-      return api.patch(`/rooms/markers/${markerId}`, { ...data, codeRoom: roomIdentifier });
-    }
-  },
+  }) => api.patch(`/rooms/${roomIdentifier}/markers/${markerId}`, data),
   
   // === DELETE : Supprimer un marqueur ===
-  deleteMarker: (roomIdentifier: number | string, markerId: number) => {
-    if (typeof roomIdentifier === 'number') {
-      return api.delete(`/rooms/${roomIdentifier}/markers/${markerId}`);
-    } else {
-      return api.delete(`/rooms/markers/${markerId}`, { params: { codeRoom: roomIdentifier } });
-    }
-  },
+  deleteMarker: (roomIdentifier: number | string, markerId: number) => 
+    api.delete(`/rooms/${roomIdentifier}/markers/${markerId}`),
 };
 
 export default api;
