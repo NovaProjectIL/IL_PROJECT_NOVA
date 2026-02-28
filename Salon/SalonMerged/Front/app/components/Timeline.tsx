@@ -1,117 +1,70 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { socketService } from '@/app/lib/socket';
-import api from '@/app/lib/api';
-
-// Couleurs des marqueurs selon la catégorie (définie par Wafa)
-const categoryColors = {
-  ERROR: '#ff4444',      // Rouge pour les erreurs
-  COMMENT: '#ffaa00',    // Orange pour les commentaires
-  HIGHLIGHT: '#00ff00',  // Vert pour les moments clés
-  QUESTION: '#4444ff'    // Bleu pour les questions
-};
-
-interface Marker {
-  id: number;
-  timeSec: number;
-  label: string;
-  category: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
-  createdBy?: {
-    id: number;
-    name: string;
-  };
-  color?: string;
-}
-
+import { useMarkers } from '@/app/hooks/useMarkers';
+import { MARKER_COLORS, MARKER_LABELS } from '@/app/types/markers';
+import type { Marker } from '@/app/types/markers';
 
 interface TimelineProps {
   duration: number;        // Durée totale de la vidéo en secondes
-  currentTime: number;      // Position actuelle de la vidéo en secondes
+  currentTime: number;     // Position actuelle de la vidéo en secondes
   onSeek: (time: number) => void;  // Fonction appelée quand on clique pour chercher
-  roomCode: string;         // Code du salon pour récupérer les marqueurs
+  roomCode: string;        // Code du salon pour récupérer les marqueurs
+  roomId?: number;         // ID numérique (optionnel, sinon utilise roomCode)
 }
 
 export default function Timeline({ 
   duration, 
   currentTime, 
   onSeek, 
-  roomCode 
+  roomCode,
+  roomId
 }: TimelineProps) {
   
-  // State pour stocker tous les marqueurs de la room
-  const [markers, setMarkers] = useState<any[]>([]);
-  
   /**
-   * TÂCHE 1: Chargement initial des marqueurs depuis l'API
-   * Au chargement du composant, on récupère tous les marqueurs existants
+   * Charger et synchroniser les marqueurs via le hook personnalisé
+   * Le hook gère :
+   * - Chargement initial depuis l'API
+   * - Écoute des événements WebSocket (marker:created, marker:updated, marker:deleted)
+   * - Mise en cache en mémoire
+   * - Gestion du loading et des erreurs
    */
-  useEffect(() => {
-    async function loadMarkers() {
-      try {
-        // Appel API pour récupérer les marqueurs de cette room
-        const response = await api.get('/markers', { 
-          params: { roomCode } 
-        });
-        setMarkers(response.data);
-        console.log('Marqueurs chargés:', response.data);
-      } catch (error) {
-        console.error('Erreur chargement marqueurs:', error);
-      }
-    }
-    
-    if (roomCode) {
-      loadMarkers();
-    }
-  }, [roomCode]);
-  
+  const { markers, loading, error } = useMarkers({
+    roomCode: roomId ? undefined : roomCode,
+    roomId: roomId,
+    enabled: !!roomCode || !!roomId,
+    autoRefresh: 0  // Pas de rafraîchissement auto, seulement via websocket
+  });
+
   /**
-   * TÂCHE 1 (suite): Synchronisation temps réel des marqueurs
-   * On écoute les événements socket pour mettre à jour l'affichage
-   * Quand Wafa ajoute/modifie/supprime un marqueur, on le reçoit ici
-   */
-  useEffect(() => {
-    // Quand un nouveau marqueur est créé par quelqu'un
-    socketService.on('marker-added', (newMarker) => {
-      setMarkers(prev => [...prev, newMarker]);
-    });
-    
-    // Quand un marqueur existant est modifié
-    socketService.on('marker-updated', (updatedMarker) => {
-      setMarkers(prev => prev.map(m => 
-        m.id === updatedMarker.id ? updatedMarker : m
-      ));
-    });
-    
-    // Quand un marqueur est supprimé
-    socketService.on('marker-deleted', (deletedMarkerId) => {
-      setMarkers(prev => prev.filter(m => m.id !== deletedMarkerId));
-    });
-    
-  }, []);
-  
-  /**
-   * TÂCHE 2: Formatage du temps pour l'affichage
+   * Formatage du temps pour l'affichage
    * Convertit les secondes en format MM:SS ou HH:MM:SS
    */
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
-  
+
   /**
-   * TÂCHE 3: Clustering des marqueurs proches
-   * Regroupe les marqueurs qui sont trop proches visuellement
-   * pour éviter que la timeline soit surchargée
+   * Clustering des marqueurs proches
+   * Regroupe les marqueurs qui sont trop proches visuellement sur la barre
+   * pour éviter une surcharge visuelle
    */
   const getClusteredMarkers = () => {
+    if (!markers || markers.length === 0) return [];
+
     // Seuil de regroupement en pixels
     const threshold = 5;
     const clusters: any[] = [];
     const used = new Set();
     
-    // Trier les marqueurs par timeSec pour faciliter le regroupement
+    // Trier les marqueurs par timeSec
     const sorted = [...markers].sort((a, b) => a.timeSec - b.timeSec);
     
     sorted.forEach((marker, index) => {
@@ -125,19 +78,19 @@ export default function Timeline({
         ids: [marker.id]
       };
       
-      // Chercher d'autres marqueurs proches
+      // Chercher d'autres marqueurs proches à regrouper
       for (let j = index + 1; j < sorted.length; j++) {
         const other = sorted[j];
         if (used.has(other.id)) continue;
         
-        // Calculer la distance en pixels entre les deux marqueurs
+        // Calculer la distance visuelle entre les deux marqueurs
         const pos1 = (marker.timeSec / duration) * 100;
         const pos2 = (other.timeSec / duration) * 100;
-        // Convertir le pourcentage en pixels (basé sur la largeur de la fenêtre)
-        const distance = Math.abs(pos1 - pos2) * (window.innerWidth / 100);
+        const percentDiff = Math.abs(pos1 - pos2);
         
-        // Si les marqueurs sont plus proches que le seuil, on les regroupe
-        if (distance < threshold) {
+        // Si les marqueurs sont plus proches que le seuil, les regrouper
+        // Seuil : 2% de la largeur totale (adaptatif)
+        if (percentDiff < 2) {
           cluster.markers.push(other);
           cluster.ids.push(other.id);
           used.add(other.id);
@@ -150,7 +103,9 @@ export default function Timeline({
     
     return clusters;
   };
-  
+
+  const clusters = getClusteredMarkers();
+
   /**
    * RENDU VISUEL de la timeline
    */
@@ -162,7 +117,7 @@ export default function Timeline({
     }}>
       
       {/* 
-        TÂCHE 1 & 4: Barre de progression cliquable
+        Barre de progression cliquable
         C'est le conteneur principal de la timeline
       */}
       <div style={{
@@ -171,22 +126,23 @@ export default function Timeline({
         backgroundColor: '#e0e0e0',
         borderRadius: '20px',
         position: 'relative',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        overflow: 'hidden'
       }}
       onClick={(e) => {
-        // TÂCHE 4: Navigation synchronisée
+        // Navigation synchronisée
         // Calculer la position du clic en pourcentage
         const rect = e.currentTarget.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
         const percentage = clickX / rect.width;
         // Convertir le pourcentage en secondes
-        const newTime = percentage * duration;
+        const newTime = Math.max(0, Math.min(duration, percentage * duration));
         // Appeler la fonction onSeek qui émettra l'événement socket
         onSeek(newTime);
       }}>
         
         {/* 
-          TÂCHE 2: Barre de progression (partie colorée)
+          Barre de progression (partie colorée)
           Sa largeur représente la position actuelle de la vidéo
         */}
         <div style={{
@@ -198,16 +154,18 @@ export default function Timeline({
         }} />
         
         {/* 
-          TÂCHE 1 & 3: Affichage des marqueurs avec clustering
-          On utilise getClusteredMarkers pour regrouper les marqueurs proches
+          Affichage des marqueurs avec clustering
+          Chaque marqueur ou cluster de marqueurs est cliquable
+          et navigue jusqu'à sa position
         */}
-        {getClusteredMarkers().map(cluster => {
+        {clusters.map(cluster => {
           
           // CAS 1: Marqueur simple (pas de regroupement)
           if (cluster.markers.length === 1) {
-            const marker = cluster.markers[0];
-            // TÂCHE 2: Calcul de la position en pourcentage
+            const marker: Marker = cluster.markers[0];
+            // Position en pourcentage
             const position = (marker.timeSec / duration) * 100;
+            const color = MARKER_COLORS[marker.category];
             
             return (
               <div
@@ -217,22 +175,27 @@ export default function Timeline({
                   left: `${position}%`,
                   top: '50%',
                   transform: 'translate(-50%, -50%)',
-                  width: '24px',
-                  height: '24px',
-                  // Utilise la catégorie pour déterminer la couleur
-                 backgroundColor: categoryColors[marker.category as keyof typeof categoryColors] || '#ffaa00',
+                  width: '20px',
+                  height: '20px',
+                  backgroundColor: color,
                   borderRadius: '50%',
                   border: '2px solid white',
                   cursor: 'pointer',
-                  zIndex: 10
+                  zIndex: 10,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                  transition: 'transform 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.transform = 'translate(-50%, -50%) scale(1.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.transform = 'translate(-50%, -50%) scale(1)';
                 }}
                 onClick={(e) => {
-                  // TÂCHE 4: Navigation synchronisée
-                  e.stopPropagation(); // Empêche le clic de se propager à la barre
+                  e.stopPropagation(); // Empêche le clic de se propager
                   onSeek(marker.timeSec); // Va à la position du marqueur
                 }}
-                // Infobulle complète avec label, catégorie, temps et créateur
-                title={`${marker.label} (${marker.category}) - ${formatTime(marker.timeSec)} par ${marker.createdBy?.name || 'Anonyme'}`}
+                title={`${MARKER_LABELS[marker.category]} • ${marker.label} • ${formatTime(marker.timeSec)}${marker.createdBy ? ` • par ${marker.createdBy.name}` : ''}`}
               />
             );
           } 
@@ -240,7 +203,7 @@ export default function Timeline({
           // CAS 2: Cluster (plusieurs marqueurs regroupés)
           else {
             // Calculer la position moyenne du cluster
-           const avgPosition = cluster.markers.reduce((sum: number, m: Marker) => sum + m.timeSec, 0) / cluster.markers.length;
+            const avgPosition = cluster.markers.reduce((sum: number, m: Marker) => sum + m.timeSec, 0) / cluster.markers.length;
             const position = (avgPosition / duration) * 100;
             
             return (
@@ -251,8 +214,8 @@ export default function Timeline({
                   left: `${position}%`,
                   top: '50%',
                   transform: 'translate(-50%, -50%)',
-                  width: '32px',
-                  height: '32px',
+                  width: '28px',
+                  height: '28px',
                   backgroundColor: '#666',
                   borderRadius: '50%',
                   border: '2px solid white',
@@ -263,15 +226,22 @@ export default function Timeline({
                   justifyContent: 'center',
                   color: 'white',
                   fontWeight: 'bold',
-                  fontSize: '12px'
+                  fontSize: '11px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                  transition: 'transform 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.transform = 'translate(-50%, -50%) scale(1.3)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.transform = 'translate(-50%, -50%) scale(1)';
                 }}
                 onClick={(e) => {
-                  // TÂCHE 4: Navigation synchronisée
                   e.stopPropagation();
                   // Aller au premier marqueur du cluster
                   onSeek(cluster.markers[0].timeSec);
                 }}
-                title={`${cluster.markers.length} marqueurs: ${cluster.markers.map((m: Marker) => m.label).join(', ')}`}
+                title={`${cluster.markers.length} marqueurs • ${cluster.markers.map((m: Marker) => m.label).join(', ')}`}
               >
                 {cluster.markers.length}
               </div>
@@ -281,16 +251,19 @@ export default function Timeline({
       </div>
       
       {/* 
-        TÂCHE 2: Affichage du temps
+        Affichage du temps
         Montre la position actuelle et la durée totale
       */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         marginTop: '8px',
-        fontSize: '14px'
+        fontSize: '12px',
+        color: '#666'
       }}>
         <span>{formatTime(currentTime)}</span>
+        {loading && <span style={{ fontSize: '11px', color: '#999' }}>Chargement marqueurs...</span>}
+        {error && <span style={{ fontSize: '11px', color: '#f44' }}>Erreur marqueurs</span>}
         <span>{formatTime(duration)}</span>
       </div>
       
