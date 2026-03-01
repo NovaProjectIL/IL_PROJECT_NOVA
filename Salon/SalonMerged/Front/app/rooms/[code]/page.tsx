@@ -202,7 +202,8 @@ export default function RoomPage() {
 
       if (stateData.playback?.video) {
         setPosition(calculateAdjustedPosition(stateData.playback));
-        setIsPlaying(stateData.playback.status === 'PLAYING');
+        // ✅ FIX: Ne pas forcer le play au démarrage
+        setIsPlaying(false);
       }
     } catch (err) {
       console.error('Erreur chargement salon:', err);
@@ -235,7 +236,9 @@ export default function RoomPage() {
       console.log('État initial reçu via socket:', data);
       if (data.playback?.video) {
         setCurrentVideo(data.playback.video);
-        setIsPlaying(data.playback.status === 'PLAYING');
+        // ✅ FIX: Ne pas forcer le play au démarrage (navigateur le refuse)
+        // Toujours démarrer en pause, l'utilisateur cliquera Play
+        setIsPlaying(false);
         if (!isSyncingRef.current) {
           setPosition(data.playback.positionSec || 0);
         }
