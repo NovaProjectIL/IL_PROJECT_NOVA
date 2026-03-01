@@ -90,8 +90,8 @@ export default function VideoPlayer({
     );
   }
 
-  // ✅ FIX: Utiliser l'URL courte youtu.be (mieux supportée par ReactPlayer)
-  const videoUrl = `https://youtu.be/${youtubeId}`;
+  // ✅ FIX: Utiliser l'URL watch complète (plus robuste que youtu.be)
+  const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
 
   return (
     <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', backgroundColor: '#000' }}>

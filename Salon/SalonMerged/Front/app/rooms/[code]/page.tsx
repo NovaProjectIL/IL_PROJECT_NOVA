@@ -348,9 +348,15 @@ export default function RoomPage() {
 
   const handlePlayVideo = async (index: number) => {
     try {
-      await playlistApi.changeIndex(memberId, code, index);
-      socketRef.current?.emit('video-change', { codeRoom: code, videoId: playlist.entries[index]?.video?.youtubeId || '' });
+      const response = await playlistApi.changeIndex(memberId, code, index);
+      // ✅ Le backend retourne la nouvelle playlist avec currentIndex
+      setPlaylist(response.data);
+      
+      // Récupérer la vidéo maintenant chargée
+      await new Promise(resolve => setTimeout(resolve, 100));
       await loadRoomData();
+      
+      socketRef.current?.emit('video-change', { codeRoom: code, videoId: response.data?.entries?.[index]?.video?.youtubeId || '' });
     } catch (err: any) {
       console.error('Erreur lecture vidéo:', err);
       alert('Erreur: ' + (err.response?.data?.message || err.message));
