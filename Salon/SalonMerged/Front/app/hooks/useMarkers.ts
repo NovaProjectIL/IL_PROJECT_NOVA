@@ -24,10 +24,22 @@ interface UseMarkersOptions {
 export function useMarkers(options: UseMarkersOptions) {
   const { roomId, roomCode, enabled = true, autoRefresh = 0 } = options;
   
-  // Validation : soit roomId soit roomCode doit être fourni
+  // ✅ FIX: Accepter soit roomId soit roomCode, retourner état vide si missing
   const roomIdentifier = roomId || roomCode;
-  if (!roomIdentifier) {
-    throw new Error('useMarkers: roomId ou roomCode obligatoire');
+  
+  if (!roomIdentifier || !enabled) {
+    // Retourner un état vide au lieu de jeter une erreur
+    return {
+      markers: [],
+      markersMap: new Map(),
+      loading: false,
+      error: null,
+      lastSyncTime: 0,
+      createMarker: async () => {},
+      updateMarker: async () => {},
+      deleteMarker: async () => {},
+      reloadMarkers: async () => {},
+    };
   }
   
   // État
