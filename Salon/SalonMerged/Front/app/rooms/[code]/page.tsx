@@ -410,7 +410,7 @@ export default function RoomPage() {
   const handlePlayVideo = async (index: number) => {
     try {
       await playlistApi.changeIndex(memberId, code, index);
-      socketRef.current?.emit('video-change', { codeRoom: code, videoId: playlist.entries[index]?.video?.youtubeId || '' });
+      syncSocketRef.current?.emit('video-change', { codeRoom: code, videoId: playlist.entries[index]?.video?.youtubeId || '' });
       await loadRoomData();
     } catch (err: any) {
       console.error('Erreur lecture vidéo:', err);
@@ -438,7 +438,8 @@ export default function RoomPage() {
   const currentMemberName = members.find(m => m.id === memberId)?.name || "";
 
   const handleQuitRoom = () => {
-    socketRef.current?.disconnect();
+    syncSocketRef.current?.disconnect();
+    chatSocketRef.current?.disconnect();
     router.push('/');
   };
 
