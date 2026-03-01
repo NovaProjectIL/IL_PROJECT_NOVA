@@ -109,6 +109,10 @@ class SocketService {
   }
 
   // ==================== CHAT EVENTS ====================
+  sendMessage(roomCode: string, message: any) {
+    this.socket?.emit('sendMessage', { roomCode, ...message });
+  }
+
   onReceiveMessage(callback: (message: any) => void) {
     this.socket?.on('receiveMessage', callback);
   }

@@ -5,8 +5,9 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import io from 'socket.io-client';
 import PlaylistComponent from '@/app/components/PlaylistComponent';
 import Chat from '@/app/components/Chat';
+import MarkersTimeline from '@/app/components/MarkersTimeline';
+import SimpleChatWidget from '@/app/components/SimpleChatWidget';
 import styles from './RoomPage.module.css';
-import Timeline from '@/app/components/Timeline';
 import VideoPlayer from '@/app/components/VideoPlayer';
 import { roomsApi, playlistApi } from '@/app/lib/api';
 
@@ -510,11 +511,11 @@ export default function RoomPage() {
             </div>
 
             <div className={styles.progressSection}>
-              <Timeline
+              <MarkersTimeline
+                roomCode={code}
                 duration={currentVideo?.durationSec || 0}
                 currentTime={position}
                 onSeek={handleSeek}
-                roomCode={code}
               />
               <div className={styles.statusInfo}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -551,12 +552,11 @@ export default function RoomPage() {
       />
 
       {/* Chat */}
-      <ChatWidget
-        socket={socketRef.current}
+      <SimpleChatWidget
         roomCode={code}
-        pseudo={pseudo || currentMemberName || "Utilisateur"}
-        userId={memberId}
-        getCurrentTime={() => position}
+        memberId={memberId}
+        memberName={pseudo || currentMemberName || 'Utilisateur'}
+        currentTime={position}
         onSeek={(timecode) => handleSeek(timecode)}
       />
     </div>
