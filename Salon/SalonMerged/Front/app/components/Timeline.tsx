@@ -41,6 +41,8 @@ export default function Timeline({
   
   // State pour stocker tous les marqueurs de la room
   const [markers, setMarkers] = useState<any[]>([]);
+  const [roomId, setRoomId] = useState<number | null>(null);
+  const [isLoadingMarkers, setIsLoadingMarkers] = useState(true);
   
   /**
    * TÂCHE 1: Chargement initial des marqueurs depuis l'API
@@ -49,14 +51,25 @@ export default function Timeline({
   useEffect(() => {
     async function loadMarkers() {
       try {
-        // Appel API pour récupérer les marqueurs de cette room
-        const response = await api.get('/markers', { 
-          params: { roomCode } 
+        setIsLoadingMarkers(true);
+        
+        // 1. Récupérer le roomId via le roomCode
+        const stateRes = await api.get('/rooms/state', { 
+          params: { codeRoom: roomCode } 
         });
+        const fetchedRoomId = stateRes.data.roomId;
+        setRoomId(fetchedRoomId);
+        
+        // 2. Utiliser le roomId pour charger les marqueurs
+        const response = await api.get(`/rooms/${fetchedRoomId}/markers`);
         setMarkers(response.data);
         console.log('Marqueurs chargés:', response.data);
+        
       } catch (error) {
+        // Ne pas logger si c'est juste une room sans marqueurs
         console.error('Erreur chargement marqueurs:', error);
+      } finally {
+        setIsLoadingMarkers(false);
       }
     }
     
@@ -201,7 +214,7 @@ export default function Timeline({
           TÂCHE 1 & 3: Affichage des marqueurs avec clustering
           On utilise getClusteredMarkers pour regrouper les marqueurs proches
         */}
-        {getClusteredMarkers().map(cluster => {
+        {!isLoadingMarkers && getClusteredMarkers().map(cluster => {
           
           // CAS 1: Marqueur simple (pas de regroupement)
           if (cluster.markers.length === 1) {

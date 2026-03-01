@@ -33,6 +33,8 @@ export default function VideoPlayer({
   onDuration,
 }: VideoPlayerProps) {
   const playerRef = useRef<any>(null);
+  const playPromiseRef = useRef<Promise<void> | null>(null);
+  const lastSeekRef = useRef<number>(0);
   const [isReady, setIsReady] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,8 +43,15 @@ export default function VideoPlayer({
   useEffect(() => {
     if (isReady && !isSeeking && playerRef.current) {
       try {
+        // Guard: vérifier que les seeks ne sont pas trop rapprochés
+        if (Date.now() - lastSeekRef.current < 500) {
+          return;
+        }
+
         const currentPlayerTime: number = playerRef.current.getCurrentTime();
-        if (Math.abs(currentPlayerTime - currentTime) > 0.5) {
+        // Seuil à 1 seconde pour moins de seeks inutiles
+        if (Math.abs(currentPlayerTime - currentTime) > 1) {
+          lastSeekRef.current = Date.now();
           playerRef.current.seekTo(currentTime, 'seconds');
         }
       } catch (e) {
@@ -51,19 +60,66 @@ export default function VideoPlayer({
     }
   }, [currentTime, isReady, isSeeking]);
 
-  // Handle play state changes
+  // Handle play state changes with race condition prevention
   useEffect(() => {
-    if (isReady && playerRef.current) {
-      try {
-        if (isPlaying && !playerRef.current.getPlayerState?.()) {
-          // If should be playing but player state suggests otherwise
-          playerRef.current.seekTo(currentTime, 'seconds');
-        }
-      } catch (e) {
-        console.error('Error syncing play state:', e);
-      }
+    if (!isReady || !playerRef.current) {
+      return;
     }
-  }, [isPlaying, isReady, currentTime]);
+
+    const handlePlayStateChange = async () => {
+      try {
+        const internalPlayer = playerRef.current?.getInternalPlayer?.();
+        if (!internalPlayer) {
+          return;
+        }
+
+        if (isPlaying) {
+          // Demander la lecture et stocker la promise
+          try {
+            playPromiseRef.current = internalPlayer.playVideo?.() ?? Promise.resolve();
+            if (playPromiseRef.current) {
+              await playPromiseRef.current;
+              playPromiseRef.current = null;
+            }
+          } catch (e: any) {
+            // Ignorer silencieusement les AbortError (interruption par pause())
+            if (e.name !== 'AbortError') {
+              console.error('Error playing video:', e);
+            }
+            playPromiseRef.current = null;
+          }
+        } else {
+          // Pause: attendre que la play promise se resolve PUIS pauseVideo
+          if (playPromiseRef.current) {
+            try {
+              await playPromiseRef.current;
+            } catch (e: any) {
+              if (e.name !== 'AbortError') {
+                console.error('Error waiting for play:', e);
+              }
+            }
+            playPromiseRef.current = null;
+          }
+
+          // Appeler pauseVideo après la promise
+          try {
+            internalPlayer.pauseVideo?.();
+          } catch (e: any) {
+            if (e.name !== 'AbortError') {
+              console.error('Error pausing video:', e);
+            }
+          }
+        }
+      } catch (error: any) {
+        // Ignorer les AbortError silencieusement
+        if (error.name !== 'AbortError') {
+          console.error('Error syncing play state:', error);
+        }
+      }
+    };
+
+    handlePlayStateChange();
+  }, [isPlaying, isReady]);
 
   const handleReady = () => {
     setIsReady(true);
