@@ -299,7 +299,7 @@ export default function RoomPage() {
     socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: isPlaying });
   };
 
-  const handleSearch = async (playDirect = true) => {
+  const handleSearch = async (playDirect: boolean) => {
     if (!searchUrl.trim()) return alert('Entrez une URL');
     let videoId = '';
     if (searchUrl.includes('youtube.com/watch?v=')) {
@@ -315,22 +315,31 @@ export default function RoomPage() {
     try {
       const youtubeRes = await roomsApi.getYouTubeInfo(videoId);
       const youtubeData = youtubeRes.data;
-      if (playDirect) {
-        await roomsApi.playDirectVideo({
-          codeRoom: code, memberId, youtubeId: videoId,
-          youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author,
-          youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail,
-        });
-      } else {
-        await playlistApi.addToPlaylist({
-          codeRoom: code, memberId, youtubeId: videoId,
-          youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author,
-          youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail,
-        });
-        alert('Vidéo ajoutée');
-      }
-      setSearchUrl('');
+      
+      // ✅ FIX: Toujours ajouter à la playlist d'abord
+      await playlistApi.addToPlaylist({
+        codeRoom: code, memberId, youtubeId: videoId,
+        youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author,
+        youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail,
+      });
+      
+      // Recharger les données pour avoir l'index correct
       await loadRoomData();
+      
+      // Si "Jouer" (playDirect=true), mettre en lecture immédiat
+      if (playDirect) {
+        // Attendre que loadRoomData finisse de mettre à jour la playlist
+        setTimeout(() => {
+          if (playlist?.entries?.length > 0) {
+            // Jouer la première (index 0)
+            handlePlayVideo(0);
+          }
+        }, 500);
+      } else {
+        alert('Vidéo ajoutée à la playlist');
+      }
+      
+      setSearchUrl('');
     } catch (err: any) {
       console.error('Erreur recherche vidéo:', err);
       alert('Erreur: ' + (err.response?.data?.message || err.message));
