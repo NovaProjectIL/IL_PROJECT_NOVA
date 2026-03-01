@@ -39,7 +39,7 @@ export class PlaybackState {
   })
   status: PlayStatus;
 
-  @Column({ type: 'float', default: 0 })
+  @Column({ type: 'int', default: 0 })
   positionSec: number;
 
   @Column({ type: 'float', default: 1.0 })

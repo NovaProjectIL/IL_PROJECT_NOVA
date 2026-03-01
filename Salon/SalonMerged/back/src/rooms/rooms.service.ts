@@ -38,16 +38,6 @@ export class RoomsService {
     private readonly playlistService: PlaylistService,
   ) {}
 
-  /**
-   * Récupérer une room par son code (ex: "ABC123")
-   */
-  async getByCode(code: string) {
-    return this.roomsRepo.findOne({
-      where: { code: code.toUpperCase() },
-      relations: ['playlistEntries', 'members'],
-    });
-  }
-
   private generateCode(): string {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
   }

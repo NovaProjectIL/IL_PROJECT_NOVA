@@ -147,35 +147,4 @@ export const playlistApi = {
     api.post('/playlist/previous', { codeRoom }),
 };
 
-// ==================== MARKERS API ====================
-export const markersApi = {
-  // === GET : Récupérer tous les marqueurs d'une room ===
-  // ✅ FIX: Support BOTH roomId (numero) AND roomCode (string) via unified endpoint
-  getMarkers: (roomIdentifier: number | string) => 
-    api.get(`/rooms/${roomIdentifier}/markers`),
-  
-  // === POST : Créer un nouveau marqueur ===
-  createMarker: (roomIdentifier: number | string, data: {
-    timeSec: number;
-    label: string;
-    content?: string;
-    category?: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
-    videoId: string;       // youtubeId
-    createdById: number;   // userId
-  }) => api.post(`/rooms/${roomIdentifier}/markers`, data),
-  
-  // === PATCH : Mettre à jour un marqueur ===
-  updateMarker: (roomIdentifier: number | string, markerId: number, data: {
-    timeSec?: number;
-    label?: string;
-    content?: string;
-    category?: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
-    version: number;  // Obligatoire pour optimistic locking
-  }) => api.patch(`/rooms/${roomIdentifier}/markers/${markerId}`, data),
-  
-  // === DELETE : Supprimer un marqueur ===
-  deleteMarker: (roomIdentifier: number | string, markerId: number) => 
-    api.delete(`/rooms/${roomIdentifier}/markers/${markerId}`),
-};
-
 export default api;

@@ -5,9 +5,8 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import io from 'socket.io-client';
 import PlaylistComponent from '@/app/components/PlaylistComponent';
 import Chat from '@/app/components/Chat';
-import MarkersTimeline from '@/app/components/MarkersTimeline';
-import SimpleChatWidget from '@/app/components/SimpleChatWidget';
 import styles from './RoomPage.module.css';
+import Timeline from '@/app/components/Timeline';
 import VideoPlayer from '@/app/components/VideoPlayer';
 import { roomsApi, playlistApi } from '@/app/lib/api';
 
@@ -203,8 +202,7 @@ export default function RoomPage() {
 
       if (stateData.playback?.video) {
         setPosition(calculateAdjustedPosition(stateData.playback));
-        // ✅ FIX: Ne pas forcer le play au démarrage
-        setIsPlaying(false);
+        setIsPlaying(stateData.playback.status === 'PLAYING');
       }
     } catch (err) {
       console.error('Erreur chargement salon:', err);
@@ -237,9 +235,7 @@ export default function RoomPage() {
       console.log('État initial reçu via socket:', data);
       if (data.playback?.video) {
         setCurrentVideo(data.playback.video);
-        // ✅ FIX: Ne pas forcer le play au démarrage (navigateur le refuse)
-        // Toujours démarrer en pause, l'utilisateur cliquera Play
-        setIsPlaying(false);
+        setIsPlaying(data.playback.status === 'PLAYING');
         if (!isSyncingRef.current) {
           setPosition(data.playback.positionSec || 0);
         }
@@ -300,7 +296,7 @@ export default function RoomPage() {
     socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: isPlaying });
   };
 
-  const handleSearch = async (playDirect: boolean) => {
+  const handleSearch = async (playDirect = true) => {
     if (!searchUrl.trim()) return alert('Entrez une URL');
     let videoId = '';
     if (searchUrl.includes('youtube.com/watch?v=')) {
@@ -316,31 +312,22 @@ export default function RoomPage() {
     try {
       const youtubeRes = await roomsApi.getYouTubeInfo(videoId);
       const youtubeData = youtubeRes.data;
-      
-      // ✅ FIX: Toujours ajouter à la playlist d'abord
-      await playlistApi.addToPlaylist({
-        codeRoom: code, memberId, youtubeId: videoId,
-        youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author,
-        youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail,
-      });
-      
-      // Recharger les données pour avoir l'index correct
-      await loadRoomData();
-      
-      // Si "Jouer" (playDirect=true), mettre en lecture immédiat
       if (playDirect) {
-        // Attendre que loadRoomData finisse de mettre à jour la playlist
-        setTimeout(() => {
-          if (playlist?.entries?.length > 0) {
-            // Jouer la première (index 0)
-            handlePlayVideo(0);
-          }
-        }, 500);
+        await roomsApi.playDirectVideo({
+          codeRoom: code, memberId, youtubeId: videoId,
+          youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author,
+          youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail,
+        });
       } else {
-        alert('Vidéo ajoutée à la playlist');
+        await playlistApi.addToPlaylist({
+          codeRoom: code, memberId, youtubeId: videoId,
+          youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author,
+          youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail,
+        });
+        alert('Vidéo ajoutée');
       }
-      
       setSearchUrl('');
+      await loadRoomData();
     } catch (err: any) {
       console.error('Erreur recherche vidéo:', err);
       alert('Erreur: ' + (err.response?.data?.message || err.message));
@@ -349,15 +336,9 @@ export default function RoomPage() {
 
   const handlePlayVideo = async (index: number) => {
     try {
-      const response = await playlistApi.changeIndex(memberId, code, index);
-      // ✅ Le backend retourne la nouvelle playlist avec currentIndex
-      setPlaylist(response.data);
-      
-      // Récupérer la vidéo maintenant chargée
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await playlistApi.changeIndex(memberId, code, index);
+      socketRef.current?.emit('video-change', { codeRoom: code, videoId: playlist.entries[index]?.video?.youtubeId || '' });
       await loadRoomData();
-      
-      socketRef.current?.emit('video-change', { codeRoom: code, videoId: response.data?.entries?.[index]?.video?.youtubeId || '' });
     } catch (err: any) {
       console.error('Erreur lecture vidéo:', err);
       alert('Erreur: ' + (err.response?.data?.message || err.message));
@@ -511,11 +492,11 @@ export default function RoomPage() {
             </div>
 
             <div className={styles.progressSection}>
-              <MarkersTimeline
-                roomCode={code}
+              <Timeline
                 duration={currentVideo?.durationSec || 0}
                 currentTime={position}
                 onSeek={handleSeek}
+                roomCode={code}
               />
               <div className={styles.statusInfo}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -552,11 +533,12 @@ export default function RoomPage() {
       />
 
       {/* Chat */}
-      <SimpleChatWidget
+      <ChatWidget
+        socket={socketRef.current}
         roomCode={code}
-        memberId={memberId}
-        memberName={pseudo || currentMemberName || 'Utilisateur'}
-        currentTime={position}
+        pseudo={pseudo || currentMemberName || "Utilisateur"}
+        userId={memberId}
+        getCurrentTime={() => position}
         onSeek={(timecode) => handleSeek(timecode)}
       />
     </div>

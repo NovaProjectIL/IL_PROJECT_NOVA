@@ -91,35 +91,6 @@ class SocketService {
       this.socket = null;
     }
   }
-
-  // ==================== MARKERS EVENTS ====================
-  // Écouter la création d'un marqueur
-  onMarkerCreated(callback: (marker: any) => void) {
-    this.socket?.on('marker:created', callback);
-  }
-
-  // Écouter la mise à jour d'un marqueur
-  onMarkerUpdated(callback: (marker: any) => void) {
-    this.socket?.on('marker:updated', callback);
-  }
-
-  // Écouter la suppression d'un marqueur
-  onMarkerDeleted(callback: (markerId: number) => void) {
-    this.socket?.on('marker:deleted', callback);
-  }
-
-  // ==================== CHAT EVENTS ====================
-  sendMessage(roomCode: string, message: any) {
-    this.socket?.emit('sendMessage', { roomCode, ...message });
-  }
-
-  onReceiveMessage(callback: (message: any) => void) {
-    this.socket?.on('receiveMessage', callback);
-  }
-
-  onUserTyping(callback: (data: any) => void) {
-    this.socket?.on('userTyping', callback);
-  }
 }
 
 export const socketService = new SocketService();
