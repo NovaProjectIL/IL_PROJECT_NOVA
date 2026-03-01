@@ -19,6 +19,7 @@ import {
 } from './dto/ws-events.dto';
 
 @WebSocketGateway({
+  namespace: '/sync',
   cors: { origin: '*', credentials: true },
 })
 // On active la validation automatique pour tous les messages arrivant ici.

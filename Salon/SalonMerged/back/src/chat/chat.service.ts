@@ -44,6 +44,7 @@ export class ChatService {
     content: string | undefined,
     gifUrl: string | undefined,
     codeRoom: string,
+    timecode: number | null = null,
   ): Promise<Message> {
     
     // 1. Trouver la Room
@@ -67,6 +68,7 @@ export class ChatService {
     const message = this.messageRepo.create({
       content: content ?? null,
       gifUrl: gifUrl ?? null,
+      timecode: timecode ?? null,
       user: user,
       chatSession: session,
     });
@@ -91,6 +93,7 @@ export class ChatService {
       userId: m.user?.id ?? null, // ✅ FIX PRINCIPAL : Inclure l'userId
       message: m.content ?? undefined,
       gifUrl: m.gifUrl ?? undefined,
+      timecode: m.timecode ?? null,
       createdAt: m.createdAt,
     }));
   }

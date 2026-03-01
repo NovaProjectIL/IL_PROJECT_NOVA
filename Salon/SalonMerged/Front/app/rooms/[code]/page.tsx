@@ -115,7 +115,10 @@ export default function RoomPage() {
   const [position, setPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
-  const socketRef = useRef<any>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  const syncSocketRef = useRef<any>(null);
+  const chatSocketRef = useRef<any>(null);
   const isSyncingRef = useRef(false);
 
   const handleNextVideo = async () => {
@@ -126,7 +129,7 @@ export default function RoomPage() {
       if (data.currentIndex >= 0 && data.entries?.length > 0) {
         const currentEntry = data.entries[data.currentIndex];
         if (currentEntry?.video) {
-          socketRef.current?.emit('changeVideo', { roomCode: code, video: currentEntry.video, sourceType: 'PLAYLIST' });
+          syncSocketRef.current?.emit('changeVideo', { roomCode: code, video: currentEntry.video, sourceType: 'PLAYLIST' });
           await loadRoomData();
         }
       }
@@ -144,7 +147,7 @@ export default function RoomPage() {
       if (data.currentIndex >= 0 && data.entries?.length > 0) {
         const currentEntry = data.entries[data.currentIndex];
         if (currentEntry?.video) {
-          socketRef.current?.emit('changeVideo', { roomCode: code, video: currentEntry.video, sourceType: 'PLAYLIST' });
+          syncSocketRef.current?.emit('changeVideo', { roomCode: code, video: currentEntry.video, sourceType: 'PLAYLIST' });
           await loadRoomData();
         }
       }
@@ -222,17 +225,35 @@ export default function RoomPage() {
   useEffect(() => {
     if (!code) return;
 
-    socketRef.current = io(API_URL, {
+    // 🎬 Socket de synchronisation vidéo
+    const syncSocket = io(`${API_URL}/sync`, {
       transports: ['websocket', 'polling'],
-      ...({ extraHeaders: { 'ngrok-skip-browser-warning': 'true' } } as any),
+      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
+      reconnection: true,
+      reconnectionAttempts: 5,
     });
 
-    socketRef.current.on('connect', () => {
-      socketRef.current.emit('join-room', { codeRoom: code, memberId });
+    // 💬 Socket de chat
+    const chatSocket = io(`${API_URL}/chat`, {
+      transports: ['websocket', 'polling'],
+      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
+      reconnection: true,
+      reconnectionAttempts: 5,
     });
 
-    socketRef.current.on('room-initial-state', (data: any) => {
-      console.log('État initial reçu via socket:', data);
+    syncSocketRef.current = syncSocket;
+    chatSocketRef.current = chatSocket;
+
+    // ═══════════════════════════════════════════════════════════
+    // 📹 SYNC SOCKET LISTENERS (Vidéo)
+    // ═══════════════════════════════════════════════════════════
+
+    syncSocket.on('connect', () => {
+      syncSocket.emit('join-room', { codeRoom: code, memberId });
+    });
+
+    syncSocket.on('room-initial-state', (data: any) => {
+      console.log('État initial reçu via sync socket:', data);
       if (data.playback?.video) {
         setCurrentVideo(data.playback.video);
         setIsPlaying(data.playback.status === 'PLAYING');
@@ -248,10 +269,10 @@ export default function RoomPage() {
       }
     });
 
-    socketRef.current.on('playback-updated', async (data: any) => {
+    syncSocket.on('playback-updated', async (data: any) => {
       isSyncingRef.current = true;
       try {
-        console.log('Playback updated via socket:', data);
+        console.log('Playback updated via sync socket:', data);
         if (data.playback?.video) {
           setCurrentVideo(data.playback.video);
         }
@@ -265,35 +286,87 @@ export default function RoomPage() {
         if (data.action === 'play') setIsPlaying(true);
         else if (data.action === 'pause') setIsPlaying(false);
         else if (data.action === 'seek') setIsPlaying(false);
+        
+        if (data.loading === true) {
+          setIsSyncing(true);
+          setSyncMessage(data.message || 'Synchronisation en cours...');
+        } else if (data.loading === false) {
+          setIsSyncing(false);
+          setSyncMessage('');
+        }
       } catch (error) {
-        console.error('Erreur synchronisation socket:', error);
+        console.error('Erreur synchronisation sync socket:', error);
       } finally {
         setTimeout(() => { isSyncingRef.current = false; }, 150);
       }
     });
 
-    socketRef.current.on('error', (error: any) => {
-      console.error('Erreur Socket:', error);
+    syncSocket.on('error', (error: any) => {
+      console.error('Erreur Sync Socket:', error);
+    });
+
+    syncSocket.on('reconnect', async () => {
+      console.log('🔄 Sync socket reconnecté et re-joint la room');
+      syncSocket?.emit('join-room', { codeRoom: code, memberId });
+      await loadRoomData();
+    });
+
+    syncSocket.on('disconnect', (reason: string) => {
+      if (reason !== 'io client disconnect') {
+        console.warn('⚠️ Sync socket déconnecté, tentative de reconnexion...');
+      }
+    });
+
+    syncSocket.on('connect_error', (error: any) => {
+      console.error('Erreur de connexion sync socket:', error);
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // 💬 CHAT SOCKET LISTENERS & RECONNECTION
+    // ═══════════════════════════════════════════════════════════
+
+    chatSocket.on('reconnect', () => {
+      console.log('🔄 Chat socket reconnecté');
+      chatSocket?.emit('joinChatRoom', { codeRoom: code });
+      chatSocket?.emit('requestMessages', { codeRoom: code });
+    });
+
+    chatSocket.on('disconnect', (reason: string) => {
+      if (reason !== 'io client disconnect') {
+        console.warn('⚠️ Chat socket déconnecté, tentative de reconnexion...');
+      }
+    });
+
+    chatSocket.on('connect_error', (error: any) => {
+      console.error('Erreur de connexion chat socket:', error);
     });
 
     return () => {
-      socketRef.current?.disconnect();
+      syncSocket?.off('reconnect');
+      syncSocket?.off('disconnect');
+      syncSocket?.off('connect_error');
+      syncSocket?.disconnect();
+
+      chatSocket?.off('reconnect');
+      chatSocket?.off('disconnect');
+      chatSocket?.off('connect_error');
+      chatSocket?.disconnect();
     };
-  }, [code, memberId]);
+  }, [code, memberId, loadRoomData]);
 
   const handlePlay = () => {
     setIsPlaying(true);
-    socketRef.current?.emit('play', { codeRoom: code, positionSec: position });
+    syncSocketRef.current?.emit('play', { codeRoom: code, positionSec: position });
   };
 
   const handlePause = () => {
     setIsPlaying(false);
-    socketRef.current?.emit('pause', { codeRoom: code, positionSec: position });
+    syncSocketRef.current?.emit('pause', { codeRoom: code, positionSec: position });
   };
 
   const handleSeek = (newPosition: number) => {
     setPosition(newPosition);
-    socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: isPlaying });
+    syncSocketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: isPlaying });
   };
 
   const handleSearch = async (playDirect = true) => {
@@ -453,7 +526,25 @@ export default function RoomPage() {
             {currentVideo.title}
           </h3>
           <p>Chaîne: {currentVideo.channelTitle || currentVideo.author}</p>
-
+          {isSyncing && (
+            <div style={{
+              background: 'rgba(0,0,0,0.85)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(197,34,51,0.4)',
+              borderRadius: '12px',
+              padding: '16px 24px',
+              marginBottom: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              color: 'white',
+              fontSize: '0.95rem',
+              fontWeight: '600',
+            }}>
+              <div className="loading-spinner" style={{width:'20px',height:'20px',flexShrink:0}} />
+              {syncMessage || 'Synchronisation en cours...'}
+            </div>
+          )}
           <div className={styles.playerContainer}>
             <VideoPlayer
               youtubeId={currentVideo.youtubeId}
@@ -464,7 +555,7 @@ export default function RoomPage() {
               onPause={handlePause}
               onSeek={(time) => {
                 setPosition(time);
-                socketRef.current?.emit('seek', { codeRoom: code, positionSec: time, wasPlaying: isPlaying });
+                syncSocketRef.current?.emit('seek', { codeRoom: code, positionSec: time, wasPlaying: isPlaying });
               }}
               onDuration={(duration) => console.log('Durée:', duration)}
             />
@@ -477,11 +568,11 @@ export default function RoomPage() {
                 title="Vidéo précédente" style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
                 <SkipBack size={18} /> Précédent
               </button>
-              <button onClick={handlePlay} className={`${styles.controlButton} ${styles.playButton}`}
+              <button onClick={handlePlay} disabled={isSyncing} className={`${styles.controlButton} ${styles.playButton}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
                 <Play size={18} /> Play
               </button>
-              <button onClick={handlePause} className={`${styles.controlButton} ${styles.pauseButton}`}
+              <button onClick={handlePause} disabled={isSyncing} className={`${styles.controlButton} ${styles.pauseButton}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
                 <Pause size={18} /> Pause
               </button>
@@ -495,7 +586,7 @@ export default function RoomPage() {
               <Timeline
                 duration={currentVideo?.durationSec || 0}
                 currentTime={position}
-                onSeek={handleSeek}
+                onSeek={(time) => !isSyncing && handleSeek(time)}
                 roomCode={code}
               />
               <div className={styles.statusInfo}>
@@ -534,7 +625,7 @@ export default function RoomPage() {
 
       {/* Chat */}
       <ChatWidget
-        socket={socketRef.current}
+        socket={chatSocketRef.current}
         roomCode={code}
         pseudo={pseudo || currentMemberName || "Utilisateur"}
         userId={memberId}

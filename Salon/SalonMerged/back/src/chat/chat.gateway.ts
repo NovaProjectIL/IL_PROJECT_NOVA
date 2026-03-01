@@ -9,6 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 
 @WebSocketGateway({
+  namespace: '/chat',
   cors: {
     origin: '*',
     credentials: true
@@ -72,6 +73,7 @@ export class ChatGateway {
         codeRoom: string;
         userId?: number;
         username?: string;
+        timecode?: number;
     },
   ) {
     // 1. SÉCURITÉ
@@ -112,7 +114,8 @@ export class ChatGateway {
           user,
           payload.message,
           payload.gifUrl,
-          roomCode
+          roomCode,
+          payload.timecode ?? null
         );
 
         console.log(`✅ Chat: Message envoyé dans ${roomCode} par ${user.name} (ID: ${user.id})`);
@@ -123,6 +126,7 @@ export class ChatGateway {
           userId: user.id, // ✅ FIX PRINCIPAL : Inclure l'userId
           message: savedMessage.content,
           gifUrl: savedMessage.gifUrl,
+          timecode: savedMessage.timecode ?? null,
           createdAt: savedMessage.createdAt,
         });
     } catch (error) {

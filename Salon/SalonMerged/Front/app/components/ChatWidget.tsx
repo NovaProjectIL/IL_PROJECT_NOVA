@@ -8,9 +8,11 @@ interface ChatWidgetProps {
   userId?: number;  // IMPORTANT
   socket: any;      
   roomCode: string; // IMPORTANT
+  getCurrentTime?: () => number;
+  onSeek?: (timecode: number) => void;
 }
 
-export default function ChatWidget({ pseudo = "Invité", userId, socket, roomCode }: ChatWidgetProps) {
+export default function ChatWidget({ pseudo = "Invité", userId, socket, roomCode, getCurrentTime, onSeek }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   
@@ -73,6 +75,8 @@ export default function ChatWidget({ pseudo = "Invité", userId, socket, roomCod
             onMessageReceived={handleMessageReceived}
             socket={socket}
             roomCode={roomCode} // ON TRANSMET LE CODE
+            getCurrentTime={getCurrentTime}
+            onSeek={onSeek}
           />
         </div>
       </div>

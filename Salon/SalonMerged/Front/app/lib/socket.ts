@@ -11,7 +11,7 @@ class SocketService {
     if (typeof window === 'undefined') return null;
     
     if (!this.socket) {
-      this.socket = io(WS_URL, {
+      this.socket = io(`${WS_URL}/sync`, {
         transports: ['websocket', 'polling'],
         // ✅ FIX : Ajouter le header pour ngrok
         extraHeaders: {
