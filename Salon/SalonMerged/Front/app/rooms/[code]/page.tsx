@@ -450,8 +450,8 @@ export default function RoomPage() {
       <div className={styles.roomHeader}>
         <h1 className={styles.roomTitle}>Salon: {code}</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className={`${styles.connectionBadge} ${socketRef.current?.connected ? styles.connected : styles.disconnected}`}>
-            {socketRef.current?.connected ? 'Connecté' : 'Déconnecté'}
+          <div className={`${styles.connectionBadge} ${syncSocketRef.current?.connected ? styles.connected : styles.disconnected}`}>
+            {syncSocketRef.current?.connected ? 'Connecté' : 'Déconnecté'}
           </div>
           <button
             onClick={handleQuitRoom}
