@@ -148,7 +148,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.clearLoadingTimeout(roomCode);
       this.logger.log(`[SYNC] Tout le monde est prêt dans ${roomCode}. On relance !`);
 
-      const adjustedPos = this.roomStateService.getAdjustedTimestamp(roomCode);
+      const adjustedPos = Math.floor(this.roomStateService.getAdjustedTimestamp(roomCode));
       
       // On met à jour la BDD et la mémoire.
       await this.roomsService.play(roomCode, adjustedPos);
@@ -257,7 +257,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const roomState = this.roomStateService.getOrCreateRoomState(roomCode);
     if (roomState.status === RoomGlobalStatus.LOADING) {
-      const adjustedPos = this.roomStateService.getAdjustedTimestamp(roomCode);
+      const adjustedPos = Math.floor(this.roomStateService.getAdjustedTimestamp(roomCode));
       
       await this.roomsService.play(roomCode, adjustedPos);
       this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PLAYING, adjustedPos);
