@@ -181,6 +181,8 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(roomCode).emit('playback-updated', {
       action: 'play',
       playback: { status: PlayStatus.PLAYING, positionSec: pos, serverTimeRef: new Date() },
+      loading: false,
+      message: ''
     });
   }
 
@@ -197,6 +199,8 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(roomCode).emit('playback-updated', {
       action: 'pause',
       playback: { status: PlayStatus.PAUSED, positionSec: pos },
+      loading: false,
+      message: ''
     });
   }
 
