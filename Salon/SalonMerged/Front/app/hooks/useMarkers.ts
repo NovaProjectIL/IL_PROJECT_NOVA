@@ -24,33 +24,18 @@ interface UseMarkersOptions {
 export function useMarkers(options: UseMarkersOptions) {
   const { roomId, roomCode, enabled = true, autoRefresh = 0 } = options;
   
-  // ✅ FIX: Accepter soit roomId soit roomCode, retourner état vide si missing
-  const roomIdentifier = roomId || roomCode;
-  
-  if (!roomIdentifier || !enabled) {
-    // Retourner un état vide au lieu de jeter une erreur
-    return {
-      markers: [],
-      markersMap: new Map(),
-      loading: false,
-      error: null,
-      lastSyncTime: 0,
-      createMarker: async () => {},
-      updateMarker: async () => {},
-      deleteMarker: async () => {},
-      reloadMarkers: async () => {},
-    };
-  }
-  
-  // État
+  // ✅ Toujours déclarer les hooks en premier (avant tout conditionnel)
   const [markers, setMarkers] = useState<Map<number, Marker>>(new Map());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => enabled && (!!roomId || !!roomCode) ? true : false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<number>(0);
   
-  // Refs pour éviter les fuites mémoire
   const isMountedRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  const roomIdentifier = roomId || roomCode;
+  
+  // Maintenant on peut faire la logique conditionnelle
 
   /**
    * Charger tous les marqueurs depuis l'API
