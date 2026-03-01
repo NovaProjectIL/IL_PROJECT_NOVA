@@ -133,8 +133,17 @@ export default function VideoPlayer({
     setIsLoading(false);
   };
 
-  // Use embed URL format which is more reliable for YouTube embeds
-  const videoUrl = `https://www.youtube.com/embed/${youtubeId}`;
+  // ✅ CORRECTION 1: URL YouTube correcte pour ReactPlayer
+  const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
+
+  // ✅ CORRECTION 4: Timeout de sécurité (5 secondes max pour disparaître le spinner)
+  useEffect(() => {
+    if (!isLoading) return;
+    const timeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 5000);
+    return () => clearTimeout(timeout);
+  }, [isLoading]);
 
   return (
     <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', backgroundColor: '#000' }}>
@@ -194,7 +203,10 @@ export default function VideoPlayer({
             controls={true}
             progressInterval={1000}
             onReady={handleReady}
-            onPlay={onPlay}
+            onPlay={() => {
+              setIsLoading(false);
+              onPlay();
+            }}
             onPause={onPause}
             onError={handleError}
             onBuffer={() => setIsLoading(true)}
