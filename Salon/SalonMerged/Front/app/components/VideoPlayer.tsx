@@ -133,8 +133,8 @@ export default function VideoPlayer({
     setIsLoading(false);
   };
 
-  // URL YouTube standard
-  const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
+  // URL YouTube embed - plus stable pour éviter le grey screen
+  const videoUrl = `https://www.youtube.com/embed/${youtubeId}?enablejsapi=1&origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}&widget_referrer=${typeof window !== 'undefined' ? encodeURIComponent(window.location.href) : ''}`;
 
   // Timeout de sécurité (5 secondes max pour disparaître le spinner)
   useEffect(() => {
@@ -223,23 +223,12 @@ export default function VideoPlayer({
             onDuration={onDuration}
             config={{
               youtube: {
-                // Force l'utilisation de l'iframe pour éviter le grey screen
-                forceIframe: true,
                 playerVars: {
                   modestbranding: 1,
                   rel: 0,
                   showinfo: 0,
                   playsinline: 1,
-                  enablejsapi: 1,
-                  origin: typeof window !== 'undefined' ? window.location.origin : '',
-                  widget_referrer: typeof window !== 'undefined' ? window.location.href : '',
-                  // Paramètres supplémentaires pour éviter les restrictions
-                  nocookie: 1,
                 },
-                embedOptions: {
-                  playsinline: 1,
-                  host: 'https://www.youtube.com',
-                }
               },
             }}
             style={{ opacity: isLoading ? 0.5 : 1 }}
