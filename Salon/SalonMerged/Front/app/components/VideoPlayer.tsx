@@ -133,10 +133,10 @@ export default function VideoPlayer({
     setIsLoading(false);
   };
 
-  // ✅ CORRECTION 1: URL YouTube correcte pour ReactPlayer
+  // URL YouTube standard
   const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
 
-  // ✅ CORRECTION 4: Timeout de sécurité (5 secondes max pour disparaître le spinner)
+  // Timeout de sécurité (5 secondes max pour disparaître le spinner)
   useEffect(() => {
     if (!isLoading) return;
     const timeout = setTimeout(() => {
@@ -223,6 +223,8 @@ export default function VideoPlayer({
             onDuration={onDuration}
             config={{
               youtube: {
+                // Force l'utilisation de l'iframe pour éviter le grey screen
+                forceIframe: true,
                 playerVars: {
                   modestbranding: 1,
                   rel: 0,
@@ -231,9 +233,12 @@ export default function VideoPlayer({
                   enablejsapi: 1,
                   origin: typeof window !== 'undefined' ? window.location.origin : '',
                   widget_referrer: typeof window !== 'undefined' ? window.location.href : '',
+                  // Paramètres supplémentaires pour éviter les restrictions
+                  nocookie: 1,
                 },
                 embedOptions: {
                   playsinline: 1,
+                  host: 'https://www.youtube.com',
                 }
               },
             }}
