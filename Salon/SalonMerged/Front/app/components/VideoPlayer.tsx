@@ -22,6 +22,9 @@ interface VideoPlayerProps {
   onDuration: (duration: number) => void;
 }
 
+// Fallback origin URL for production/ngrok
+const FALLBACK_ORIGIN = 'https://vulgarly-unforcible-loura.ngrok-free.dev';
+
 export default function VideoPlayer({
   youtubeId,
   isPlaying,
@@ -39,6 +42,21 @@ export default function VideoPlayer({
   const [isSeeking, setIsSeeking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Get the current origin safely
+  const getOrigin = () => {
+    if (typeof window !== 'undefined' && window.location.origin) {
+      return window.location.origin;
+    }
+    return FALLBACK_ORIGIN;
+  };
+
+  const getWidgetReferrer = () => {
+    if (typeof window !== 'undefined' && window.location.href) {
+      return window.location.href;
+    }
+    return FALLBACK_ORIGIN;
+  };
 
   useEffect(() => {
     if (isReady && !isSeeking && playerRef.current) {
@@ -125,6 +143,7 @@ export default function VideoPlayer({
     setIsReady(true);
     setIsLoading(false);
     setError(null);
+    console.log('VideoPlayer: Player is ready');
   };
 
   const handleError = (e: any) => {
@@ -222,13 +241,16 @@ export default function VideoPlayer({
               youtube: {
                 playerVars: {
                   enablejsapi: 1,
-                  origin: typeof window !== 'undefined' ? window.location.origin : '',
-                  widget_referrer: typeof window !== 'undefined' ? window.location.href : '',
+                  origin: getOrigin(),
+                  widget_referrer: getWidgetReferrer(),
                   modestbranding: 1,
                   rel: 0,
                   showinfo: 0,
                   playsinline: 1,
+                  fs: 1,
+                  frameborder: 0,
                 },
+                preload: true,
               },
             }}
             style={{ opacity: isLoading ? 0.5 : 1 }}
