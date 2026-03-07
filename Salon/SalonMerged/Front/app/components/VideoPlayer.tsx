@@ -133,9 +133,6 @@ export default function VideoPlayer({
     setIsLoading(false);
   };
 
-  // URL YouTube embed - plus stable pour éviter le grey screen
-  const videoUrl = `https://www.youtube.com/embed/${youtubeId}?enablejsapi=1&origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}&widget_referrer=${typeof window !== 'undefined' ? encodeURIComponent(window.location.href) : ''}`;
-
   // Timeout de sécurité (5 secondes max pour disparaître le spinner)
   useEffect(() => {
     if (!isLoading) return;
@@ -196,7 +193,7 @@ export default function VideoPlayer({
           )}
           <Player
             ref={playerRef}
-            url={videoUrl}
+            url={`https://www.youtube.com/watch?v=${youtubeId}`}
             width="100%"
             height="100%"
             playing={isPlaying}
@@ -224,6 +221,9 @@ export default function VideoPlayer({
             config={{
               youtube: {
                 playerVars: {
+                  enablejsapi: 1,
+                  origin: typeof window !== 'undefined' ? window.location.origin : '',
+                  widget_referrer: typeof window !== 'undefined' ? window.location.href : '',
                   modestbranding: 1,
                   rel: 0,
                   showinfo: 0,
@@ -243,3 +243,4 @@ export default function VideoPlayer({
     </div>
   );
 }
+
