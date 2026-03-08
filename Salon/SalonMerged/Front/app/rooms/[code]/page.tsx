@@ -559,6 +559,14 @@ export default function RoomPage() {
                 syncSocketRef.current?.emit('seek', { codeRoom: code, positionSec: time, wasPlaying: isPlaying });
               }}
               onDuration={(duration) => console.log('Durée:', duration)}
+              onReadyToPlay={() => {
+                console.log('[HANDSHAKE] Client ready sent to server');
+                syncSocketRef.current?.emit('client-ready', { codeRoom: code });
+              }}
+              onBuffering={() => {
+                console.log('[HANDSHAKE] Loading-video sent to server');
+                syncSocketRef.current?.emit('loading-video', { codeRoom: code });
+              }}
             />
           </div>
 

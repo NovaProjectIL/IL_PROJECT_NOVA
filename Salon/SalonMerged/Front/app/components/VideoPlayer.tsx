@@ -20,6 +20,8 @@ interface VideoPlayerProps {
   onPause: () => void;
   onSeek: (time: number) => void;
   onDuration: (duration: number) => void;
+  onReadyToPlay?: () => void;
+  onBuffering?: () => void;
 }
 
 // Fallback origin URL for production/ngrok
@@ -34,9 +36,10 @@ export default function VideoPlayer({
   onPause,
   onSeek,
   onDuration,
+  onReadyToPlay,
+  onBuffering,
 }: VideoPlayerProps) {
   const playerRef = useRef<any>(null);
-  const playPromiseRef = useRef<Promise<void> | null>(null);
   const lastSeekRef = useRef<number>(0);
   const [isReady, setIsReady] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -61,14 +64,13 @@ export default function VideoPlayer({
   useEffect(() => {
     if (isReady && !isSeeking && playerRef.current) {
       try {
-        // Guard: vérifier que les seeks ne sont pas trop rapprochés
-        if (Date.now() - lastSeekRef.current < 500) {
-          return;
-        }
-
         const currentPlayerTime: number = playerRef.current.getCurrentTime();
-        // Seuil à 1 seconde pour moins de seeks inutiles
-        if (Math.abs(currentPlayerTime - currentTime) > 1) {
+        // Seuil à 1.5 seconde pour moins de seeks inutiles et éviter les boucles
+        if (Math.abs(currentPlayerTime - currentTime) > 1.5) {
+          // Guard: vérifier que les seeks ne sont pas trop rapprochés (800ms)
+          if (Date.now() - lastSeekRef.current < 800) {
+            return;
+          }
           lastSeekRef.current = Date.now();
           playerRef.current.seekTo(currentTime, 'seconds');
         }
@@ -78,72 +80,12 @@ export default function VideoPlayer({
     }
   }, [currentTime, isReady, isSeeking]);
 
-  // Handle play state changes with race condition prevention
-  useEffect(() => {
-    if (!isReady || !playerRef.current) {
-      return;
-    }
-
-    const handlePlayStateChange = async () => {
-      try {
-        const internalPlayer = playerRef.current?.getInternalPlayer?.();
-        if (!internalPlayer) {
-          return;
-        }
-
-        if (isPlaying) {
-          // Demander la lecture et stocker la promise
-          try {
-            playPromiseRef.current = internalPlayer.playVideo?.() ?? Promise.resolve();
-            if (playPromiseRef.current) {
-              await playPromiseRef.current;
-              playPromiseRef.current = null;
-            }
-          } catch (e: any) {
-            // Ignorer silencieusement les AbortError (interruption par pause())
-            if (e.name !== 'AbortError') {
-              console.error('Error playing video:', e);
-            }
-            playPromiseRef.current = null;
-          }
-        } else {
-          // Pause: attendre que la play promise se resolve PUIS pauseVideo
-          if (playPromiseRef.current) {
-            try {
-              await playPromiseRef.current;
-            } catch (e: any) {
-              if (e.name !== 'AbortError') {
-                console.error('Error waiting for play:', e);
-              }
-            }
-            playPromiseRef.current = null;
-          }
-
-          // Appeler pauseVideo après la promise
-          try {
-            internalPlayer.pauseVideo?.();
-          } catch (e: any) {
-            if (e.name !== 'AbortError') {
-              console.error('Error pausing video:', e);
-            }
-          }
-        }
-      } catch (error: any) {
-        // Ignorer les AbortError silencieusement
-        if (error.name !== 'AbortError') {
-          console.error('Error syncing play state:', error);
-        }
-      }
-    };
-
-    handlePlayStateChange();
-  }, [isPlaying, isReady]);
-
   const handleReady = () => {
     setIsReady(true);
     setIsLoading(false);
     setError(null);
     console.log('VideoPlayer: Player is ready');
+    onReadyToPlay?.();
   };
 
   const handleError = (e: any) => {
@@ -225,8 +167,14 @@ export default function VideoPlayer({
             }}
             onPause={onPause}
             onError={handleError}
-            onBuffer={() => setIsLoading(true)}
-            onBufferEnd={() => setIsLoading(false)}
+            onBuffer={() => {
+              setIsLoading(true);
+              onBuffering?.();
+            }}
+            onBufferEnd={() => {
+              setIsLoading(false);
+              onReadyToPlay?.();
+            }}
             onSeek={(seconds: number) => {
               setIsSeeking(false);
               onSeek(seconds);
