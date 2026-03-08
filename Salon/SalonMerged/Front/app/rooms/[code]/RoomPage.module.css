@@ -210,6 +210,10 @@
   margin-bottom: 15px;
   border-radius: 12px;
   overflow: hidden;
+  background-color: #000;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 300px; /* Fallback for very small containers */
 }
 
 .youtubePlayer {

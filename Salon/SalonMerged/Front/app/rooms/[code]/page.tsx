@@ -271,9 +271,10 @@ export default function RoomPage() {
 
     syncSocket.on('playback-updated', async (data: any) => {
       isSyncingRef.current = true;
+      console.log('[DEBUG] playback-updated received:', data.action, data);
       try {
-        console.log('Playback updated via sync socket:', data);
         if (data.playback?.video) {
+          console.log('[DEBUG] Setting currentVideo from socket:', data.playback.video.youtubeId);
           setCurrentVideo(data.playback.video);
         }
 
@@ -282,7 +283,10 @@ export default function RoomPage() {
           const serverTime = new Date(data.playback.serverTimeRef).getTime();
           targetPosition = targetPosition + (Date.now() - serverTime) / 1000;
         }
+        
+        console.log('[DEBUG] Updating state - position:', targetPosition, 'isPlaying:', data.action === 'play');
         setPosition(targetPosition);
+        
         if (data.action === 'play') setIsPlaying(true);
         else if (data.action === 'pause') setIsPlaying(false);
         else if (data.action === 'seek') setIsPlaying(false);
@@ -297,7 +301,11 @@ export default function RoomPage() {
       } catch (error) {
         console.error('Erreur synchronisation sync socket:', error);
       } finally {
-        setTimeout(() => { isSyncingRef.current = false; }, 150);
+        // On attend plus longtemps (1s) pour que le lecteur s'ajuste avant de réautoriser les émissions
+        setTimeout(() => { 
+          isSyncingRef.current = false; 
+          console.log('[DEBUG] isSyncingRef reset to false');
+        }, 1000);
       }
     });
 
@@ -355,16 +363,39 @@ export default function RoomPage() {
   }, [code, memberId, loadRoomData]);
 
   const handlePlay = () => {
+    if (isSyncingRef.current) {
+      console.log('[DEBUG] handlePlay IGNORED (Sync in progress)');
+      return;
+    }
+    if (isPlaying) {
+      console.log('[DEBUG] handlePlay IGNORED (Already playing)');
+      return;
+    }
+    console.log('[DEBUG] handlePlay EMITTING to server');
     setIsPlaying(true);
     syncSocketRef.current?.emit('play', { codeRoom: code, positionSec: position });
   };
 
   const handlePause = () => {
+    if (isSyncingRef.current) {
+      console.log('[DEBUG] handlePause IGNORED (Sync in progress)');
+      return;
+    }
+    if (!isPlaying) {
+      console.log('[DEBUG] handlePause IGNORED (Already paused)');
+      return;
+    }
+    console.log('[DEBUG] handlePause EMITTING to server');
     setIsPlaying(false);
     syncSocketRef.current?.emit('pause', { codeRoom: code, positionSec: position });
   };
 
   const handleSeek = (newPosition: number) => {
+    if (isSyncingRef.current) {
+      console.log('[DEBUG] handleSeek IGNORED (Sync in progress)');
+      return;
+    }
+    console.log('[DEBUG] handleSeek EMITTING to server:', newPosition);
     setPosition(newPosition);
     syncSocketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: isPlaying });
   };
