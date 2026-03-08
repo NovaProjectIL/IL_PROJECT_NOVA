@@ -188,29 +188,29 @@ export default function RoomPage() {
       const stateRes = await roomsApi.getRoomState(code);
       const stateData = stateRes.data;
 
-      // ✅ CORRECTION : On met à jour currentVideo ET la playlist AVANT
-      // de vérifier isSyncingRef, car la vidéo doit toujours s'afficher
-      // même si un événement socket est en cours de traitement.
-      if (stateData.playback?.video) {
+      // Update current video only if it changed to avoid unnecessary remounts
+      if (stateData.playback?.video && (!currentVideo || stateData.playback.video.youtubeId !== currentVideo.youtubeId)) {
+        console.log('[DEBUG] loadRoomData: Updating currentVideo');
         setCurrentVideo(stateData.playback.video);
       }
 
-      // ✅ CORRECTION : On ne bloque le reste de la mise à jour
-      // (position, isPlaying, playlist, members) que si une synchro
-      // socket est en cours, pour éviter les conflits de position.
       if (isSyncingRef.current) return;
 
       setPlaylist(stateData.playlist);
       setMembers(stateData.members || []);
 
       if (stateData.playback?.video) {
-        setPosition(calculateAdjustedPosition(stateData.playback));
+        const adjusted = calculateAdjustedPosition(stateData.playback);
+        // Only set position if difference is significant to avoid seek loops
+        if (Math.abs(position - adjusted) > 5) {
+          setPosition(adjusted);
+        }
         setIsPlaying(stateData.playback.status === 'PLAYING');
       }
     } catch (err) {
       console.error('Erreur chargement salon:', err);
     }
-  }, [code, calculateAdjustedPosition]);
+  }, [code, calculateAdjustedPosition, currentVideo, position]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -218,9 +218,10 @@ export default function RoomPage() {
       setLoading(false);
     };
     initialLoad();
-    const interval = setInterval(loadRoomData, 5000);
-    return () => clearInterval(interval);
-  }, [code, loadRoomData]);
+    // ✅ FIX : On retire l'intervalle de 5s qui crée des conflits avec les sockets
+    // const interval = setInterval(loadRoomData, 5000);
+    // return () => clearInterval(interval);
+  }, [code]); // Load only once on mount or code change
 
   useEffect(() => {
     if (!code) return;
