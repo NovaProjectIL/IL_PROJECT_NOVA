@@ -12,19 +12,6 @@ const categoryColors = {
   QUESTION: '#4444ff'    // Bleu pour les questions
 };
 
-interface Marker {
-  id: number;
-  timeSec: number;
-  label: string;
-  category: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
-  createdBy?: {
-    id: number;
-    name: string;
-  };
-  color?: string;
-}
-
-
 interface TimelineProps {
   duration: number;        // Durée totale de la vidéo en secondes
   currentTime: number;      // Position actuelle de la vidéo en secondes
@@ -41,8 +28,6 @@ export default function Timeline({
   
   // State pour stocker tous les marqueurs de la room
   const [markers, setMarkers] = useState<any[]>([]);
-  const [roomId, setRoomId] = useState<number | null>(null);
-  const [isLoadingMarkers, setIsLoadingMarkers] = useState(true);
   
   /**
    * TÂCHE 1: Chargement initial des marqueurs depuis l'API
@@ -51,25 +36,14 @@ export default function Timeline({
   useEffect(() => {
     async function loadMarkers() {
       try {
-        setIsLoadingMarkers(true);
-        
-        // 1. Récupérer le roomId via le roomCode
-        const stateRes = await api.get('/rooms/state', { 
-          params: { codeRoom: roomCode } 
+        // Appel API pour récupérer les marqueurs de cette room
+        const response = await api.get('/markers', { 
+          params: { roomCode } 
         });
-        const fetchedRoomId = stateRes.data.roomId;
-        setRoomId(fetchedRoomId);
-        
-        // 2. Utiliser le roomId pour charger les marqueurs
-        const response = await api.get(`/rooms/${fetchedRoomId}/markers`);
         setMarkers(response.data);
         console.log('Marqueurs chargés:', response.data);
-        
       } catch (error) {
-        // Ne pas logger si c'est juste une room sans marqueurs
         console.error('Erreur chargement marqueurs:', error);
-      } finally {
-        setIsLoadingMarkers(false);
       }
     }
     
@@ -214,7 +188,7 @@ export default function Timeline({
           TÂCHE 1 & 3: Affichage des marqueurs avec clustering
           On utilise getClusteredMarkers pour regrouper les marqueurs proches
         */}
-        {!isLoadingMarkers && getClusteredMarkers().map(cluster => {
+        {getClusteredMarkers().map(cluster => {
           
           // CAS 1: Marqueur simple (pas de regroupement)
           if (cluster.markers.length === 1) {
@@ -233,7 +207,7 @@ export default function Timeline({
                   width: '24px',
                   height: '24px',
                   // Utilise la catégorie pour déterminer la couleur
-                 backgroundColor: categoryColors[marker.category as keyof typeof categoryColors] || '#ffaa00',
+                  backgroundColor: categoryColors[marker.category] || '#ffaa00',
                   borderRadius: '50%',
                   border: '2px solid white',
                   cursor: 'pointer',
@@ -253,7 +227,7 @@ export default function Timeline({
           // CAS 2: Cluster (plusieurs marqueurs regroupés)
           else {
             // Calculer la position moyenne du cluster
-           const avgPosition = cluster.markers.reduce((sum: number, m: Marker) => sum + m.timeSec, 0) / cluster.markers.length;
+            const avgPosition = cluster.markers.reduce((sum, m) => sum + m.timeSec, 0) / cluster.markers.length;
             const position = (avgPosition / duration) * 100;
             
             return (
@@ -284,7 +258,7 @@ export default function Timeline({
                   // Aller au premier marqueur du cluster
                   onSeek(cluster.markers[0].timeSec);
                 }}
-                title={`${cluster.markers.length} marqueurs: ${cluster.markers.map((m: Marker) => m.label).join(', ')}`}
+                title={`${cluster.markers.length} marqueurs: ${cluster.markers.map(m => m.label).join(', ')}`}
               >
                 {cluster.markers.length}
               </div>

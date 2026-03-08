@@ -420,7 +420,7 @@ export class RoomsService {
     const playback = await this.getOrCreatePlaybackState(room);
 
     if (positionSec !== undefined) {
-      playback.positionSec = Math.floor(positionSec);
+      playback.positionSec = positionSec;
     }
 
     playback.status = PlayStatus.PLAYING;
@@ -446,9 +446,9 @@ export class RoomsService {
     const playback = await this.getOrCreatePlaybackState(room);
 
     if (positionSec !== undefined) {
-      playback.positionSec = Math.floor(positionSec);
+      playback.positionSec = positionSec;
     }
-
+    
     playback.status = PlayStatus.PAUSED;
     playback.serverTimeRef = new Date();
     
@@ -471,7 +471,7 @@ export class RoomsService {
 
     const playback = await this.getOrCreatePlaybackState(room);
 
-    playback.positionSec = Math.floor(positionSec);
+    playback.positionSec = positionSec;
     playback.serverTimeRef = new Date();  
     
     await this.playbackRepo.save(playback);

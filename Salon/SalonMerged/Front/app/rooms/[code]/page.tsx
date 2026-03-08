@@ -10,14 +10,14 @@ import Timeline from '@/app/components/Timeline';
 import VideoPlayer from '@/app/components/VideoPlayer';
 import { roomsApi, playlistApi } from '@/app/lib/api';
 
+// --- IMPORTS DES ICÔNES ---
 import {
   SkipBack,
   Play,
   Pause,
   SkipForward,
   Film,
-  LogOut,
-  Plus,
+  LogOut
 } from 'lucide-react';
 
 // --- Composant ChatWidget ---
@@ -77,15 +77,15 @@ function ChatWidget({ pseudo = "", userId, socket, roomCode, getCurrentTime, onS
       <div ref={sidebarRef} className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`} style={{ width: `${sidebarWidth}px` }}>
         <div className="resize-handle" onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}><div className="resize-line"></div></div>
         <div className="chat-panel">
-          <Chat
-            onClose={() => setIsOpen(false)}
-            pseudo={pseudo}
+          <Chat 
+            onClose={() => setIsOpen(false)} 
+            pseudo={pseudo} 
             userId={userId}
-            onMessageReceived={handleMessageReceived}
-            socket={socket}
+            onMessageReceived={handleMessageReceived} 
+            socket={socket} 
             roomCode={roomCode}
             getCurrentTime={getCurrentTime}
-            onSeek={onSeek}
+            onSeek={onSeek}  
           />
         </div>
       </div>
@@ -94,7 +94,7 @@ function ChatWidget({ pseudo = "", userId, socket, roomCode, getCurrentTime, onS
 }
 
 // ============================================================================
-// PAGE PRINCIPALE (RoomPage)
+// PARTIE 2 : PAGE PRINCIPALE (RoomPage)
 // ============================================================================
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://vulgarly-unforcible-loura.ngrok-free.dev';
@@ -107,7 +107,8 @@ export default function RoomPage() {
   const code = params.code as string;
   const memberId = Number(searchParams.get('memberId'));
   const pseudo = searchParams.get('pseudo') || '';
-
+  
+  // === ÉTATS ===
   const [playlist, setPlaylist] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [searchUrl, setSearchUrl] = useState('');
@@ -115,51 +116,89 @@ export default function RoomPage() {
   const [position, setPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
-  const syncSocketRef = useRef<any>(null);
-  const chatSocketRef = useRef<any>(null);
+  const socketRef = useRef<any>(null);
   const isSyncingRef = useRef(false);
 
+  // Fonction pour passer à la vidéo suivante
   const handleNextVideo = async () => {
+    console.log('Bouton Suivant cliqué');
+    
     try {
       const response = await playlistApi.nextVideo(code);
       const data = response.data;
-      setPlaylist({ ...playlist, currentIndex: data.currentIndex, entries: data.entries });
+      
+      setPlaylist({
+        ...playlist,
+        currentIndex: data.currentIndex,
+        entries: data.entries
+      });
+      
       if (data.currentIndex >= 0 && data.entries?.length > 0) {
         const currentEntry = data.entries[data.currentIndex];
         if (currentEntry?.video) {
-          syncSocketRef.current?.emit('changeVideo', { roomCode: code, video: currentEntry.video, sourceType: 'PLAYLIST' });
+          socketRef.current?.emit('changeVideo', {
+            roomCode: code,
+            video: currentEntry.video,
+            sourceType: 'PLAYLIST'
+          });
+          
           await loadRoomData();
         }
       }
     } catch (error: any) {
       console.error('Erreur handleNextVideo:', error);
-      if (error.response?.status === 409) alert('Vous êtes déjà à la dernière vidéo');
+      if (error.response?.status === 409) {
+        alert('Vous êtes déjà à la dernière vidéo');
+      }
     }
   };
 
+  // Fonction pour revenir à la vidéo précédente
   const handlePreviousVideo = async () => {
+    console.log('Bouton Précédent cliqué');
+    
     try {
       const response = await playlistApi.previousVideo(code);
       const data = response.data;
-      setPlaylist({ ...playlist, currentIndex: data.currentIndex, entries: data.entries });
+      
+      setPlaylist({
+        ...playlist,
+        currentIndex: data.currentIndex,
+        entries: data.entries
+      });
+      
       if (data.currentIndex >= 0 && data.entries?.length > 0) {
         const currentEntry = data.entries[data.currentIndex];
         if (currentEntry?.video) {
-          syncSocketRef.current?.emit('changeVideo', { roomCode: code, video: currentEntry.video, sourceType: 'PLAYLIST' });
+          socketRef.current?.emit('changeVideo', {
+            roomCode: code,
+            video: currentEntry.video,
+            sourceType: 'PLAYLIST'
+          });
+          
           await loadRoomData();
         }
       }
     } catch (error: any) {
       console.error('Erreur handlePreviousVideo:', error);
-      if (error.response?.status === 409) alert('Vous êtes déjà à la première vidéo');
+      if (error.response?.status === 409) {
+        alert('Vous êtes déjà à la première vidéo');
+      }
     }
   };
 
   const handleReorder = async (entryId: number, oldPosition: number, newPosition: number) => {
+    console.log('Réorganisation:', { entryId, oldPosition, newPosition });
+    
     try {
-      const response = await playlistApi.reorderPlaylist({ codeRoom: code, memberId, entryId, oldPosition, newPosition });
+      const response = await playlistApi.reorderPlaylist({
+        codeRoom: code,
+        memberId,
+        entryId,
+        oldPosition,
+        newPosition
+      });
+      
       await loadRoomData();
       return response.data;
     } catch (err: any) {
@@ -171,238 +210,159 @@ export default function RoomPage() {
 
   const calculateAdjustedPosition = useCallback((playbackData: any) => {
     if (!playbackData) return 0;
-    let pos = playbackData.positionSec || 0;
+    
+    let position = playbackData.positionSec || 0;
+    
     if (playbackData.status === 'PLAYING' && playbackData.serverTimeRef) {
       const serverTime = new Date(playbackData.serverTimeRef).getTime();
-      const elapsedSeconds = (Date.now() - serverTime) / 1000;
-      pos = pos + elapsedSeconds;
-      if (playbackData.video?.durationSec && pos > playbackData.video.durationSec) {
-        pos = playbackData.video.durationSec;
+      const now = Date.now();
+      const elapsedSeconds = (now - serverTime) / 1000;
+      position = position + elapsedSeconds;
+      
+      if (playbackData.video?.durationSec && position > playbackData.video.durationSec) {
+        position = playbackData.video.durationSec;
       }
     }
-    return pos;
+    
+    return position;
   }, []);
 
   const loadRoomData = useCallback(async () => {
     try {
+      console.log('Chargement état serveur...');
+      
       const stateRes = await roomsApi.getRoomState(code);
       const stateData = stateRes.data;
 
-      // Update current video only if it changed to avoid unnecessary remounts
-      if (stateData.playback?.video && (!currentVideo || stateData.playback.video.youtubeId !== currentVideo.youtubeId)) {
-        console.log('[DEBUG] loadRoomData: Updating currentVideo');
-        setCurrentVideo(stateData.playback.video);
+      if (isSyncingRef.current) {
+        console.log('Synchro en cours, ignore loadRoomData');
+        return;
       }
-
-      if (isSyncingRef.current) return;
 
       setPlaylist(stateData.playlist);
       setMembers(stateData.members || []);
 
       if (stateData.playback?.video) {
-        const adjusted = calculateAdjustedPosition(stateData.playback);
-        // Only set position if difference is significant to avoid seek loops
-        if (Math.abs(position - adjusted) > 5) {
-          setPosition(adjusted);
-        }
+        setCurrentVideo(stateData.playback.video);
+
+        const adjustedPosition = calculateAdjustedPosition(stateData.playback);
+        console.log('Position ajustée:', adjustedPosition);
+
+        setPosition(adjustedPosition);
         setIsPlaying(stateData.playback.status === 'PLAYING');
       }
     } catch (err) {
       console.error('Erreur chargement salon:', err);
     }
-  }, [code, calculateAdjustedPosition, currentVideo, position]);
+  }, [code, calculateAdjustedPosition]);
 
   useEffect(() => {
     const initialLoad = async () => {
       await loadRoomData();
       setLoading(false);
     };
+    
     initialLoad();
-    // ✅ FIX : On retire l'intervalle de 5s qui crée des conflits avec les sockets
-    // const interval = setInterval(loadRoomData, 5000);
-    // return () => clearInterval(interval);
-  }, [code]); // Load only once on mount or code change
+    const interval = setInterval(loadRoomData, 5000);
+    return () => clearInterval(interval);
+  }, [code, loadRoomData]);
 
   useEffect(() => {
     if (!code) return;
-
-    // 🎬 Socket de synchronisation vidéo
-    const syncSocket = io(`${API_URL}/sync`, {
+    
+    console.log('Initialisation Socket.io pour:', code);
+    
+    socketRef.current = io(API_URL, {
       transports: ['websocket', 'polling'],
-      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
-      reconnection: true,
-      reconnectionAttempts: 5,
+      extraHeaders: {
+        'ngrok-skip-browser-warning': 'true',
+      },
     });
-
-    // 💬 Socket de chat
-    const chatSocket = io(`${API_URL}/chat`, {
-      transports: ['websocket', 'polling'],
-      extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
-      reconnection: true,
-      reconnectionAttempts: 5,
+    
+    socketRef.current.on('connect', () => {
+      console.log('Socket.io connecté');
+      socketRef.current.emit('join-room', { codeRoom: code, memberId });
     });
-
-    syncSocketRef.current = syncSocket;
-    chatSocketRef.current = chatSocket;
-
-    // ═══════════════════════════════════════════════════════════
-    // 📹 SYNC SOCKET LISTENERS (Vidéo)
-    // ═══════════════════════════════════════════════════════════
-
-    syncSocket.on('connect', () => {
-      syncSocket.emit('join-room', { codeRoom: code, memberId });
-    });
-
-    syncSocket.on('room-initial-state', (data: any) => {
-      console.log('État initial reçu via sync socket:', data);
-      if (data.playback?.video) {
-        setCurrentVideo(data.playback.video);
-        setIsPlaying(data.playback.status === 'PLAYING');
-        if (!isSyncingRef.current) {
-          setPosition(data.playback.positionSec || 0);
-        }
-      }
-      if (data.playlist) {
-        setPlaylist(data.playlist);
-      }
-      if (data.users) {
-        setMembers(data.users);
-      }
-    });
-
-    syncSocket.on('playback-updated', async (data: any) => {
+    
+    socketRef.current.on('playback-updated', async (data: any) => {
+      console.log('Socket reçu:', data.action, 'position:', data.playback?.positionSec);
+      
       isSyncingRef.current = true;
-      console.log('[DEBUG] playback-updated received:', data.action, data);
+      
       try {
-        if (data.playback?.video) {
-          console.log('[DEBUG] Setting currentVideo from socket:', data.playback.video.youtubeId);
-          setCurrentVideo(data.playback.video);
-        }
-
         let targetPosition = data.playback?.positionSec || 0;
+        
         if (data.action === 'play' && data.playback?.serverTimeRef) {
           const serverTime = new Date(data.playback.serverTimeRef).getTime();
-          targetPosition = targetPosition + (Date.now() - serverTime) / 1000;
+          const now = Date.now();
+          const elapsedSeconds = (now - serverTime) / 1000;
+          targetPosition = targetPosition + elapsedSeconds;
         }
         
-        console.log('[DEBUG] Updating state - position:', targetPosition, 'isPlaying:', data.action === 'play');
         setPosition(targetPosition);
         
-        if (data.action === 'play') setIsPlaying(true);
-        else if (data.action === 'pause') setIsPlaying(false);
-        else if (data.action === 'seek') setIsPlaying(false);
-        
-        if (data.loading === true) {
-          setIsSyncing(true);
-          setSyncMessage(data.message || 'Synchronisation en cours...');
-        } else if (data.loading === false) {
-          setIsSyncing(false);
-          setSyncMessage('');
+        if (data.action === 'play') {
+          setIsPlaying(true);
+        } else if (data.action === 'pause') {
+          setIsPlaying(false);
         }
+        
       } catch (error) {
-        console.error('Erreur synchronisation sync socket:', error);
+        console.error('Erreur synchronisation socket:', error);
       } finally {
-        // On attend plus longtemps (1s) pour que le lecteur s'ajuste avant de réautoriser les émissions
-        setTimeout(() => { 
-          isSyncingRef.current = false; 
-          console.log('[DEBUG] isSyncingRef reset to false');
-        }, 1000);
+        setTimeout(() => {
+          isSyncingRef.current = false;
+        }, 150);
       }
     });
-
-    syncSocket.on('error', (error: any) => {
-      console.error('Erreur Sync Socket:', error);
+    
+    socketRef.current.on('error', (error: any) => {
+      console.error('Erreur Socket:', error);
     });
-
-    syncSocket.on('reconnect', async () => {
-      console.log('🔄 Sync socket reconnecté et re-joint la room');
-      syncSocket?.emit('join-room', { codeRoom: code, memberId });
-      await loadRoomData();
-    });
-
-    syncSocket.on('disconnect', (reason: string) => {
-      if (reason !== 'io client disconnect') {
-        console.warn('⚠️ Sync socket déconnecté, tentative de reconnexion...');
-      }
-    });
-
-    syncSocket.on('connect_error', (error: any) => {
-      console.error('Erreur de connexion sync socket:', error);
-    });
-
-    // ═══════════════════════════════════════════════════════════
-    // 💬 CHAT SOCKET LISTENERS & RECONNECTION
-    // ═══════════════════════════════════════════════════════════
-
-    chatSocket.on('reconnect', () => {
-      console.log('🔄 Chat socket reconnecté');
-      chatSocket?.emit('joinChatRoom', { codeRoom: code });
-      chatSocket?.emit('requestMessages', { codeRoom: code });
-    });
-
-    chatSocket.on('disconnect', (reason: string) => {
-      if (reason !== 'io client disconnect') {
-        console.warn('⚠️ Chat socket déconnecté, tentative de reconnexion...');
-      }
-    });
-
-    chatSocket.on('connect_error', (error: any) => {
-      console.error('Erreur de connexion chat socket:', error);
-    });
-
+    
     return () => {
-      syncSocket?.off('reconnect');
-      syncSocket?.off('disconnect');
-      syncSocket?.off('connect_error');
-      syncSocket?.disconnect();
-
-      chatSocket?.off('reconnect');
-      chatSocket?.off('disconnect');
-      chatSocket?.off('connect_error');
-      chatSocket?.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
-  }, [code, memberId, loadRoomData]);
+  }, [code, memberId]);
 
   const handlePlay = () => {
-    if (isSyncingRef.current) {
-      console.log('[DEBUG] handlePlay IGNORED (Sync in progress)');
-      return;
-    }
-    if (isPlaying) {
-      console.log('[DEBUG] handlePlay IGNORED (Already playing)');
-      return;
-    }
-    console.log('[DEBUG] handlePlay EMITTING to server');
+    console.log('Bouton Play cliqué');
     setIsPlaying(true);
-    syncSocketRef.current?.emit('play', { codeRoom: code, positionSec: position });
+    
+    socketRef.current?.emit('play', { 
+      codeRoom: code, 
+      positionSec: position
+    });
   };
-
+  
   const handlePause = () => {
-    if (isSyncingRef.current) {
-      console.log('[DEBUG] handlePause IGNORED (Sync in progress)');
-      return;
-    }
-    if (!isPlaying) {
-      console.log('[DEBUG] handlePause IGNORED (Already paused)');
-      return;
-    }
-    console.log('[DEBUG] handlePause EMITTING to server');
+    console.log('Bouton Pause cliqué');
     setIsPlaying(false);
-    syncSocketRef.current?.emit('pause', { codeRoom: code, positionSec: position });
+    
+    socketRef.current?.emit('pause', { 
+      codeRoom: code, 
+      positionSec: position
+    });
   };
 
   const handleSeek = (newPosition: number) => {
-    if (isSyncingRef.current) {
-      console.log('[DEBUG] handleSeek IGNORED (Sync in progress)');
-      return;
-    }
-    console.log('[DEBUG] handleSeek EMITTING to server:', newPosition);
+    console.log('Seek manuel à:', newPosition);
+    
     setPosition(newPosition);
-    syncSocketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: isPlaying });
+    
+    socketRef.current?.emit('seek', { 
+      codeRoom: code, 
+      positionSec: newPosition,
+      wasPlaying: isPlaying
+    });
   };
 
+  // Recherche vidéo
   const handleSearch = async (playDirect = true) => {
     if (!searchUrl.trim()) return alert('Entrez une URL');
+    
     let videoId = '';
     if (searchUrl.includes('youtube.com/watch?v=')) {
       videoId = searchUrl.split('v=')[1].split('&')[0];
@@ -417,22 +377,33 @@ export default function RoomPage() {
     try {
       const youtubeRes = await roomsApi.getYouTubeInfo(videoId);
       const youtubeData = youtubeRes.data;
+      
       if (playDirect) {
         await roomsApi.playDirectVideo({
-          codeRoom: code, memberId, youtubeId: videoId,
-          youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author,
-          youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail,
+          codeRoom: code,
+          memberId,
+          youtubeId: videoId,
+          youtubeVTitle: youtubeData.title,
+          youtubeVChannel: youtubeData.author,
+          youtubeVDurationSec: youtubeData.durationSec || 180,
+          youtubeVThumbnailUrl: youtubeData.thumbnail,
         });
       } else {
         await playlistApi.addToPlaylist({
-          codeRoom: code, memberId, youtubeId: videoId,
-          youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author,
-          youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail,
+          codeRoom: code,
+          memberId,
+          youtubeId: videoId,
+          youtubeVTitle: youtubeData.title,
+          youtubeVChannel: youtubeData.author,
+          youtubeVDurationSec: youtubeData.durationSec || 180,
+          youtubeVThumbnailUrl: youtubeData.thumbnail,
         });
         alert('Vidéo ajoutée');
       }
+      
       setSearchUrl('');
       await loadRoomData();
+      
     } catch (err: any) {
       console.error('Erreur recherche vidéo:', err);
       alert('Erreur: ' + (err.response?.data?.message || err.message));
@@ -442,7 +413,12 @@ export default function RoomPage() {
   const handlePlayVideo = async (index: number) => {
     try {
       await playlistApi.changeIndex(memberId, code, index);
-      syncSocketRef.current?.emit('video-change', { codeRoom: code, videoId: playlist.entries[index]?.video?.youtubeId || '' });
+      
+      socketRef.current?.emit('video-change', { 
+        codeRoom: code,
+        videoId: playlist.entries[index]?.video?.youtubeId || ''
+      });
+      
       await loadRoomData();
     } catch (err: any) {
       console.error('Erreur lecture vidéo:', err);
@@ -470,8 +446,9 @@ export default function RoomPage() {
   const currentMemberName = members.find(m => m.id === memberId)?.name || "";
 
   const handleQuitRoom = () => {
-    syncSocketRef.current?.disconnect();
-    chatSocketRef.current?.disconnect();
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+    }
     router.push('/');
   };
 
@@ -482,19 +459,25 @@ export default function RoomPage() {
       <div className={styles.roomHeader}>
         <h1 className={styles.roomTitle}>Salon: {code}</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className={`${styles.connectionBadge} ${syncSocketRef.current?.connected ? styles.connected : styles.disconnected}`}>
-            {syncSocketRef.current?.connected ? 'Connecté' : 'Déconnecté'}
+          <div className={`${styles.connectionBadge} ${socketRef.current?.connected ? styles.connected : styles.disconnected}`}>
+            {socketRef.current?.connected ? 'Connecté' : 'Déconnecté'}
           </div>
           <button
             onClick={handleQuitRoom}
             className={styles.quitButton}
             title="Quitter le salon"
             style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
               padding: '8px 16px',
               background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
-              color: 'white', border: 'none', borderRadius: '8px',
-              cursor: 'pointer', fontSize: '14px', fontWeight: '600',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '600',
               transition: 'all 0.3s ease',
               boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)'
             }}
@@ -512,7 +495,7 @@ export default function RoomPage() {
           </button>
         </div>
       </div>
-
+      
       {/* Recherche */}
       <div className={styles.searchSection}>
         <h3>Rechercher YouTube:</h3>
@@ -535,22 +518,31 @@ export default function RoomPage() {
           Playlist
         </button>
       </div>
-
+      
       {/* Membres */}
       <div className={styles.membersSection}>
         <h3>Membres ({members.length}):</h3>
         <div className={styles.membersList}>
           {members.map(member => (
-            <span
-              key={member.id}
-              className={`${styles.memberTag} ${member.id === memberId ? styles.currentMember : ''}`}
-            >
-              {member.name}{member.id === memberId ? ' (Vous)' : ''}
-            </span>
+            member.id === memberId ? (
+              <span
+                key={member.id}
+                className={`${styles.memberTag} ${styles.currentMember}`}
+              >
+                {member.name} (Vous)
+              </span>
+            ) : (
+              <span
+                key={member.id}
+                className={`${styles.memberTag}`}
+              >
+                {member.name}
+              </span>
+            )
           ))}
         </div>
       </div>
-
+      
       {/* Vidéo en cours */}
       {currentVideo && (
         <div className={styles.videoSection}>
@@ -559,90 +551,102 @@ export default function RoomPage() {
             {currentVideo.title}
           </h3>
           <p>Chaîne: {currentVideo.channelTitle || currentVideo.author}</p>
-          {isSyncing && (
-            <div style={{
-              background: 'rgba(0,0,0,0.85)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(197,34,51,0.4)',
-              borderRadius: '12px',
-              padding: '16px 24px',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              color: 'white',
-              fontSize: '0.95rem',
-              fontWeight: '600',
-            }}>
-              <div className="loading-spinner" style={{width:'20px',height:'20px',flexShrink:0}} />
-              {syncMessage || 'Synchronisation en cours...'}
-            </div>
-          )}
+          
+          {/* Player YouTube avec React-Player */}
           <div className={styles.playerContainer}>
-            <VideoPlayer
-              youtubeId={currentVideo.youtubeId}
-              isPlaying={isPlaying}
-              currentTime={position}
-              onProgress={(time) => setPosition(time)}
-              onPlay={handlePlay}
-              onPause={handlePause}
-              onSeek={(time) => {
-                setPosition(time);
-                syncSocketRef.current?.emit('seek', { codeRoom: code, positionSec: time, wasPlaying: isPlaying });
-              }}
-              onDuration={(duration) => console.log('Durée:', duration)}
-              onReadyToPlay={() => {
-                console.log('[HANDSHAKE] Client ready sent to server');
-                syncSocketRef.current?.emit('client-ready', { codeRoom: code });
-              }}
-              onBuffering={() => {
-                console.log('[HANDSHAKE] Loading-video sent to server');
-                syncSocketRef.current?.emit('loading-video', { codeRoom: code });
-              }}
-            />
+            {currentVideo && (
+              <VideoPlayer
+                youtubeId={currentVideo.youtubeId}
+                isPlaying={isPlaying}
+                currentTime={position}
+                onProgress={(time) => setPosition(time)}
+                onPlay={handlePlay}
+                onPause={handlePause}
+                onSeek={(time) => {
+                  setPosition(time);
+                  socketRef.current?.emit('seek', { 
+                    codeRoom: code, 
+                    positionSec: time,
+                    wasPlaying: isPlaying
+                  });
+                }}
+                onDuration={(duration) => {
+                  console.log('Durée:', duration);
+                }}
+              />
+            )}
           </div>
-
+          
           {/* Contrôles */}
           <div className={styles.controlsSection}>
             <div className={styles.controlButtons}>
-              <button onClick={handlePreviousVideo} className={`${styles.controlButton} ${styles.previousButton}`}
-                title="Vidéo précédente" style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                <SkipBack size={18} /> Précédent
+              <button 
+                onClick={handlePreviousVideo} 
+                className={`${styles.controlButton} ${styles.previousButton}`}
+                title="Vidéo précédente"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
+              >
+                <SkipBack size={18} />
+                Précédent
               </button>
-              <button onClick={handlePlay} disabled={isSyncing} className={`${styles.controlButton} ${styles.playButton}`}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                <Play size={18} /> Play
+              
+              <button 
+                onClick={handlePlay} 
+                className={`${styles.controlButton} ${styles.playButton}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
+              >
+                <Play size={18} />
+                Play
               </button>
-              <button onClick={handlePause} disabled={isSyncing} className={`${styles.controlButton} ${styles.pauseButton}`}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                <Pause size={18} /> Pause
+              
+              <button 
+                onClick={handlePause} 
+                className={`${styles.controlButton} ${styles.pauseButton}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
+              >
+                <Pause size={18} />
+                Pause
               </button>
-              <button onClick={handleNextVideo} className={`${styles.controlButton} ${styles.nextButton}`}
-                title="Vidéo suivante" style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                Suivant <SkipForward size={18} />
+              
+              <button 
+                onClick={handleNextVideo} 
+                className={`${styles.controlButton} ${styles.nextButton}`}
+                title="Vidéo suivante"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
+              >
+                Suivant
+                <SkipForward size={18} />
               </button>
             </div>
-
+            
+            {/* Barre de progression avec marqueurs */}
             <div className={styles.progressSection}>
-              <Timeline
+              <Timeline 
                 duration={currentVideo?.durationSec || 0}
                 currentTime={position}
-                onSeek={(time) => !isSyncing && handleSeek(time)}
+                onSeek={handleSeek}
                 roomCode={code}
               />
               <div className={styles.statusInfo}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <strong>État:</strong>
+                  <strong>État:</strong> 
                   {isPlaying ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Play size={14} /> En lecture</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Play size={14} />
+                      En lecture
+                    </span>
                   ) : (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Pause size={14} /> En pause</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Pause size={14} />
+                      En pause
+                    </span>
                   )}
                 </span>
                 <span className={styles.positionInfo}>
                   <strong>Position:</strong> {formatTime(position)} / {currentVideo.durationSec ? formatTime(currentVideo.durationSec) : '??:??'}
                 </span>
-                {playlist?.entries?.length > 0 && (
+                
+                {playlist && playlist.entries && playlist.entries.length > 0 && (
                   <span className={styles.playlistInfo}>
                     <strong>Playlist:</strong> {playlist.currentIndex + 1}/{playlist.entries.length}
                   </span>
@@ -652,7 +656,7 @@ export default function RoomPage() {
           </div>
         </div>
       )}
-
+      
       {/* Playlist */}
       <PlaylistComponent
         playlist={playlist}
@@ -663,16 +667,17 @@ export default function RoomPage() {
         onReorder={handleReorder}
         isLoading={loading}
       />
-
+      
       {/* Chat */}
       <ChatWidget
-        socket={chatSocketRef.current}
+        socket={socketRef.current}
         roomCode={code}
         pseudo={pseudo || currentMemberName || "Utilisateur"}
         userId={memberId}
         getCurrentTime={() => position}
-        onSeek={(timecode) => handleSeek(timecode)}
+        onSeek={(timecode) => handleSeek(timecode)} 
       />
+      
     </div>
   );
 }

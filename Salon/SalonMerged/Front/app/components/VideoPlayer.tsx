@@ -1,8 +1,7 @@
 'use client';
+
 import { useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
-
-const Player = ReactPlayer as any;
 
 interface VideoPlayerProps {
   youtubeId: string;
@@ -13,8 +12,6 @@ interface VideoPlayerProps {
   onPause: () => void;
   onSeek: (time: number) => void;
   onDuration: (duration: number) => void;
-  onReadyToPlay?: () => void;
-  onBuffering?: () => void;
 }
 
 export default function VideoPlayer({
@@ -25,125 +22,81 @@ export default function VideoPlayer({
   onPlay,
   onPause,
   onSeek,
-  onDuration,
-  onReadyToPlay,
-  onBuffering,
+  onDuration
 }: VideoPlayerProps) {
-  const playerRef = useRef<any>(null);
-  const lastSeekRef = useRef<number>(0);
+  const playerRef = useRef<ReactPlayer>(null);
   const [isReady, setIsReady] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Fallback origin logic
-  const getOrigin = () => {
-    if (typeof window !== 'undefined') return window.location.origin;
-    return '';
-  };
-
-  // Seeker logic
+  // Quand la prop currentTime change (seek externe)
   useEffect(() => {
     if (isReady && !isSeeking && playerRef.current) {
-      const currentPlayerTime = playerRef.current.getCurrentTime();
-      if (Math.abs(currentPlayerTime - currentTime) > 2.5) {
-        if (Date.now() - lastSeekRef.current < 1500) return;
-        lastSeekRef.current = Date.now();
-        console.log('[DEBUG] VideoPlayer: External sync seek to', currentTime);
-        playerRef.current.seekTo(currentTime, 'seconds');
+      const player = playerRef.current;
+      const currentPlayerTime = player.getCurrentTime();
+      
+      if (Math.abs(currentPlayerTime - currentTime) > 0.5) {
+        player.seekTo(currentTime, 'seconds');
       }
     }
   }, [currentTime, isReady, isSeeking]);
 
-  const handleReady = () => {
-    if (isReady) return;
-    console.log('[DEBUG] VideoPlayer: onReady fired');
-    setIsReady(true);
-    setIsLoading(false);
-    onReadyToPlay?.();
-  };
-
-  const handlePlay = () => {
-    console.log('[DEBUG] VideoPlayer: onPlay fired');
-    setIsLoading(false);
-    // FALLBACK: si onPlay arrive avant onReady, on force le ready
-    if (!isReady) {
-      console.log('[DEBUG] VideoPlayer: Forcing isReady via onPlay fallback');
-      setIsReady(true);
-      onReadyToPlay?.();
-    }
-    onPlay();
-  };
-
-  const handleError = (e: any) => {
-    console.error('[DEBUG] VideoPlayer: onError fired', e);
-    setError('Vidéo indisponible ou erreur de lecture.');
-    setIsLoading(false);
-  };
-
-  if (!youtubeId) return <div style={{width:'100%',height:'100%',background:'#000'}} />;
-
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: '#000' }}>
-      {error && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', zIndex: 20, background: '#1a1a1a', textAlign: 'center', padding: '20px' }}>
-          <div>⚠️ {error}<br/><small>ID: {youtubeId}</small></div>
-        </div>
-      )}
+    <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9' }}>
+      {/* Safe Zone - Zone cliquable transparente au-dessus de la vidéo */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 10,
+          cursor: 'pointer',
+          // Rendre visible pour le développement (à enlever plus tard)
+          backgroundColor: 'rgba(255,0,0,0.1)'
+        }}
+        onClick={() => {
+          if (isPlaying) {
+            onPause();
+          } else {
+            onPlay();
+          }
+        }}
+        title="Cliquez pour play/pause"
+      />
       
-      {isLoading && !error && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', zIndex: 10 }}>
-          <div className="spinner" />
-        </div>
-      )}
-
-      <Player
-        key={youtubeId}
+      {/* ReactPlayer sans contrôles natifs */}
+      <ReactPlayer
         ref={playerRef}
         url={`https://www.youtube.com/watch?v=${youtubeId}`}
         width="100%"
         height="100%"
         playing={isPlaying}
-        controls={true}
-        onReady={handleReady}
-        onPlay={handlePlay}
+        controls={false}  // ← Désactive les contrôles natifs
+        progressInterval={1000}
+        onReady={() => setIsReady(true)}
+        onPlay={onPlay}
         onPause={onPause}
-        onError={handleError}
-        onBuffer={() => {
-          console.log('[DEBUG] VideoPlayer: onBuffer fired');
-          onBuffering?.();
+        onSeek={(seconds) => {
+          setIsSeeking(false);
+          onSeek(seconds);
         }}
-        onBufferEnd={() => {
-          console.log('[DEBUG] VideoPlayer: onBufferEnd fired');
-          handleReady();
-        }}
-        onProgress={(state: any) => {
-          if (!isSeeking) onProgress(state.playedSeconds);
+        onProgress={({ playedSeconds }) => {
+          if (!isSeeking) {
+            onProgress(playedSeconds);
+          }
         }}
         onDuration={onDuration}
         config={{
           youtube: {
             playerVars: {
-              autoplay: 1,
               modestbranding: 1,
               rel: 0,
-              origin: getOrigin(),
+              showinfo: 0
             }
           }
         }}
       />
-      <style jsx>{`
-        .spinner {
-          width: 40px;
-          height: 40px;
-          border: 3px solid rgba(255,255,255,0.3);
-          border-top-color: #fff;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }
-

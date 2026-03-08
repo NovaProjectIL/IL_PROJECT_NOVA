@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>💬 Chat temps réel</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+      body { font-family: Arial; background: #f0f2f5; margin: 0; padding: 20px; }
+      .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; }
+      .header { background: #2c5aa0; color: white; padding: 15px; text-align: center; }
+      #messages { list-style: none; padding: 0; margin: 0; height: 400px; overflow-y: auto; background: #fafafa; }
+      #messages li { margin: 8px; padding: 10px; border-radius: 8px; }
+      .user-msg { background: white; border-left: 4px solid #2c5aa0; }
+      .input-area { padding: 15px; background: white; border-top: 1px solid #eee; }
+      .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+      input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+      button { padding: 10px 20px; background: #2c5aa0; color: white; border: none; border-radius: 5px; cursor: pointer; }
+      button:disabled { background: #ccc; cursor: not-allowed; }
+      #typing-indicator { padding: 0 15px; color: #666; font-style: italic; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header"><h1>💬 Chat</h1></div>
+      <div id="user-info" style="display: none; padding: 10px; background: #e3f2fd;">
+        Connecté : <span id="current-username"></span>
+      </div>
+      <ul id="messages"></ul>
+      <div id="typing-indicator"></div>
+      <div class="input-area">
+        <div class="input-group">
+          <input id="msg" placeholder="Votre message..." disabled />
+          <button id="send-btn" onclick="sendMessage()" disabled>Envoyer</button>
+        </div>
+        <div class="input-group">
+          <input id="gifUrl" placeholder="URL GIF (optionnel)" disabled />
+          <button id="gif-btn" onclick="sendGif()" disabled>Envoyer GIF</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const socket = io("http://localhost:3001");
+      let currentUsername = '';
+      let typingUsers = new Set();
+
+      // Récupérer le nom réel depuis l'API /rooms/members
+      async function getRealUserName() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomCode = urlParams.get('roomCode') || localStorage.getItem('roomCode');
+        const memberId = localStorage.getItem('memberId');
+        
+        if (roomCode && memberId) {
+          try {
+            const response = await fetch(`/rooms/members?codeRoom=${roomCode}`);
+            const data = await response.json();
+            const member = data.members.find(m => m.id == memberId);
+            return member ? member.name : null;
+          } catch (error) {
+            return null;
+          }
+        }
+        return null;
+      }
+
+      // Connexion
+      socket.on("connect", async () => {
+        // Récupérer le vrai nom
+        const realName = await getRealUserName();
+        const savedUserId = localStorage.getItem('chatUserId');
+        
+        // Envoyer le nom au serveur
+        socket.emit('setUsername', {
+          username: realName || `User_${socket.id.substring(0, 4)}`,
+          userId: savedUserId ? parseInt(savedUserId) : undefined
+        });
+        
+        // Activer les champs
+        document.getElementById('msg').disabled = false;
+        document.getElementById('gifUrl').disabled = false;
+        document.getElementById('send-btn').disabled = false;
+        document.getElementById('gif-btn').disabled = false;
+        document.getElementById('msg').focus();
+      });
+
+      // Recevoir l'identité
+      socket.on("identity", (data) => {
+        currentUsername = data.username;
+        document.getElementById('current-username').textContent = data.username;
+        document.getElementById('user-info').style.display = 'block';
+        localStorage.setItem('chatUserId', data.userId);
+        localStorage.setItem('chatUsername', data.username);
+      });
+
+      // Recevoir les messages
+      socket.on("loadMessages", (messages) => {
+        const messagesList = document.getElementById('messages');
+        messagesList.innerHTML = '';
+        messages.forEach(displayMessage);
+        scrollToBottom();
+      });
+
+      socket.on("receiveMessage", displayMessage);
+
+      function displayMessage(data) {
+        const li = document.createElement("li");
+        li.className = 'user-msg';
+        li.innerHTML = `
+          <strong>${data.username}</strong><br>
+          ${data.message || ''}
+          ${data.gifUrl ? `<br><img src="${data.gifUrl}" style="max-width:150px; margin-top:5px;">` : ''}
+          <div style="text-align:right; color:#888; font-size:0.8em">
+            ${new Date(data.createdAt).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}
+          </div>
+        `;
+        document.getElementById('messages').appendChild(li);
+        scrollToBottom();
+      }
+
+      // Indicateur de frappe
+      socket.on("userTyping", (data) => {
+        if (data.isTyping) typingUsers.add(data.username);
+        else typingUsers.delete(data.username);
+        
+        const usersArray = Array.from(typingUsers);
+        const indicator = document.getElementById('typing-indicator');
+        
+        if (usersArray.length === 0) indicator.textContent = '';
+        else if (usersArray.length === 1) indicator.textContent = `${usersArray[0]} écrit...`;
+        else if (usersArray.length === 2) indicator.textContent = `${usersArray.join(' et ')} écrivent...`;
+        else indicator.textContent = 'Plusieurs personnes écrivent...';
+      });
+
+      // Envoi de messages
+      function sendMessage() {
+        const message = document.getElementById('msg').value.trim();
+        if (!message) return;
+        socket.emit("sendMessage", { message });
+        document.getElementById('msg').value = "";
+      }
+
+      function sendGif() {
+        const gifUrl = document.getElementById('gifUrl').value.trim();
+        if (!gifUrl) return alert("Entrez une URL de GIF");
+        socket.emit("sendMessage", { gifUrl });
+        document.getElementById('gifUrl').value = "";
+      }
+
+      // Touche Entrée
+      document.getElementById('msg').onkeypress = (e) => {
+        if (e.key === 'Enter') sendMessage();
+      };
+
+      function scrollToBottom() {
+        const messagesList = document.getElementById('messages');
+        messagesList.scrollTop = messagesList.scrollHeight;
+      }
+    </script>
+  </body>
+</html>

@@ -3,20 +3,18 @@
 import { useState, useEffect, useRef } from "react";
 import Chat from "./Chat";
 
-interface ChatWidgetProps {
-  pseudo?: string;
-  userId?: number;  // IMPORTANT
-  socket: any;      
-  roomCode: string; // IMPORTANT
-}
-
-export default function ChatWidget({ pseudo = "Invité", userId, socket, roomCode }: ChatWidgetProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export default function ChatWidget() {
+  const [isOpen, setIsOpen] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   
-  const [sidebarWidth, setSidebarWidth] = useState(420);
+  const [sidebarWidth, setSidebarWidth] = useState(400);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
 
   useEffect(() => {
     const stopResizing = () => setIsResizing(false);
@@ -28,10 +26,12 @@ export default function ChatWidget({ pseudo = "Invité", userId, socket, roomCod
         }
       }
     };
+
     if (isResizing) {
       window.addEventListener("mousemove", resize);
       window.addEventListener("mouseup", stopResizing);
     }
+
     return () => {
       window.removeEventListener("mousemove", resize);
       window.removeEventListener("mouseup", stopResizing);
@@ -44,35 +44,42 @@ export default function ChatWidget({ pseudo = "Invité", userId, socket, roomCod
     }
   };
 
-  useEffect(() => {
-    if (isOpen) setUnreadCount(0);
-  }, [isOpen]);
-
-  // Si on n'a pas de code de room, on n'affiche rien pour éviter les erreurs
-  if (!roomCode) return null;
+  const toggleChat = () => {
+    setIsOpen(!isOpen);
+    if (!isOpen) setUnreadCount(0);
+  };
 
   return (
     <>
       {!isOpen && (
-        <div className="chat-trigger-side" onClick={() => setIsOpen(true)} title="Ouvrir le chat">
+        <div 
+          className="chat-trigger-side"
+          onClick={toggleChat}
+          title="Ouvrir le chat"
+        >
           <span className="chat-trigger-text">Chat</span>
-          {unreadCount > 0 && <span className="badge-notification animate-jump">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+          {unreadCount > 0 && (
+            <span className="badge-notification animate-jump">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
         </div>
       )}
 
-      <div ref={sidebarRef} className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`} style={{ width: `${sidebarWidth}px` }}>
-        <div className="resize-handle" onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}>
+      <div 
+        ref={sidebarRef}
+        className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`}
+        style={{ width: `${sidebarWidth}px` }}
+      >
+        <div className="resize-handle" onMouseDown={startResizing}>
             <div className="resize-line"></div>
         </div>
 
         <div className="chat-panel">
           <Chat 
             onClose={() => setIsOpen(false)} 
-            pseudo={pseudo} 
-            userId={userId} // ON TRANSMET L'ID
+            pseudo="Invité" 
             onMessageReceived={handleMessageReceived}
-            socket={socket}
-            roomCode={roomCode} // ON TRANSMET LE CODE
           />
         </div>
       </div>
