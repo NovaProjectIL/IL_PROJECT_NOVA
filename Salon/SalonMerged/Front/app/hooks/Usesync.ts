@@ -1,27 +1,9 @@
 // useSync.ts
-// Hook Socket.io pour la synchronisation video
-// A placer dans : Front/app/hooks/useSync.ts
-// Ce hook gere la connexion Socket.io et les evenements de synchronisation
+// Hook Socket.io pour la synchronisation video (partie Fatma)
 
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { EtatSync, EvenementForceSeek, EvenementReady, EvenementSeek } from "../types/types";
-
-// TODO NADJIB : verifier que ces noms d evenements correspondent
-// exactement a ce que ton gateway NestJS ecoute et emet
-// FLOW FATMA (simple): click marqueur -> request_seek -> force_seek -> ready -> all_ready
-const EVENTS = {
-  REQUEST_SEEK: "request_seek",
-  READY: "ready",
-  FORCE_SEEK: "force_seek",
-  ALL_READY: "all_ready",
-  PLAY: "play",
-  PAUSE: "pause",
-};
-
-// TODO NADJIB : verifier que ce namespace correspond a celui
-// que tu as configure dans ton gateway NestJS pour la synchro video
-const NAMESPACE_SYNC = "/sync";
+import { EtatSync } from "../types/types";
 
 type UseSync = {
   etatSync: EtatSync;
@@ -30,54 +12,105 @@ type UseSync = {
   emitReady: () => void;
 };
 
-export const useSync = (roomId: string): UseSync => {
+// Hook adapte au backend actuel:
+// - rooms.gateway ecoute "seek" / "play" / "pause" sur namespace principal
+// - il emet "playback-updated" avec action = seek|play|pause
+export const useSync = (
+  roomCode: string,
+  externalSocket?: Socket | null,
+): UseSync => {
   const [etatSync, setEtatSync] = useState<EtatSync>("IDLE");
   const [dernierSeekForce, setDernierSeekForce] = useState<number | null>(null);
-  const socketRef = useRef<Socket | null>(null);
+  const localSocketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
+    const hasExternalSocket = !!externalSocket;
 
-    socketRef.current = io(`${socketUrl}${NAMESPACE_SYNC}`, { autoConnect: true });
-    const socket = socketRef.current;
+    if (!hasExternalSocket) {
+      const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      localSocketRef.current = io(socketUrl, { autoConnect: true });
+      console.log("[SYNC] Socket local cree (fallback)", socketUrl);
+    }
 
-    socket.on("connect", () => {
-      // TODO NADJIB : verifier/adapter join_room si votre gateway utilise un autre nom
-      socket.emit("join_room", { roomId });
-    });
+    const activeSocket = externalSocket ?? localSocketRef.current;
+    if (!activeSocket) return;
 
-    socket.on(EVENTS.FORCE_SEEK, (data: EvenementForceSeek) => {
-      // ZINEB: ce timecode doit venir du serveur pour toute la room
-      setDernierSeekForce(data.timecode);
+    const onPlaybackUpdated = (data: any) => {
+      const action = data?.action;
+      const positionSec = Number(data?.playback?.positionSec ?? 0);
+      console.log("[SYNC] playback-updated recu", { action, positionSec, data });
+
+      if (action === "seek") {
+        // Liaison avec Zineb: pas de force_seek explicite dans le gateway actuel,
+        // on utilise playback-updated/seek comme signal serveur pour seek global.
+        setDernierSeekForce(positionSec);
+        setEtatSync("BUFFERING");
+
+        // TODO ZINEB/NADJIB: remplacer ce timeout par un vrai cycle ready/all_ready
+        // si ces evenements sont exposes dans le gateway principal.
+        window.setTimeout(() => {
+          const status = data?.playback?.status;
+          setEtatSync(status === "PLAYING" ? "PLAYING" : "PAUSED");
+        }, 500);
+      } else if (action === "play") {
+        setEtatSync("PLAYING");
+      } else if (action === "pause") {
+        setEtatSync("PAUSED");
+      }
+    };
+
+    // Compatibilite future si Zineb expose force_seek/all_ready plus tard
+    const onForceSeek = (data: any) => {
+      console.log("[SYNC] force_seek recu (compat)", data);
+      setDernierSeekForce(Number(data?.timecode ?? 0));
       setEtatSync("BUFFERING");
-    });
+    };
 
-    socket.on(EVENTS.ALL_READY, () => {
+    const onAllReady = () => {
+      console.log("[SYNC] all_ready recu (compat)");
       setEtatSync("PLAYING");
-    });
+    };
 
-    // Liaison a brancher avec la machine a etats de Zineb
-    socket.on(EVENTS.PAUSE, () => setEtatSync("PAUSED"));
-    socket.on(EVENTS.PLAY, () => setEtatSync("PLAYING"));
+    activeSocket.on("playback-updated", onPlaybackUpdated);
+    activeSocket.on("force_seek", onForceSeek);
+    activeSocket.on("all_ready", onAllReady);
 
     return () => {
-      socket.disconnect();
+      activeSocket.off("playback-updated", onPlaybackUpdated);
+      activeSocket.off("force_seek", onForceSeek);
+      activeSocket.off("all_ready", onAllReady);
+      if (!hasExternalSocket && localSocketRef.current) {
+        localSocketRef.current.disconnect();
+      }
     };
-  }, [roomId]);
+  }, [externalSocket, roomCode]);
 
   const emitSeek = (timecode: number) => {
-    // FATMA: appel depuis clic timeline / liste marqueurs
-    if (!socketRef.current) return;
-    const payload: EvenementSeek = { timecode, roomId };
-    socketRef.current.emit(EVENTS.REQUEST_SEEK, payload);
+    const activeSocket = externalSocket ?? localSocketRef.current;
+    if (!activeSocket) {
+      console.error("[SYNC] emitSeek ignore: socket indisponible");
+      return;
+    }
+
+    console.log("[SYNC] emit seek", { roomCode, timecode });
+    activeSocket.emit("seek", {
+      codeRoom: roomCode,
+      positionSec: timecode,
+      wasPlaying: true,
+    });
+
     setDernierSeekForce(timecode);
     setEtatSync("BUFFERING");
   };
 
   const emitReady = () => {
-    if (!socketRef.current) return;
-    const payload: EvenementReady = { roomId };
-    socketRef.current.emit(EVENTS.READY, payload);
+    const activeSocket = externalSocket ?? localSocketRef.current;
+    if (!activeSocket) return;
+
+    // TODO ZINEB: gateway principal n expose pas ready actuellement.
+    // On conserve l emit pour compatibilite si le protocole ready/all_ready revient.
+    console.log("[SYNC] emit ready (compat)", { roomCode });
+    activeSocket.emit("ready", { roomCode });
   };
 
   return { etatSync, dernierSeekForce, emitSeek, emitReady };

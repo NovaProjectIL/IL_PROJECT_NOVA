@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactPlayer from "react-player";
 import { useSync } from "../hooks/Usesync";
+import { Socket } from "socket.io-client";
 import { Marqueur } from "../types/types";
 import VideoTimeline from "./VideoTimeline";
 
@@ -21,6 +22,7 @@ type VideoPlayerProps = {
   // Identifiant de la room courante
   // TODO NADJIB : ce roomId sera utilise par useSync pour rejoindre le bon namespace Socket.io
   roomId: string;
+  syncSocket?: Socket | null;
   // Liste des marqueurs a afficher sur la timeline
   // TODO WAFA : ces marqueurs viendront de ton API GET /markers?room_id=X
   marqueurs: Marqueur[];
@@ -40,6 +42,7 @@ export default function VideoPlayer({
   isPlaying,
   currentTime,
   roomId,
+  syncSocket,
   marqueurs,
   onProgress,
   onPlay,
@@ -73,12 +76,13 @@ export default function VideoPlayer({
 // 4) serveur all_ready => PLAYING
   // TODO NADJIB : verifier que useSync correspond a ta configuration gateway
   // TODO ZINEB : verifier que les evenements force_seek et all_ready sont bien emis par ton gateway
-  const { etatSync, dernierSeekForce, emitSeek, emitReady } = useSync(roomId);
+  const { etatSync, dernierSeekForce, emitSeek, emitReady } = useSync(roomId, syncSocket);
 
   // Quand etatSync passe en BUFFERING suite a un force_seek du serveur
   // on applique le seek sur le player YouTube
   useEffect(() => {
     if (etatSync === "BUFFERING" && dernierSeekForce !== null && playerRef.current) {
+      console.log("[PLAYER] apply sync seek", { dernierSeekForce, etatSync });
       playerRef.current.seekTo(dernierSeekForce, "seconds");
     }
   }, [etatSync, dernierSeekForce]);

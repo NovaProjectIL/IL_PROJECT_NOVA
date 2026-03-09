@@ -15,7 +15,7 @@ export type Marqueur = {
   label: string;
   // Categorie du marqueur
   // TODO WAFA : ajuster les categories selon ce que tu definis en BDD
-  categorie: "erreur" | "commentaire" | "point_fort" | "a_revoir";
+  categorie: "ERROR" | "COMMENT" | "HIGHLIGHT" | "QUESTION" | string;
   // Identifiant de la room a laquelle appartient ce marqueur
   roomId: string;
   // Identifiant de l utilisateur qui a pose ce marqueur
