@@ -19,13 +19,13 @@
     "bootstrap": "^5.3.8",
     "emoji-picker-react": "^4.16.1",
     "lucide-react": "^0.554.0",
-    "next": "^16.1.0",
+    "next": "^15.1.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
     "react-bootstrap": "^2.10.10",
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
-    "react-player": "^3.4.0",
+    "react-player": "^2.16.0",
     "socket.io-client": "^4.8.2"
   },
   "devDependencies": {
