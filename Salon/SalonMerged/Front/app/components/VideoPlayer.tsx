@@ -100,11 +100,10 @@ export default function VideoPlayer({
   }, [currentTime, duree]);
 
   // Appele par VideoTimeline quand l utilisateur clique sur un marqueur
-  // On emet un request_seek vers le serveur via Socket.io
-  // TODO ZINEB : emitSeek envoie request_seek a ton gateway NestJS
+  // emitSeek pilote la synchro UI; l emission serveur est geree par RoomPage.onSeek
   const handleClicMarqueur = (marqueur: Marqueur, index: number) => {
     setIndexActuel(index);
-    // Liaison Zineb: emitSeek envoie request_seek; le serveur doit renvoyer force_seek a toute la room
+    // Liaison backend: RoomPage emet deja "seek"; ici on evite les doublons et on garde l etat sync coherent
     emitSeek(marqueur.timecode);
     // On notifie aussi RoomPage pour garder la position synchronisee
     onSeek(marqueur.timecode);

@@ -22,6 +22,7 @@ export const useSync = (
   const [etatSync, setEtatSync] = useState<EtatSync>("IDLE");
   const [dernierSeekForce, setDernierSeekForce] = useState<number | null>(null);
   const localSocketRef = useRef<Socket | null>(null);
+  const lastPlaybackStateRef = useRef<"PLAYING" | "PAUSED">("PAUSED");
 
   useEffect(() => {
     const hasExternalSocket = !!externalSocket;
@@ -30,6 +31,12 @@ export const useSync = (
       const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       localSocketRef.current = io(socketUrl, { autoConnect: true });
       console.log("[SYNC] Socket local cree (fallback)", socketUrl);
+
+      localSocketRef.current.on("connect", () => {
+        // Important fallback: rejoindre la room pour recevoir server.to(roomCode)
+        localSocketRef.current?.emit("join-room", { codeRoom: roomCode, memberId: 0 });
+        console.log("[SYNC] join-room emis (fallback)", { codeRoom: roomCode, memberId: 0 });
+      });
     }
 
     const activeSocket = externalSocket ?? localSocketRef.current;
@@ -41,20 +48,20 @@ export const useSync = (
       console.log("[SYNC] playback-updated recu", { action, positionSec, data });
 
       if (action === "seek") {
-        // Liaison avec Zineb: pas de force_seek explicite dans le gateway actuel,
-        // on utilise playback-updated/seek comme signal serveur pour seek global.
+        // Signal serveur de seek global
         setDernierSeekForce(positionSec);
         setEtatSync("BUFFERING");
 
-        // TODO ZINEB/NADJIB: remplacer ce timeout par un vrai cycle ready/all_ready
-        // si ces evenements sont exposes dans le gateway principal.
+        // Le backend actuel n'envoie pas toujours status sur seek.
+        // On restaure l'etat precedent connu pour eviter de forcer PAUSED a tort.
         window.setTimeout(() => {
-          const status = data?.playback?.status;
-          setEtatSync(status === "PLAYING" ? "PLAYING" : "PAUSED");
+          setEtatSync(lastPlaybackStateRef.current);
         }, 500);
       } else if (action === "play") {
+        lastPlaybackStateRef.current = "PLAYING";
         setEtatSync("PLAYING");
       } else if (action === "pause") {
+        lastPlaybackStateRef.current = "PAUSED";
         setEtatSync("PAUSED");
       }
     };
@@ -68,6 +75,7 @@ export const useSync = (
 
     const onAllReady = () => {
       console.log("[SYNC] all_ready recu (compat)");
+      lastPlaybackStateRef.current = "PLAYING";
       setEtatSync("PLAYING");
     };
 
@@ -92,12 +100,19 @@ export const useSync = (
       return;
     }
 
-    console.log("[SYNC] emit seek", { roomCode, timecode });
-    activeSocket.emit("seek", {
-      codeRoom: roomCode,
-      positionSec: timecode,
-      wasPlaying: true,
-    });
+    // Evite le doublon d'emission:
+    // - avec socket externe, RoomPage.onSeek emet deja "seek"
+    // - ici on ne fait que piloter l'UI sync
+    if (!externalSocket) {
+      console.log("[SYNC] emit seek (fallback local)", { roomCode, timecode });
+      activeSocket.emit("seek", {
+        codeRoom: roomCode,
+        positionSec: timecode,
+        wasPlaying: lastPlaybackStateRef.current === "PLAYING",
+      });
+    } else {
+      console.log("[SYNC] emit seek skipped (external socket handles emit)", { roomCode, timecode });
+    }
 
     setDernierSeekForce(timecode);
     setEtatSync("BUFFERING");
@@ -108,7 +123,6 @@ export const useSync = (
     if (!activeSocket) return;
 
     // TODO ZINEB: gateway principal n expose pas ready actuellement.
-    // On conserve l emit pour compatibilite si le protocole ready/all_ready revient.
     console.log("[SYNC] emit ready (compat)", { roomCode });
     activeSocket.emit("ready", { roomCode });
   };
