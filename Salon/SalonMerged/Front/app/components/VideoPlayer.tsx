@@ -12,28 +12,20 @@ import { Marqueur } from "../types/types";
 import VideoTimeline from "./VideoTimeline";
 
 type VideoPlayerProps = {
-  // ID YouTube de la video (ex: "dQw4w9WgXcQ")
-  // Compatibilite avec l existant qui passe youtubeId et non url
   youtubeId: string;
-  // Etat de lecture pilote par la room
   isPlaying: boolean;
-  // Position courante en secondes pilotee par la room
   currentTime: number;
-  // Identifiant de la room courante
-  // TODO NADJIB : ce roomId sera utilise par useSync pour rejoindre le bon namespace Socket.io
   roomId: string;
   syncSocket?: Socket | null;
-  // Liste des marqueurs a afficher sur la timeline
-  // TODO WAFA : ces marqueurs viendront de ton API GET /markers?room_id=X
   marqueurs: Marqueur[];
-  // Callbacks existants pour compatibilite avec RoomPage
+  // Index du marqueur actuel calcule dans RoomPage depuis position socket
+  // Identique pour tous les users => marqueur en gras synchronise
+  indexActuel: number;
   onProgress: (time: number) => void;
   onPlay: () => void;
   onPause: () => void;
   onSeek: (time: number) => void;
   onDuration: (duration: number) => void;
-  // Callback appele quand l utilisateur pose un nouveau marqueur
-  // TODO WAFA : ce callback appellera ton API POST /markers
   onNouveauMarqueur?: (timecode: number) => void;
 };
 
@@ -44,6 +36,7 @@ export default function VideoPlayer({
   roomId,
   syncSocket,
   marqueurs,
+  indexActuel,
   onProgress,
   onPlay,
   onPause,
@@ -52,34 +45,17 @@ export default function VideoPlayer({
   onNouveauMarqueur,
 }: VideoPlayerProps) {
 
-  // Montage cote client uniquement pour eviter l erreur d hydratation SSR
-  // Valide en Etape 1 des tests
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  // Reference vers le player pour acceder a getCurrentTime et seekTo
   const playerRef = useRef<any>(null);
-
-  // Duree totale de la video en secondes
-  // Passee a VideoTimeline pour calculer les positions des epingles
   const [duree, setDuree] = useState<number>(0);
 
-  // Index du marqueur actuellement selectionne
-  // Passe a VideoTimeline pour afficher le marqueur actuel en gras
-  const [indexActuel, setIndexActuel] = useState<number>(-1);
+  // indexActuel vient de RoomPage - plus d etat local ici
+  // Cela garantit que tous les users voient le meme marqueur en gras
 
-  // Hook Socket.io - gere la connexion et les evenements de sync
-// FLOW FATMA DETAILLE:
-// 1) clic marqueur => emitSeek
-// 2) etatSync BUFFERING => overlay + seekTo(dernierSeekForce)
-// 3) player pret => emitReady
-// 4) serveur all_ready => PLAYING
-  // TODO NADJIB : verifier que useSync correspond a ta configuration gateway
-  // TODO ZINEB : verifier que les evenements force_seek et all_ready sont bien emis par ton gateway
   const { etatSync, dernierSeekForce, emitSeek, emitReady } = useSync(roomId, syncSocket);
 
-  // Quand etatSync passe en BUFFERING suite a un force_seek du serveur
-  // on applique le seek sur le player YouTube
   useEffect(() => {
     if (etatSync === "BUFFERING" && dernierSeekForce !== null && playerRef.current) {
       console.log("[PLAYER] apply sync seek", { dernierSeekForce, etatSync });
@@ -87,9 +63,6 @@ export default function VideoPlayer({
     }
   }, [etatSync, dernierSeekForce]);
 
-  // Synchro avec la position recue depuis RoomPage
-  // Quand RoomPage met a jour currentTime via socket playback-updated
-  // on seek le player si l ecart est trop grand (> 2s)
   useEffect(() => {
     if (playerRef.current && duree > 0) {
       const diff = Math.abs(playerRef.current.getCurrentTime() - currentTime);
@@ -99,19 +72,13 @@ export default function VideoPlayer({
     }
   }, [currentTime, duree]);
 
-  // Appele par VideoTimeline quand l utilisateur clique sur un marqueur
-  // emitSeek pilote la synchro UI; l emission serveur est geree par RoomPage.onSeek
+  // Clic sur un marqueur dans la timeline
+  // indexActuel vient de RoomPage donc pas besoin de setter ici
   const handleClicMarqueur = (marqueur: Marqueur, index: number) => {
-    setIndexActuel(index);
-    // Liaison backend: RoomPage emet deja "seek"; ici on evite les doublons et on garde l etat sync coherent
     emitSeek(marqueur.timecode);
-    // On notifie aussi RoomPage pour garder la position synchronisee
     onSeek(marqueur.timecode);
   };
 
-  // Appele par VideoTimeline quand l utilisateur clique sur "Poser un marqueur"
-  // On capture le currentTime precis au moment du clic
-  // Valide en Etape 1 des tests
   const handlePoserMarqueur = () => {
     if (playerRef.current && onNouveauMarqueur) {
       const timecode = playerRef.current.getCurrentTime() ?? 0;
@@ -119,53 +86,38 @@ export default function VideoPlayer({
     }
   };
 
-  // Construction de l URL YouTube complete a partir de l ID
   const url = `https://www.youtube.com/watch?v=${youtubeId}`;
 
   return (
     <div>
-
-      {/* -------------------------------------------------- */}
-      {/* ZONE PLAYER - le player YouTube sans controles natifs */}
-      {/* -------------------------------------------------- */}
       {mounted && (
         <div style={{ position: "relative" }}>
           <ReactPlayer
             ref={playerRef}
             url={url}
-            // controls=false pour cacher les controles natifs YouTube
-            // On utilise VideoTimeline et les boutons de RoomPage pour la navigation
             controls={false}
             width="100%"
             height="400px"
-            // playing pilote par isPlaying venant de RoomPage
             playing={isPlaying}
-            // Se declenche quand le player est pret
             onReady={() => {
               const d = playerRef.current?.getDuration() ?? 0;
               setDuree(d);
               onDuration(d);
             }}
-            // Se declenche periodiquement pendant la lecture
             onProgress={(state: any) => {
               onProgress(state.playedSeconds);
             }}
-            // Se declenche quand l utilisateur clique sur play
             onPlay={() => {
-              // Si on est en BUFFERING c est qu on vient de finir un seek
-              // On signale au serveur que ce client est pret
-              // TODO ZINEB : emitReady envoie l evenement "ready" a ton gateway NestJS
               if (etatSync === "BUFFERING") {
                 emitReady();
               }
               onPlay();
             }}
-            onPause={onPause}
+            // Pas de onPause ici pour eviter le double emit avec le bouton RoomPage
+            onPause={() => {}}
             onError={(e: any) => console.error("Erreur player:", e)}
           />
 
-          {/* Overlay BUFFERING - affiche pendant l attente des autres users */}
-          {/* Valide en Etape 5 des tests */}
           {etatSync === "BUFFERING" && (
             <div style={{
               position: "absolute",
@@ -183,11 +135,6 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* -------------------------------------------------- */}
-      {/* SAFE ZONE - VideoTimeline est SOUS l iframe YouTube */}
-      {/* Evite le click-jacking YouTube */}
-      {/* TODO ZINEB : RT-03 - cette zone safe evite le blocage des overlays */}
-      {/* -------------------------------------------------- */}
       <VideoTimeline
         duree={duree}
         marqueurs={marqueurs}
@@ -195,7 +142,6 @@ export default function VideoPlayer({
         onClicMarqueur={handleClicMarqueur}
         onPoserMarqueur={handlePoserMarqueur}
       />
-
     </div>
   );
 }
