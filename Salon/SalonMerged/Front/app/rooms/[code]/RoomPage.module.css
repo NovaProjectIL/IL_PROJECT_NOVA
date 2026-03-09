@@ -1,5 +1,5 @@
 /* Variables thème Salon Luxe */
-:root {
+:global(:root) {
   --salon-primary: #1a1a2e;
   --salon-secondary: #16213e;
   --salon-accent: #0f3460;
