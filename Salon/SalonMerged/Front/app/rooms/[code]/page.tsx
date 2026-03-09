@@ -10,16 +10,6 @@ import VideoPlayer from '@/app/components/VideoPlayer';
 import { roomsApi, playlistApi, marqueursApi } from '@/app/lib/api';
 import { Marqueur } from '@/app/types/types';
 
-import {
-  SkipBack,
-  Play,
-  Pause,
-  SkipForward,
-  Film,
-  LogOut,
-  Plus
-} from 'lucide-react';
-
 // ============================================================================
 // LOGS HELPERS
 // Prefixes pour filtrer facilement dans la console du navigateur
@@ -490,7 +480,6 @@ export default function RoomPage() {
               boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)'
             }}
           >
-            <LogOut size={16} />
             Quitter
           </button>
         </div>
@@ -510,11 +499,9 @@ export default function RoomPage() {
           onKeyPress={(e) => e.key === 'Enter' && handleSearch(true)}
         />
         <button onClick={() => handleSearch(true)} className={styles.searchButton}>
-          <Play size={16} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} />
           Jouer
         </button>
         <button onClick={() => handleSearch(false)} className={`${styles.searchButton} ${styles.addButton}`}>
-          <Plus size={16} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} />
           Playlist
         </button>
       </div>
@@ -541,7 +528,6 @@ export default function RoomPage() {
       {currentVideo && (
         <div className={styles.videoSection}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Film size={24} />
             {currentVideo.title}
           </h3>
           <p>Chaine: {currentVideo.channelTitle || currentVideo.author}</p>
@@ -589,7 +575,6 @@ export default function RoomPage() {
                 className={`${styles.controlButton} ${styles.previousButton}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                <SkipBack size={18} />
                 Precedent
               </button>
               <button
@@ -597,15 +582,13 @@ export default function RoomPage() {
                 className={`${styles.controlButton} ${styles.playButton}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                <Play size={18} />
-                Play
+                Lecture
               </button>
               <button
                 onClick={handlePause}
                 className={`${styles.controlButton} ${styles.pauseButton}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                <Pause size={18} />
                 Pause
               </button>
               <button
@@ -614,7 +597,6 @@ export default function RoomPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
                 Suivant
-                <SkipForward size={18} />
               </button>
             </div>
 
@@ -624,11 +606,11 @@ export default function RoomPage() {
                   <strong>Etat:</strong>
                   {isPlaying ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Play size={14} /> En lecture
+                      En lecture
                     </span>
                   ) : (
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Pause size={14} /> En pause
+                      En pause
                     </span>
                   )}
                 </span>

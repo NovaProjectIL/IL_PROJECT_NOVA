@@ -61,25 +61,27 @@ export default function VideoPlayer({
   // Passee a VideoTimeline pour calculer les positions des epingles
   const [duree, setDuree] = useState<number>(0);
 
-  // Timecode cible lors d un seek force par le serveur Socket.io
-  const [seekCible, setSeekCible] = useState<number | null>(null);
-
   // Index du marqueur actuellement selectionne
   // Passe a VideoTimeline pour afficher le marqueur actuel en gras
   const [indexActuel, setIndexActuel] = useState<number>(-1);
 
   // Hook Socket.io - gere la connexion et les evenements de sync
+// FLOW FATMA DETAILLE:
+// 1) clic marqueur => emitSeek
+// 2) etatSync BUFFERING => overlay + seekTo(dernierSeekForce)
+// 3) player pret => emitReady
+// 4) serveur all_ready => PLAYING
   // TODO NADJIB : verifier que useSync correspond a ta configuration gateway
   // TODO ZINEB : verifier que les evenements force_seek et all_ready sont bien emis par ton gateway
-  const { etatSync, emitSeek, emitReady } = useSync(roomId);
+  const { etatSync, dernierSeekForce, emitSeek, emitReady } = useSync(roomId);
 
   // Quand etatSync passe en BUFFERING suite a un force_seek du serveur
   // on applique le seek sur le player YouTube
   useEffect(() => {
-    if (etatSync === "BUFFERING" && seekCible !== null && playerRef.current) {
-      playerRef.current.seekTo(seekCible, "seconds");
+    if (etatSync === "BUFFERING" && dernierSeekForce !== null && playerRef.current) {
+      playerRef.current.seekTo(dernierSeekForce, "seconds");
     }
-  }, [etatSync, seekCible]);
+  }, [etatSync, dernierSeekForce]);
 
   // Synchro avec la position recue depuis RoomPage
   // Quand RoomPage met a jour currentTime via socket playback-updated
@@ -98,7 +100,7 @@ export default function VideoPlayer({
   // TODO ZINEB : emitSeek envoie request_seek a ton gateway NestJS
   const handleClicMarqueur = (marqueur: Marqueur, index: number) => {
     setIndexActuel(index);
-    setSeekCible(marqueur.timecode);
+    // Liaison Zineb: emitSeek envoie request_seek; le serveur doit renvoyer force_seek a toute la room
     emitSeek(marqueur.timecode);
     // On notifie aussi RoomPage pour garder la position synchronisee
     onSeek(marqueur.timecode);
