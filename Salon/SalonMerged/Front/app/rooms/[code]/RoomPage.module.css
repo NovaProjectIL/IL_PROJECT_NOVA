@@ -1,5 +1,6 @@
 /* Variables thème Salon Luxe */
-:global(:root) {
+
+.container {
   --salon-primary: #1a1a2e;
   --salon-secondary: #16213e;
   --salon-accent: #0f3460;
@@ -13,9 +14,10 @@
   --salon-shadow: rgba(0, 0, 0, 0.25);
   --salon-shadow-light: rgba(0, 0, 0, 0.15);
   --salon-glow: rgba(232, 185, 35, 0.3);
-}
+  --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.15);
+  --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.25);
 
-.container {
   padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
@@ -475,28 +477,6 @@
     padding: 4px 8px;
   }
 }
-/* ========================================
-   VARIABLES
-   ======================================== */
-:root {
-  --salon-primary: #1a1a2e;
-  --salon-secondary: #16213e;
-  --salon-accent: #0f3460;
-  --salon-gold: #e8b923;
-  --salon-gold-light: #f4c430;
-  --salon-gold-dark: #d4a017;
-  --salon-neutral: #e6e6e6;
-  --salon-neutral-dark: #b8b8b8;
-  --salon-glass: rgba(255, 255, 255, 0.08);
-  --salon-glass-border: rgba(255, 255, 255, 0.15);
-  --salon-shadow: rgba(0, 0, 0, 0.25);
-  --salon-shadow-light: rgba(0, 0, 0, 0.15);
-  --salon-glow: rgba(232, 185, 35, 0.3);
-  --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
-  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.15);
-  --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.25);
-}
-
 /* ========================================
    CONTAINER PRINCIPAL
    ======================================== */
