@@ -1,104 +1,117 @@
 // useSync.ts
-// Hook Socket.io pour la synchronisation video
-// A placer dans : Front/app/hooks/useSync.ts
-// Ce hook gere la connexion Socket.io et les evenements de synchronisation
+// Hook Socket.io pour la synchronisation video (partie Fatma)
 
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { EtatSync, EvenementForceSeek, EvenementReady, EvenementSeek } from "../types/types";
-
-// TODO NADJIB : verifier que ces noms d evenements correspondent
-// exactement a ce que ton gateway NestJS ecoute et emet
-const EVENTS = {
-  // Evenements emis par le client vers le serveur
-  REQUEST_SEEK: "request_seek",
-  READY: "ready",
-  // Evenements recus du serveur par le client
-  FORCE_SEEK: "force_seek",
-  ALL_READY: "all_ready",
-};
-
-// TODO NADJIB : verifier que ce namespace correspond a celui
-// que tu as configure dans ton gateway NestJS pour la synchro video
-// Exemple : @WebSocketGateway({ namespace: '/sync' })
-const NAMESPACE_SYNC = "/sync";
+import { EtatSync } from "../types/types";
 
 type UseSync = {
-  // Etat actuel de synchronisation
   etatSync: EtatSync;
-  // Fonction pour emettre un seek vers le serveur
+  dernierSeekForce: number | null;
   emitSeek: (timecode: number) => void;
-  // Fonction pour signaler au serveur que ce client est pret apres buffering
   emitReady: () => void;
 };
 
-export const useSync = (roomId: string): UseSync => {
-
-  // Etat de synchronisation actuel
+// Hook adapte au backend actuel:
+// - rooms.gateway ecoute "seek" / "play" / "pause" sur namespace principal
+// - il emet "playback-updated" avec action = seek|play|pause
+export const useSync = (
+  roomCode: string,
+  externalSocket?: Socket | null,
+): UseSync => {
   const [etatSync, setEtatSync] = useState<EtatSync>("IDLE");
-
-  // Reference vers le socket pour eviter les re-renders
-  const socketRef = useRef<Socket | null>(null);
+  const [dernierSeekForce, setDernierSeekForce] = useState<number | null>(null);
+  const localSocketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    // TODO NADJIB : verifier que l URL correspond a ton serveur NestJS
-    // Elle est definie dans les variables d environnement du projet
-    const socketUrl = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:3001";
+    const hasExternalSocket = !!externalSocket;
 
-    // Connexion au namespace de synchronisation
-    socketRef.current = io(`${socketUrl}${NAMESPACE_SYNC}`, {
-      // On n envoie la room qu apres connexion via un evenement join
-      autoConnect: true,
-    });
+    if (!hasExternalSocket) {
+      const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      localSocketRef.current = io(socketUrl, { autoConnect: true });
+      console.log("[SYNC] Socket local cree (fallback)", socketUrl);
+    }
 
-    const socket = socketRef.current;
+    const activeSocket = externalSocket ?? localSocketRef.current;
+    if (!activeSocket) return;
 
-    // Quand la connexion est etablie on rejoint la room
-    socket.on("connect", () => {
-      // TODO NADJIB : verifier que l evenement "join_room" correspond
-      // a celui que ton gateway NestJS ecoute pour ajouter un client a une room
-      socket.emit("join_room", { roomId });
-    });
+    const onPlaybackUpdated = (data: any) => {
+      const action = data?.action;
+      const positionSec = Number(data?.playback?.positionSec ?? 0);
+      console.log("[SYNC] playback-updated recu", { action, positionSec, data });
 
-    // Ecoute l evenement force_seek envoye par le serveur de Zineb
-    // Quand cet evenement arrive, on passe en BUFFERING
-    socket.on(EVENTS.FORCE_SEEK, (data: EvenementForceSeek) => {
-      setEtatSync("BUFFERING");
-      // TODO FATMA : cet evenement declenche le seek dans VideoPlayer.tsx
-      // Le composant VideoPlayer ecoute cet evenement via ce hook
-    });
+      if (action === "seek") {
+        // Liaison avec Zineb: pas de force_seek explicite dans le gateway actuel,
+        // on utilise playback-updated/seek comme signal serveur pour seek global.
+        setDernierSeekForce(positionSec);
+        setEtatSync("BUFFERING");
 
-    // Ecoute l evenement all_ready envoye par le serveur de Zineb
-    // Quand tous les clients sont prets, on passe en PLAYING
-    socket.on(EVENTS.ALL_READY, () => {
-      setEtatSync("PLAYING");
-    });
-
-    // Nettoyage : deconnexion quand le composant est demonte
-    return () => {
-      socket.disconnect();
+        // TODO ZINEB/NADJIB: remplacer ce timeout par un vrai cycle ready/all_ready
+        // si ces evenements sont exposes dans le gateway principal.
+        window.setTimeout(() => {
+          const status = data?.playback?.status;
+          setEtatSync(status === "PLAYING" ? "PLAYING" : "PAUSED");
+        }, 500);
+      } else if (action === "play") {
+        setEtatSync("PLAYING");
+      } else if (action === "pause") {
+        setEtatSync("PAUSED");
+      }
     };
-  }, [roomId]);
 
-  // Emet un evenement request_seek vers le serveur
-  // Appele quand l utilisateur clique sur une epingle de la timeline
-  const emitSeek = (timecode: number) => {
-    if (socketRef.current) {
-      const payload: EvenementSeek = { timecode, roomId };
-      socketRef.current.emit(EVENTS.REQUEST_SEEK, payload);
-      // On passe immediatement en BUFFERING en attendant le force_seek du serveur
+    // Compatibilite future si Zineb expose force_seek/all_ready plus tard
+    const onForceSeek = (data: any) => {
+      console.log("[SYNC] force_seek recu (compat)", data);
+      setDernierSeekForce(Number(data?.timecode ?? 0));
       setEtatSync("BUFFERING");
+    };
+
+    const onAllReady = () => {
+      console.log("[SYNC] all_ready recu (compat)");
+      setEtatSync("PLAYING");
+    };
+
+    activeSocket.on("playback-updated", onPlaybackUpdated);
+    activeSocket.on("force_seek", onForceSeek);
+    activeSocket.on("all_ready", onAllReady);
+
+    return () => {
+      activeSocket.off("playback-updated", onPlaybackUpdated);
+      activeSocket.off("force_seek", onForceSeek);
+      activeSocket.off("all_ready", onAllReady);
+      if (!hasExternalSocket && localSocketRef.current) {
+        localSocketRef.current.disconnect();
+      }
+    };
+  }, [externalSocket, roomCode]);
+
+  const emitSeek = (timecode: number) => {
+    const activeSocket = externalSocket ?? localSocketRef.current;
+    if (!activeSocket) {
+      console.error("[SYNC] emitSeek ignore: socket indisponible");
+      return;
     }
+
+    console.log("[SYNC] emit seek", { roomCode, timecode });
+    activeSocket.emit("seek", {
+      codeRoom: roomCode,
+      positionSec: timecode,
+      wasPlaying: true,
+    });
+
+    setDernierSeekForce(timecode);
+    setEtatSync("BUFFERING");
   };
 
-  // Emet un evenement ready vers le serveur
-  // Appele quand le player YouTube a fini de bufferiser apres un seek
   const emitReady = () => {
-    if (socketRef.current) {
-      const payload: EvenementReady = { roomId };
-      socketRef.current.emit(EVENTS.READY, payload);
-    }
+    const activeSocket = externalSocket ?? localSocketRef.current;
+    if (!activeSocket) return;
+
+    // TODO ZINEB: gateway principal n expose pas ready actuellement.
+    // On conserve l emit pour compatibilite si le protocole ready/all_ready revient.
+    console.log("[SYNC] emit ready (compat)", { roomCode });
+    activeSocket.emit("ready", { roomCode });
   };
 
-  return { etatSync, emitSeek, emitReady };
+  return { etatSync, dernierSeekForce, emitSeek, emitReady };
 };

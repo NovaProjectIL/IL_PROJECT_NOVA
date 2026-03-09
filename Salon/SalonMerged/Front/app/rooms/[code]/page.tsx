@@ -10,16 +10,6 @@ import VideoPlayer from '@/app/components/VideoPlayer';
 import { roomsApi, playlistApi, marqueursApi } from '@/app/lib/api';
 import { Marqueur } from '@/app/types/types';
 
-import {
-  SkipBack,
-  Play,
-  Pause,
-  SkipForward,
-  Film,
-  LogOut,
-  Plus
-} from 'lucide-react';
-
 // ============================================================================
 // LOGS HELPERS
 // Prefixes pour filtrer facilement dans la console du navigateur
@@ -132,48 +122,79 @@ export default function RoomPage() {
   const [position, setPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [roomInternalId, setRoomInternalId] = useState<number | null>(null);
   const socketRef = useRef<any>(null);
   const isSyncingRef = useRef(false);
 
   // === NOUVEAUX ETATS : MARQUEURS ===
-  // TODO WAFA : ces marqueurs seront charges depuis ton API GET /markers?room_id=X
   const [marqueurs, setMarqueurs] = useState<Marqueur[]>([]);
 
+  const normaliserMarqueur = useCallback((raw: any): Marqueur => {
+    return {
+      id: String(raw.id),
+      timecode: Number(raw.timeSec ?? raw.timecode ?? 0),
+      label: raw.label ?? 'Marqueur',
+      categorie: raw.category ?? raw.categorie ?? 'COMMENT',
+      roomId: String(raw.room?.id ?? roomInternalId ?? ''),
+      auteurId: String(raw.createdBy?.id ?? raw.auteurId ?? ''),
+      auteurNom: raw.createdBy?.name ?? raw.auteurNom ?? 'Utilisateur',
+    } as Marqueur;
+  }, [roomInternalId]);
+
   // === CHARGEMENT DES MARQUEURS ===
-  const chargerMarqueurs = useCallback(async () => {
-    log.marqueurs('Chargement des marqueurs pour la room', code);
+  const chargerMarqueurs = useCallback(async (roomIdParam?: number | null) => {
+    const idToUse = roomIdParam ?? roomInternalId;
+    if (!idToUse) {
+      log.marqueurs('Skip chargement marqueurs: roomInternalId indisponible');
+      return;
+    }
+
+    log.marqueurs('Chargement des marqueurs pour roomId', idToUse);
     try {
-      // TODO WAFA : verifier que cet endpoint correspond a ton controller NestJS
-      const response = await marqueursApi.getMarqueurs(code);
-      log.marqueurs(`${response.data.length} marqueurs charges`, response.data);
-      setMarqueurs(response.data);
+      const response = await marqueursApi.getMarqueurs(idToUse);
+      const liste = Array.isArray(response.data) ? response.data.map(normaliserMarqueur) : [];
+      log.marqueurs(`${liste.length} marqueurs charges (mapping front ok)`, liste);
+      setMarqueurs(liste);
     } catch (err) {
-      // Si l API n est pas encore prete on reste avec un tableau vide
-      log.marqueurs('API marqueurs pas encore disponible - tableau vide (TODO WAFA)');
+      log.error('Erreur chargement marqueurs', err);
       setMarqueurs([]);
     }
-  }, [code]);
+  }, [roomInternalId, normaliserMarqueur]);
 
   // === CREATION D UN NOUVEAU MARQUEUR ===
   const handleNouveauMarqueur = async (timecode: number) => {
     log.marqueurs(`Nouveau marqueur demande a ${timecode}s`);
+
+    if (!roomInternalId) {
+      log.error('Creation marqueur impossible: roomInternalId manquant');
+      return;
+    }
+
+    if (!currentVideo?.youtubeId) {
+      log.error('Creation marqueur impossible: youtubeId manquant');
+      return;
+    }
+
+    if (!Number.isFinite(memberId)) {
+      log.error('Creation marqueur impossible: memberId invalide', memberId);
+      return;
+    }
+
     try {
-      // TODO WAFA : verifier que ce body correspond a ce que ton controller NestJS attend
-      const response = await marqueursApi.creerMarqueur({
-        roomId: code,
-        timecode,
+      const response = await marqueursApi.creerMarqueur(roomInternalId, {
+        timeSec: timecode,
         label: `Marqueur a ${Math.floor(timecode)}s`,
-        categorie: "commentaire",
-        auteurId: String(memberId),
+        category: 'COMMENT',
+        videoId: currentVideo.youtubeId,
+        createdById: memberId,
       });
-      const nouveauMarqueur: Marqueur = response.data;
+
+      const nouveauMarqueur = normaliserMarqueur(response.data);
       log.marqueurs('Marqueur cree avec succes', nouveauMarqueur);
       setMarqueurs((prev) => [...prev, nouveauMarqueur]);
 
-      // TODO NADJIB : emettre un evenement Socket.io pour notifier les autres users
-      // socketRef.current?.emit('nouveau_marqueur', nouveauMarqueur);
-      log.socket('TODO NADJIB : emettre nouveau_marqueur via Socket.io', nouveauMarqueur);
-
+      // TODO NADJIB: si vous ajoutez un event WS marker-created, on le branchera ici.
+      // socketRef.current?.emit('marker-created', { roomId: roomInternalId, marker: nouveauMarqueur });
     } catch (err) {
       log.error('Erreur creation marqueur', err);
     }
@@ -206,6 +227,7 @@ export default function RoomPage() {
         return;
       }
 
+      setRoomInternalId(stateData.roomId ?? null);
       setPlaylist(stateData.playlist);
       setMembers(stateData.members || []);
       log.room(`${stateData.members?.length ?? 0} membres dans la room`);
@@ -219,6 +241,8 @@ export default function RoomPage() {
       } else {
         log.room('Aucune video en cours de lecture');
       }
+
+      return stateData;
     } catch (err) {
       log.error('Erreur chargement salon', err);
     }
@@ -227,8 +251,8 @@ export default function RoomPage() {
   useEffect(() => {
     log.room(`Initialisation de la room : ${code} - memberId : ${memberId}`);
     const initialLoad = async () => {
-      await loadRoomData();
-      await chargerMarqueurs();
+      const stateData = await loadRoomData();
+      await chargerMarqueurs(stateData?.roomId ?? null);
       setLoading(false);
       log.room('Chargement initial termine');
     };
@@ -490,7 +514,6 @@ export default function RoomPage() {
               boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)'
             }}
           >
-            <LogOut size={16} />
             Quitter
           </button>
         </div>
@@ -510,11 +533,9 @@ export default function RoomPage() {
           onKeyPress={(e) => e.key === 'Enter' && handleSearch(true)}
         />
         <button onClick={() => handleSearch(true)} className={styles.searchButton}>
-          <Play size={16} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} />
           Jouer
         </button>
         <button onClick={() => handleSearch(false)} className={`${styles.searchButton} ${styles.addButton}`}>
-          <Plus size={16} style={{ marginRight: '6px', display: 'inline-block', verticalAlign: 'middle' }} />
           Playlist
         </button>
       </div>
@@ -541,7 +562,6 @@ export default function RoomPage() {
       {currentVideo && (
         <div className={styles.videoSection}>
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Film size={24} />
             {currentVideo.title}
           </h3>
           <p>Chaine: {currentVideo.channelTitle || currentVideo.author}</p>
@@ -552,6 +572,7 @@ export default function RoomPage() {
               isPlaying={isPlaying}
               currentTime={position}
               roomId={code}
+              syncSocket={socketRef.current}
               marqueurs={marqueurs}
               onProgress={(time) => {
                 // Log seulement toutes les 5s pour ne pas spammer la console
@@ -589,7 +610,6 @@ export default function RoomPage() {
                 className={`${styles.controlButton} ${styles.previousButton}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                <SkipBack size={18} />
                 Precedent
               </button>
               <button
@@ -597,15 +617,13 @@ export default function RoomPage() {
                 className={`${styles.controlButton} ${styles.playButton}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                <Play size={18} />
-                Play
+                Lecture
               </button>
               <button
                 onClick={handlePause}
                 className={`${styles.controlButton} ${styles.pauseButton}`}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
-                <Pause size={18} />
                 Pause
               </button>
               <button
@@ -614,7 +632,6 @@ export default function RoomPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}
               >
                 Suivant
-                <SkipForward size={18} />
               </button>
             </div>
 
@@ -624,11 +641,11 @@ export default function RoomPage() {
                   <strong>Etat:</strong>
                   {isPlaying ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Play size={14} /> En lecture
+                      En lecture
                     </span>
                   ) : (
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Pause size={14} /> En pause
+                      En pause
                     </span>
                   )}
                 </span>

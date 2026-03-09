@@ -138,36 +138,38 @@ export const playlistApi = {
 };
 
 // ==================== MARQUEURS API ====================
-// TODO WAFA : verifier que ces endpoints correspondent exactement
-// a ce que ton controller NestJS expose
+// Aligne sur le backend de Wafa:
+// Controller('rooms/:roomId/markers')
 export const marqueursApi = {
+  getMarqueurs: (roomId: number) =>
+    api.get(`/rooms/${roomId}/markers`),
 
-  // Recupere tous les marqueurs d une room
-  // TODO WAFA : verifier l endpoint GET /markers et le nom du param
-  getMarqueurs: (roomId: string) =>
-    api.get('/markers', { params: { room_id: roomId } }),
+  creerMarqueur: (
+    roomId: number,
+    data: {
+      timeSec: number;
+      label: string;
+      content?: string;
+      category?: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
+      videoId: string;
+      createdById: number;
+    },
+  ) => api.post(`/rooms/${roomId}/markers`, data),
 
-  // Cree un nouveau marqueur
-  // TODO WAFA : verifier l endpoint POST /markers et le body attendu
-  creerMarqueur: (data: {
-    roomId: string;
-    timecode: number;
-    label: string;
-    categorie: string;
-    auteurId: string;
-  }) => api.post('/markers', data),
+  modifierMarqueur: (
+    roomId: number,
+    markerId: number,
+    data: {
+      version: number;
+      timeSec?: number;
+      label?: string;
+      content?: string;
+      category?: 'ERROR' | 'COMMENT' | 'HIGHLIGHT' | 'QUESTION';
+    },
+  ) => api.patch(`/rooms/${roomId}/markers/${markerId}`, data),
 
-  // Met a jour un marqueur existant
-  // TODO WAFA : verifier l endpoint PATCH /markers/:id
-  modifierMarqueur: (id: string, data: {
-    label?: string;
-    categorie?: string;
-  }) => api.patch(`/markers/${id}`, data),
-
-  // Supprime un marqueur
-  // TODO WAFA : verifier l endpoint DELETE /markers/:id
-  supprimerMarqueur: (id: string) =>
-    api.delete(`/markers/${id}`),
+  supprimerMarqueur: (roomId: number, markerId: number) =>
+    api.delete(`/rooms/${roomId}/markers/${markerId}`),
 };
 
 export default api;
