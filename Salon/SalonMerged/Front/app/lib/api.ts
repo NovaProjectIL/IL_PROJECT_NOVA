@@ -7,7 +7,6 @@ const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
-    // ✅ FIX PRINCIPAL : Contourner l'avertissement ngrok
     'ngrok-skip-browser-warning': 'true',
   },
   timeout: 10000,
@@ -17,31 +16,28 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('❌ API Error:', {
+    console.error('API Error:', {
       url: error.config?.url,
       method: error.config?.method,
       status: error.response?.status,
       message: error.message,
-      data: error.response?.data, // ✅ Afficher les données d'erreur
+      data: error.response?.data,
     });
     return Promise.reject(error);
   }
 );
 
-// ✅ FIX BONUS : Intercepteur pour vérifier les réponses HTML
+// Intercepteur pour verifier les reponses HTML
 api.interceptors.response.use(
   (response) => {
-    // Vérifier si on a reçu du HTML au lieu de JSON
     if (typeof response.data === 'string' && response.data.startsWith('<!DOCTYPE')) {
-      console.error('⚠️ Réponse HTML détectée au lieu de JSON !');
-      console.error('URL:', response.config.url);
-      console.error('Headers:', response.config.headers);
-      throw new Error('Réponse HTML reçue - vérifier la configuration ngrok');
+      console.error('Reponse HTML detectee au lieu de JSON !');
+      throw new Error('Reponse HTML recue - verifier la configuration ngrok');
     }
     return response;
   },
   (error) => {
-    console.error('❌ API Error:', {
+    console.error('API Error:', {
       url: error.config?.url,
       method: error.config?.method,
       status: error.response?.status,
@@ -53,33 +49,30 @@ api.interceptors.response.use(
 
 // ==================== ROOMS API ====================
 export const roomsApi = {
-  // === Salles ===
-  createRoom: (displayName: string) => 
-   api.post('/rooms', { displayName }),
-  
-  joinRoom: (displayName: string, codeRoom: string) => 
+  createRoom: (displayName: string) =>
+    api.post('/rooms', { displayName }),
+
+  joinRoom: (displayName: string, codeRoom: string) =>
     api.post('/rooms/join', { displayName, codeRoom }),
-  
+
   inviteRoom: (codeRoom: string) =>
     api.post('/rooms/invite', { codeRoom }),
-  
-  leaveRoom: (memberId: number, codeRoom: string) => 
+
+  leaveRoom: (memberId: number, codeRoom: string) =>
     api.post('/rooms/leave', { memberId, codeRoom }),
-  
+
   endRoom: (memberId: number, codeRoom: string) =>
     api.post('/rooms/End', { memberId, codeRoom }),
-  
-  // === Playback (pour WebSocket) ===
-  play: (codeRoom: string, positionSec?: number) => 
+
+  play: (codeRoom: string, positionSec?: number) =>
     api.post('/rooms/play', { codeRoom, positionSec }),
-  
-  pause: (codeRoom: string, positionSec?: number) => 
+
+  pause: (codeRoom: string, positionSec?: number) =>
     api.post('/rooms/pause', { codeRoom, positionSec }),
-  
+
   seek: (codeRoom: string, positionSec: number) =>
     api.post('/rooms/seek', { codeRoom, positionSec }),
-  
-  // === Vidéo directe ===
+
   playDirectVideo: (data: {
     codeRoom: string;
     memberId: number;
@@ -89,33 +82,30 @@ export const roomsApi = {
     youtubeVDurationSec: number;
     youtubeVThumbnailUrl: string;
   }) => api.post('/rooms/play-direct', data),
-  
+
   videoEnded: (codeRoom: string) =>
     api.post('/rooms/video-ended', { codeRoom }),
-  
-  // === GET Endpoints ===
+
   getRoomMembers: (codeRoom: string) =>
     api.get('/rooms/members', { params: { codeRoom } }),
-  
-  getRoomState: (codeRoom: string) => 
+
+  getRoomState: (codeRoom: string) =>
     api.get('/rooms/state', { params: { codeRoom } }),
-  
+
   getPlayback: (codeRoom: string) =>
     api.get('/rooms/playback', { params: { codeRoom } }),
-  
+
   getYouTubeInfo: (videoId: string) =>
     api.get('/rooms/youtube-info', { params: { videoId } }),
-  
+
   healthCheck: () => api.get('/rooms/health'),
 };
 
 // ==================== PLAYLIST API ====================
 export const playlistApi = {
-  // === GET ===
-  getPlaylist: (codeRoom: string) => 
+  getPlaylist: (codeRoom: string) =>
     api.get('/playlist', { params: { codeRoom } }),
-  
-  // === POST ===
+
   addToPlaylist: (data: {
     memberId: number;
     codeRoom: string;
@@ -125,13 +115,13 @@ export const playlistApi = {
     youtubeVDurationSec: number;
     youtubeVThumbnailUrl: string;
   }) => api.post('/playlist/add', data),
-  
-  deleteFromPlaylist: (memberId: number, codeRoom: string, entryId: number) => 
+
+  deleteFromPlaylist: (memberId: number, codeRoom: string, entryId: number) =>
     api.post('/playlist/delete', { memberId, codeRoom, entryId }),
-  
+
   changeIndex: (memberId: number, codeRoom: string, newIndex: number) =>
     api.post('/playlist/change-index', { memberId, codeRoom, newIndex }),
-  
+
   reorderPlaylist: (data: {
     memberId: number;
     codeRoom: string;
@@ -139,12 +129,45 @@ export const playlistApi = {
     oldPosition: number;
     newPosition: number;
   }) => api.post('/playlist/reorder', data),
-  
+
   nextVideo: (codeRoom: string) =>
     api.post('/playlist/next', { codeRoom }),
-  
+
   previousVideo: (codeRoom: string) =>
     api.post('/playlist/previous', { codeRoom }),
+};
+
+// ==================== MARQUEURS API ====================
+// TODO WAFA : verifier que ces endpoints correspondent exactement
+// a ce que ton controller NestJS expose
+export const marqueursApi = {
+
+  // Recupere tous les marqueurs d une room
+  // TODO WAFA : verifier l endpoint GET /markers et le nom du param
+  getMarqueurs: (roomId: string) =>
+    api.get('/markers', { params: { room_id: roomId } }),
+
+  // Cree un nouveau marqueur
+  // TODO WAFA : verifier l endpoint POST /markers et le body attendu
+  creerMarqueur: (data: {
+    roomId: string;
+    timecode: number;
+    label: string;
+    categorie: string;
+    auteurId: string;
+  }) => api.post('/markers', data),
+
+  // Met a jour un marqueur existant
+  // TODO WAFA : verifier l endpoint PATCH /markers/:id
+  modifierMarqueur: (id: string, data: {
+    label?: string;
+    categorie?: string;
+  }) => api.patch(`/markers/${id}`, data),
+
+  // Supprime un marqueur
+  // TODO WAFA : verifier l endpoint DELETE /markers/:id
+  supprimerMarqueur: (id: string) =>
+    api.delete(`/markers/${id}`),
 };
 
 export default api;
