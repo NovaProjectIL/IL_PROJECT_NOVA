@@ -1,7 +1,7 @@
 // app/lib/socket.ts
 import { io, Socket } from 'socket.io-client';
 
-const WS_URL = 'https://vulgarly-unforcible-loura.ngrok-free.dev';
+const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -13,10 +13,6 @@ class SocketService {
     if (!this.socket) {
       this.socket = io(WS_URL, {
         transports: ['websocket', 'polling'],
-        // ✅ FIX : Ajouter le header pour ngrok
-        extraHeaders: {
-          'ngrok-skip-browser-warning': 'true',
-        },
         // ✅ Options de reconnexion robustes
         reconnection: true,
         reconnectionDelay: 1000,
