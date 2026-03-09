@@ -12,37 +12,30 @@ const api = axios.create({
   timeout: 10000,
 });
 
-// Intercepteur pour logging des erreurs
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.error('API Error:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      message: error.message,
-      data: error.response?.data,
-    });
-    return Promise.reject(error);
-  }
-);
-
-// Intercepteur pour verifier les reponses HTML
 api.interceptors.response.use(
   (response) => {
     if (typeof response.data === 'string' && response.data.startsWith('<!DOCTYPE')) {
-      console.error('Reponse HTML detectee au lieu de JSON !');
+      console.error('Reponse HTML detectee au lieu de JSON !', {
+        baseURL: API_URL,
+        url: response.config?.url,
+        method: response.config?.method,
+      });
       throw new Error('Reponse HTML recue - verifier la configuration ngrok');
     }
     return response;
   },
   (error) => {
-    console.error('API Error:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      message: error.message,
-    });
+    const shouldDebug = process.env.NEXT_PUBLIC_DEBUG_API === 'true';
+    if (shouldDebug) {
+      console.warn('API Error:', {
+        baseURL: API_URL,
+        url: error.config?.url,
+        method: error.config?.method,
+        status: error.response?.status,
+        message: error.message,
+        data: error.response?.data,
+      });
+    }
     return Promise.reject(error);
   }
 );

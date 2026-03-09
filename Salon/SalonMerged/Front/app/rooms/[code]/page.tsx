@@ -368,6 +368,9 @@ export default function RoomPage() {
     } catch (error: any) {
       log.error('Erreur handleNextVideo', error);
       if (error.response?.status === 409) alert('Vous etes deja a la derniere video');
+      if (error.response?.status === 404) {
+        alert('Endpoint /playlist/next introuvable. Verifiez NEXT_PUBLIC_API_URL et le backend.');
+      }
     }
   };
 
@@ -389,6 +392,9 @@ export default function RoomPage() {
     } catch (error: any) {
       log.error('Erreur handlePreviousVideo', error);
       if (error.response?.status === 409) alert('Vous etes deja a la premiere video');
+      if (error.response?.status === 404) {
+        alert('Endpoint /playlist/previous introuvable. Verifiez NEXT_PUBLIC_API_URL et le backend.');
+      }
     }
   };
 
