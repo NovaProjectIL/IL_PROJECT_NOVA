@@ -15,7 +15,7 @@ type VideoPlayerProps = {
   // ID YouTube de la video (ex: "dQw4w9WgXcQ")
   // Compatibilite avec l existant qui passe youtubeId et non url
   youtubeId: string;
-  // Etat de lecture pilote par la room
+  //Etat de lecture pilote par la room
   isPlaying: boolean;
   // Position courante en secondes pilotee par la room
   currentTime: number;
@@ -92,9 +92,17 @@ export default function VideoPlayer({
   // on seek le player si l ecart est trop grand (> 2s)
   useEffect(() => {
     if (playerRef.current && duree > 0) {
-      const diff = Math.abs(playerRef.current.getCurrentTime() - currentTime);
-      if (diff > 2) {
-        playerRef.current.seekTo(currentTime, "seconds");
+      try {
+        const currentPlayerTime = playerRef.current.getCurrentTime?.();
+        if (typeof currentPlayerTime !== 'number' || isNaN(currentPlayerTime)) {
+          return; // Player pas pret
+        }
+        const diff = Math.abs(currentPlayerTime - currentTime);
+        if (diff > 2) {
+          playerRef.current.seekTo(currentTime, "seconds");
+        }
+      } catch (e) {
+        // Player pas pret, on ignore
       }
     }
   }, [currentTime, duree]);
@@ -115,7 +123,7 @@ export default function VideoPlayer({
   // Valide en Etape 1 des tests
   const handlePoserMarqueur = () => {
     if (playerRef.current && onNouveauMarqueur) {
-      const timecode = playerRef.current.getCurrentTime() ?? 0;
+      const timecode = playerRef.current.getCurrentTime?.() ?? 0;
       onNouveauMarqueur(timecode);
     }
   };
