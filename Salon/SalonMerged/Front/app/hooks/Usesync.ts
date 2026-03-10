@@ -15,6 +15,8 @@ type UseSync = {
 // Hook adapte au backend actuel:
 // - rooms.gateway ecoute "seek" / "play" / "pause" sur namespace principal
 // - il emet "playback-updated" avec action = seek|play|pause
+// - Wait-for-Ready: gateway emet "force-seek" puis attend "client-ready" de tous
+//   avant emitting "all-ready" to resume
 export const useSync = (
   roomCode: string,
   externalSocket?: Socket | null,
@@ -33,7 +35,6 @@ export const useSync = (
       console.log("[SYNC] Socket local cree (fallback)", socketUrl);
 
       localSocketRef.current.on("connect", () => {
-        // Important fallback: rejoindre la room pour recevoir server.to(roomCode)
         localSocketRef.current?.emit("join-room", { codeRoom: roomCode, memberId: 0 });
         console.log("[SYNC] join-room emis (fallback)", { codeRoom: roomCode, memberId: 0 });
       });
@@ -48,15 +49,12 @@ export const useSync = (
       console.log("[SYNC] playback-updated recu", { action, positionSec, data });
 
       if (action === "seek") {
-        // Signal serveur de seek global
-        setDernierSeekForce(positionSec);
-        setEtatSync("BUFFERING");
-
-        // Le backend actuel n'envoie pas toujours status sur seek.
-        // On restaure l'etat precedent connu pour eviter de forcer PAUSED a tort.
-        window.setTimeout(() => {
-          setEtatSync(lastPlaybackStateRef.current);
-        }, 500);
+        // Seek is now handled by force-seek; keep this for backward compat
+        // but don't override if we're already in BUFFERING from force-seek
+        if (etatSync !== "BUFFERING") {
+          setDernierSeekForce(positionSec);
+          setEtatSync("BUFFERING");
+        }
       } else if (action === "play") {
         lastPlaybackStateRef.current = "PLAYING";
         setEtatSync("PLAYING");
@@ -66,27 +64,35 @@ export const useSync = (
       }
     };
 
-    // Compatibilite future si Zineb expose force_seek/all_ready plus tard
+    // Wait-for-Ready: server sends force-seek when someone seeks
+    // Client must seek player then emit "client-ready" when buffered
     const onForceSeek = (data: any) => {
-      console.log("[SYNC] force_seek recu (compat)", data);
-      setDernierSeekForce(Number(data?.timecode ?? 0));
+      const timecode = Number(data?.timecode ?? 0);
+      console.log("[SYNC] force-seek recu", { timecode, data });
+      setDernierSeekForce(timecode);
       setEtatSync("BUFFERING");
+      // Remember what state we should return to after all-ready
+      if (data?.status === "PLAYING") {
+        lastPlaybackStateRef.current = "PLAYING";
+      }
     };
 
-    const onAllReady = () => {
-      console.log("[SYNC] all_ready recu (compat)");
+    // Wait-for-Ready: all clients buffered, resume playback
+    const onAllReady = (data: any) => {
+      const positionSec = Number(data?.positionSec ?? 0);
+      console.log("[SYNC] all-ready recu - resuming at", positionSec);
       lastPlaybackStateRef.current = "PLAYING";
       setEtatSync("PLAYING");
     };
 
     activeSocket.on("playback-updated", onPlaybackUpdated);
-    activeSocket.on("force_seek", onForceSeek);
-    activeSocket.on("all_ready", onAllReady);
+    activeSocket.on("force-seek", onForceSeek);
+    activeSocket.on("all-ready", onAllReady);
 
     return () => {
       activeSocket.off("playback-updated", onPlaybackUpdated);
-      activeSocket.off("force_seek", onForceSeek);
-      activeSocket.off("all_ready", onAllReady);
+      activeSocket.off("force-seek", onForceSeek);
+      activeSocket.off("all-ready", onAllReady);
       if (!hasExternalSocket && localSocketRef.current) {
         localSocketRef.current.disconnect();
       }
@@ -100,9 +106,6 @@ export const useSync = (
       return;
     }
 
-    // Evite le doublon d'emission:
-    // - avec socket externe, RoomPage.onSeek emet deja "seek"
-    // - ici on ne fait que piloter l'UI sync
     if (!externalSocket) {
       console.log("[SYNC] emit seek (fallback local)", { roomCode, timecode });
       activeSocket.emit("seek", {
@@ -122,9 +125,8 @@ export const useSync = (
     const activeSocket = externalSocket ?? localSocketRef.current;
     if (!activeSocket) return;
 
-    // TODO ZINEB: gateway principal n expose pas ready actuellement.
-    console.log("[SYNC] emit ready (compat)", { roomCode });
-    activeSocket.emit("ready", { roomCode });
+    console.log("[SYNC] emit client-ready", { roomCode });
+    activeSocket.emit("client-ready", { codeRoom: roomCode });
   };
 
   return { etatSync, dernierSeekForce, emitSeek, emitReady };

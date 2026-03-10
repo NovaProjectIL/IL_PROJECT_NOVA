@@ -78,7 +78,14 @@ export default function VideoPlayer({
       seekingRef.current = true;
       expectedTimeRef.current = currentTime;
       playerRef.current.seekTo(currentTime, "seconds");
-      setTimeout(() => { seekingRef.current = false; }, 800);
+      // After seeking completes, signal ready to server
+      setTimeout(() => {
+        seekingRef.current = false;
+        if (etatSync === "BUFFERING") {
+          console.log("[PLAYER] Seek complete, emitting client-ready");
+          emitReady();
+        }
+      }, 800);
     }
   }, [currentTime, duree]);
 
@@ -128,6 +135,8 @@ export default function VideoPlayer({
               const d = playerRef.current?.getDuration() ?? 0;
               setDuree(d);
               onDuration(d);
+              // Signal ready when player initially loads
+              emitReady();
             }}
             onProgress={(state: any) => {
               if (!seekingRef.current) {
@@ -137,7 +146,12 @@ export default function VideoPlayer({
             }}
             onPlay={() => {
               if (seekingRef.current) return;
-              if (etatSync === "BUFFERING") emitReady();
+              if (etatSync === "BUFFERING") {
+                // During wait-for-ready, don't propagate play - just signal ready
+                console.log("[PLAYER] onPlay during BUFFERING - emitting ready");
+                emitReady();
+                return;
+              }
               onPlay();
             }}
             onPause={() => {

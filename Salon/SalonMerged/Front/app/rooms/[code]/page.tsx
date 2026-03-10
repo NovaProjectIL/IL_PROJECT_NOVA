@@ -286,6 +286,27 @@ export default function RoomPage() {
       loadRoomData();
     });
 
+    // Wait-for-Ready: server orders all clients to seek to a position
+    socket.on('force-seek', (data: any) => {
+      log.socket('Force-seek reçu', data);
+      isUpdatingFromSocket.current = true;
+      const targetPos = Number(data.timecode ?? 0);
+      setPosition(targetPos);
+      // Pause during loading - playback resumes when all-ready fires
+      setIsPlaying(false);
+      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1500);
+    });
+
+    // Wait-for-Ready: all clients buffered, resume together
+    socket.on('all-ready', (data: any) => {
+      log.socket('All-ready reçu, resuming playback', data);
+      isUpdatingFromSocket.current = true;
+      const pos = Number(data.positionSec ?? 0);
+      setPosition(pos);
+      setIsPlaying(true);
+      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
+    });
+
     socket.on('user-joined', (data: any) => {
       log.socket('User joined reçu', data);
       loadRoomData();
@@ -324,6 +345,12 @@ export default function RoomPage() {
     isUpdatingFromSocket.current = true;
     setPosition(newPosition);
     socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: stateRef.current.isPlaying });
+    // The seeker already seeked locally, so force-seek won't trigger a remote-sync
+    // in VideoPlayer (no diff). Emit client-ready directly after a short delay.
+    setTimeout(() => {
+      socketRef.current?.emit('client-ready', { codeRoom: code });
+      log.player('Seeker emitting client-ready after local seek');
+    }, 800);
     setTimeout(() => { isUpdatingFromSocket.current = false; }, 1500);
   };
 

@@ -12,6 +12,7 @@ import { PlaylistModule } from '../playlist/playlist.module';
 import { ChatSession } from '../entities/chat-session.entity';
 import { RoomsGateway } from './rooms.gateway';
 import { ChatModule } from '../chat/chat.module';
+import { RoomStateService } from './room-state.service';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { ChatModule } from '../chat/chat.module';
     ChatModule,                  
   ],
   controllers: [RoomsController],
-  providers: [RoomsService, RoomsGateway],
-  exports: [RoomsService],
+  providers: [RoomsService, RoomsGateway, RoomStateService],
+  exports: [RoomsService, RoomStateService],
 })
 export class RoomsModule {}
