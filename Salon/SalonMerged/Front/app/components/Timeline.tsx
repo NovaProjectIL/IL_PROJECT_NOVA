@@ -227,7 +227,7 @@ export default function Timeline({
           // CAS 2: Cluster (plusieurs marqueurs regroupés)
           else {
             // Calculer la position moyenne du cluster
-            const avgPosition = cluster.markers.reduce((sum, m) => sum + m.timeSec, 0) / cluster.markers.length;
+const avgPosition = cluster.markers.reduce((sum: number, m: any) => sum + m.timeSec, 0) / cluster.markers.length;
             const position = (avgPosition / duration) * 100;
             
             return (
@@ -258,7 +258,7 @@ export default function Timeline({
                   // Aller au premier marqueur du cluster
                   onSeek(cluster.markers[0].timeSec);
                 }}
-                title={`${cluster.markers.length} marqueurs: ${cluster.markers.map(m => m.label).join(', ')}`}
+title={`${cluster.markers.length} marqueurs: ${cluster.markers.map((m: any) => m.label).join(', ')}`}
               >
                 {cluster.markers.length}
               </div>
