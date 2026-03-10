@@ -1,9 +1,5 @@
 "use client";
 
-// VideoPlayer.tsx
-// Composant principal du player video synchronise
-// A placer dans : Front/app/components/VideoPlayer.tsx
-
 import { useEffect, useRef, useState } from "react";
 import ReactPlayer from "react-player";
 import { useSync } from "../hooks/Usesync";
@@ -18,8 +14,6 @@ type VideoPlayerProps = {
   roomId: string;
   syncSocket?: Socket | null;
   marqueurs: Marqueur[];
-  // Index du marqueur actuel calcule dans RoomPage depuis position socket
-  // Identique pour tous les users => marqueur en gras synchronise
   indexActuel: number;
   onProgress: (time: number) => void;
   onPlay: () => void;
@@ -50,32 +44,68 @@ export default function VideoPlayer({
 
   const playerRef = useRef<any>(null);
   const [duree, setDuree] = useState<number>(0);
+  const isProgrammaticSeek = useRef(false);
+  const lastKnownTime = useRef<number>(0);
 
-  // indexActuel vient de RoomPage - plus d etat local ici
-  // Cela garantit que tous les users voient le meme marqueur en gras
+  const { etatSync, emitReady } = useSync(roomId, syncSocket);
 
-  const { etatSync, dernierSeekForce, emitSeek, emitReady } = useSync(roomId, syncSocket);
-
+  // Detect user seeks by polling getCurrentTime (YouTube has no native onSeek event)
   useEffect(() => {
-    if (etatSync === "BUFFERING" && dernierSeekForce !== null && playerRef.current) {
-      console.log("[PLAYER] apply sync seek", { dernierSeekForce, etatSync });
-      playerRef.current.seekTo(dernierSeekForce, "seconds");
-    }
-  }, [etatSync, dernierSeekForce]);
+    const interval = setInterval(() => {
+      if (!playerRef.current || isProgrammaticSeek.current) return;
+      const time = playerRef.current.getCurrentTime();
+      if (time == null) return;
 
+      const diff = Math.abs(time - lastKnownTime.current);
+      if (diff > 2 && lastKnownTime.current > 0) {
+        console.log("[PLAYER] Seek detected via polling:", lastKnownTime.current, "->", time);
+        onSeek(time);
+      }
+      lastKnownTime.current = time;
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [onSeek]);
+
+  // Sync position if it drifts too much from the master time
   useEffect(() => {
     if (playerRef.current && duree > 0) {
-      const diff = Math.abs(playerRef.current.getCurrentTime() - currentTime);
-      if (diff > 2) {
+      const playerTime = playerRef.current.getCurrentTime();
+      const diff = Math.abs(playerTime - currentTime);
+      if (diff > 1) {
+        console.log("[PLAYER] Drift detected, seeking to", currentTime);
+        isProgrammaticSeek.current = true;
+        lastKnownTime.current = currentTime;
         playerRef.current.seekTo(currentTime, "seconds");
+        setTimeout(() => { isProgrammaticSeek.current = false; }, 500);
       }
     }
   }, [currentTime, duree]);
 
-  // Clic sur un marqueur dans la timeline
-  // indexActuel vient de RoomPage donc pas besoin de setter ici
-  const handleClicMarqueur = (marqueur: Marqueur, index: number) => {
-    emitSeek(marqueur.timecode);
+  // Imperative play/pause fallback: ensures the YouTube player
+  // actually obeys the isPlaying prop even when native controls are active
+  useEffect(() => {
+    if (!playerRef.current) return;
+    const internalPlayer = playerRef.current.getInternalPlayer();
+    if (!internalPlayer || typeof internalPlayer.getPlayerState !== 'function') return;
+
+    // Small delay to let ReactPlayer's own prop handling run first
+    const timer = setTimeout(() => {
+      const state = internalPlayer.getPlayerState();
+      // YouTube states: 1=playing, 2=paused
+      if (isPlaying && state === 2) {
+        console.log("[PLAYER] Forcing playVideo (prop sync fallback)");
+        internalPlayer.playVideo();
+      } else if (!isPlaying && state === 1) {
+        console.log("[PLAYER] Forcing pauseVideo (prop sync fallback)");
+        internalPlayer.pauseVideo();
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [isPlaying]);
+
+  const handleClicMarqueur = (marqueur: Marqueur) => {
     onSeek(marqueur.timecode);
   };
 
@@ -95,7 +125,7 @@ export default function VideoPlayer({
           <ReactPlayer
             ref={playerRef}
             url={url}
-            controls={false}
+            controls={true} // Enable controls so users can interact directly
             width="100%"
             height="400px"
             playing={isPlaying}
@@ -108,30 +138,14 @@ export default function VideoPlayer({
               onProgress(state.playedSeconds);
             }}
             onPlay={() => {
-              if (etatSync === "BUFFERING") {
-                emitReady();
-              }
+              if (etatSync === "BUFFERING") emitReady();
               onPlay();
             }}
-            // Pas de onPause ici pour eviter le double emit avec le bouton RoomPage
-            onPause={() => {}}
+            onPause={() => {
+              onPause();
+            }}
             onError={(e: any) => console.error("Erreur player:", e)}
           />
-
-          {etatSync === "BUFFERING" && (
-            <div style={{
-              position: "absolute",
-              top: 0, left: 0, right: 0, bottom: 0,
-              background: "rgba(0,0,0,0.5)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "white",
-              fontSize: "18px",
-            }}>
-              En attente des autres utilisateurs...
-            </div>
-          )}
         </div>
       )}
 

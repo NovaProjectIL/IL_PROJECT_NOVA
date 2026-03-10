@@ -96,7 +96,7 @@ export default function RoomPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const code = params.code as string;
+  const code = (params.code as string)?.toUpperCase();
   const memberId = Number(searchParams.get('memberId'));
   const pseudo = searchParams.get('pseudo') || '';
 
@@ -109,16 +109,17 @@ export default function RoomPage() {
   const [loading, setLoading] = useState(true);
   const [roomInternalId, setRoomInternalId] = useState<number | null>(null);
   const socketRef = useRef<any>(null);
-  const isSyncingRef = useRef(false);
 
   const [marqueurs, setMarqueurs] = useState<Marqueur[]>([]);
-
-  // ============================================================
-  // INDEX ACTUEL - calcule ici dans RoomPage depuis position
-  // Comme position vient du socket, indexActuel est identique
-  // pour tous les users => marqueur en gras synchronise
-  // ============================================================
   const [indexActuel, setIndexActuel] = useState<number>(-1);
+
+  const stateRef = useRef({ position, isPlaying });
+  const isUpdatingFromSocket = useRef(false);
+  const pendingPauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    stateRef.current = { position, isPlaying };
+  }, [position, isPlaying]);
 
   useEffect(() => {
     if (marqueurs.length === 0) {
@@ -131,10 +132,9 @@ export default function RoomPage() {
       if (tries[i].timecode <= position) idx = i;
     }
     if (idx !== indexActuel) {
-      log.marqueurs(`Index actuel mis a jour : ${idx} (position ${position}s)`);
       setIndexActuel(idx);
     }
-  }, [position, marqueurs]);
+  }, [position, marqueurs, indexActuel]);
 
   const normaliserMarqueur = useCallback((raw: any): Marqueur => {
     return {
@@ -150,27 +150,18 @@ export default function RoomPage() {
 
   const chargerMarqueurs = useCallback(async (roomIdParam?: number | null) => {
     const idToUse = roomIdParam ?? roomInternalId;
-    if (!idToUse) {
-      log.marqueurs('Skip chargement marqueurs: roomInternalId indisponible');
-      return;
-    }
-    log.marqueurs('Chargement des marqueurs pour roomId', idToUse);
+    if (!idToUse) return;
     try {
       const response = await marqueursApi.getMarqueurs(idToUse);
       const liste = Array.isArray(response.data) ? response.data.map(normaliserMarqueur) : [];
-      log.marqueurs(`${liste.length} marqueurs charges`, liste);
       setMarqueurs(liste);
     } catch (err) {
       log.error('Erreur chargement marqueurs', err);
-      setMarqueurs([]);
     }
   }, [roomInternalId, normaliserMarqueur]);
 
   const handleNouveauMarqueur = async (timecode: number) => {
-    log.marqueurs(`Nouveau marqueur demande a ${timecode}s`);
-    if (!roomInternalId) { log.error('Creation marqueur impossible: roomInternalId manquant'); return; }
-    if (!currentVideo?.youtubeId) { log.error('Creation marqueur impossible: youtubeId manquant'); return; }
-    if (!Number.isFinite(memberId)) { log.error('Creation marqueur impossible: memberId invalide', memberId); return; }
+    if (!roomInternalId || !currentVideo?.youtubeId || !Number.isFinite(memberId)) return;
     try {
       const response = await marqueursApi.creerMarqueur(roomInternalId, {
         timeSec: timecode,
@@ -180,7 +171,6 @@ export default function RoomPage() {
         createdById: memberId,
       });
       const nouveauMarqueur = normaliserMarqueur(response.data);
-      log.marqueurs('Marqueur cree avec succes', nouveauMarqueur);
       setMarqueurs((prev) => [...prev, nouveauMarqueur]);
     } catch (err) {
       log.error('Erreur creation marqueur', err);
@@ -189,12 +179,12 @@ export default function RoomPage() {
 
   const calculateAdjustedPosition = useCallback((playbackData: any) => {
     if (!playbackData) return 0;
-    let pos = playbackData.positionSec || 0;
+    let pos = Number(playbackData.positionSec || 0);
     if (playbackData.status === 'PLAYING' && playbackData.serverTimeRef) {
       const serverTime = new Date(playbackData.serverTimeRef).getTime();
       const now = Date.now();
       const elapsedSeconds = (now - serverTime) / 1000;
-      pos = pos + elapsedSeconds;
+      pos += elapsedSeconds;
       if (playbackData.video?.durationSec && pos > playbackData.video.durationSec) {
         pos = playbackData.video.durationSec;
       }
@@ -203,24 +193,25 @@ export default function RoomPage() {
   }, []);
 
   const loadRoomData = useCallback(async () => {
-    log.room('Chargement etat serveur...');
+    if (!code) return;
     try {
       const stateRes = await roomsApi.getRoomState(code);
       const stateData = stateRes.data;
-      log.api('getRoomState reponse recue', stateData);
-      if (isSyncingRef.current) { log.room('Synchro en cours, loadRoomData ignore'); return; }
+      
       setRoomInternalId(stateData.roomId ?? null);
       setPlaylist(stateData.playlist);
       setMembers(stateData.members || []);
-      log.room(`${stateData.members?.length ?? 0} membres dans la room`);
+      
       if (stateData.playback?.video) {
-        setCurrentVideo(stateData.playback.video);
-        const adjustedPosition = calculateAdjustedPosition(stateData.playback);
-        log.player(`Position ajustee : ${adjustedPosition}s - statut : ${stateData.playback.status}`);
-        setPosition(adjustedPosition);
-        setIsPlaying(stateData.playback.status === 'PLAYING');
-      } else {
-        log.room('Aucune video en cours de lecture');
+        setCurrentVideo((prev: any) => {
+          if (prev?.youtubeId !== stateData.playback.video.youtubeId) {
+            const adjustedPosition = calculateAdjustedPosition(stateData.playback);
+            setPosition(adjustedPosition);
+            setIsPlaying(stateData.playback.status === 'PLAYING');
+            return stateData.playback.video;
+          }
+          return prev;
+        });
       }
       return stateData;
     } catch (err) {
@@ -229,190 +220,129 @@ export default function RoomPage() {
   }, [code, calculateAdjustedPosition]);
 
   useEffect(() => {
-    log.room(`Initialisation de la room : ${code} - memberId : ${memberId}`);
+    if (!code) return;
     const initialLoad = async () => {
       const stateData = await loadRoomData();
-      await chargerMarqueurs(stateData?.roomId ?? null);
+      if (stateData?.roomId) await chargerMarqueurs(stateData.roomId);
       setLoading(false);
-      log.room('Chargement initial termine');
     };
     initialLoad();
-    const interval = setInterval(() => { log.room('Polling toutes les 5s...'); loadRoomData(); }, 5000);
+    const interval = setInterval(loadRoomData, 5000);
     return () => clearInterval(interval);
   }, [code, loadRoomData, chargerMarqueurs]);
 
   useEffect(() => {
     if (!code) return;
-    log.socket(`Connexion Socket.io vers ${API_URL}`);
-    socketRef.current = io(API_URL, {
+    const socket = io(API_URL, {
       transports: ['websocket', 'polling'],
       extraHeaders: { 'ngrok-skip-browser-warning': 'true' },
     });
-    socketRef.current.on('connect', () => {
-      log.socket(`Socket connecte - id : ${socketRef.current?.id}`);
-      socketRef.current.emit('join-room', { codeRoom: code, memberId });
-      log.socket('Evenement join-room emis', { codeRoom: code, memberId });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      log.socket('Connecté au serveur sync', { code, memberId });
+      socket.emit('join-room', { codeRoom: code, memberId });
     });
-    socketRef.current.on('disconnect', (reason: string) => { log.socket(`Socket deconnecte - raison : ${reason}`); });
-    socketRef.current.on('connect_error', (err: any) => { log.error('Socket erreur de connexion', err.message); });
-    socketRef.current.on('playback-updated', async (data: any) => {
-      log.socket('Evenement playback-updated recu', data);
-      isSyncingRef.current = true;
-      try {
-        let targetPosition = data.playback?.positionSec || 0;
-        if (data.action === 'play' && data.playback?.serverTimeRef) {
-          const serverTime = new Date(data.playback.serverTimeRef).getTime();
-          const now = Date.now();
-          targetPosition = targetPosition + (now - serverTime) / 1000;
-        }
-        log.player(`Synchro position -> ${targetPosition}s - action : ${data.action}`);
-        setPosition(targetPosition);
-        if (data.action === 'play') { setIsPlaying(true); log.player('Etat -> PLAYING'); }
-        else if (data.action === 'pause') { setIsPlaying(false); log.player('Etat -> PAUSED'); }
-      } catch (error) {
-        log.error('Erreur synchronisation socket', error);
-      } finally {
-        setTimeout(() => { isSyncingRef.current = false; }, 1000);
+
+    socket.on('room-joined-confirm', (data: any) => {
+      log.socket('Confirmation de jointure de salle reçue', data);
+    });
+
+    socket.on('room-initial-state', (data: any) => {
+      log.socket('État initial reçu', data);
+      isUpdatingFromSocket.current = true;
+      if (data.playback?.video) {
+        setCurrentVideo(data.playback.video);
+        const adjusted = calculateAdjustedPosition(data.playback);
+        setPosition(adjusted);
+        setIsPlaying(data.playback.status === 'PLAYING');
       }
+      if (data.users) setMembers(data.users);
+      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
     });
-    socketRef.current.on('error', (error: any) => { log.error('Erreur Socket', error); });
-    return () => { log.socket('Deconnexion Socket.io'); if (socketRef.current) socketRef.current.disconnect(); };
-  }, [code, memberId]);
+
+    socket.on('playback-updated', (data: any) => {
+      log.socket('Playback updated reçu', data);
+      isUpdatingFromSocket.current = true;
+      
+      if (data.action === 'play') {
+        const targetPos = calculateAdjustedPosition(data.playback);
+        setPosition(targetPos);
+        setIsPlaying(true);
+      } else if (data.action === 'pause') {
+        setPosition(data.playback.positionSec || 0);
+        setIsPlaying(false);
+      } else if (data.action === 'seek') {
+        const targetPos = calculateAdjustedPosition(data.playback);
+        setPosition(targetPos);
+      }
+      
+      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
+    });
+
+    socket.on('video-changed', (data: any) => {
+      log.socket('Video changed reçu', data);
+      loadRoomData();
+    });
+
+    socket.on('user-joined', (data: any) => {
+      log.socket('User joined reçu', data);
+      loadRoomData();
+    });
+
+    socket.on('test-sync-receive', (data: any) => {
+      log.socket('TEST SYNC REÇU', data);
+      alert('Test sync reçu du socket: ' + data.from);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [code, memberId, calculateAdjustedPosition, loadRoomData]);
 
   const handlePlay = () => {
-    if (isSyncingRef.current) { log.player('handlePlay ignore - synchro socket en cours'); return; }
-    log.player('Bouton Play clique - position actuelle : ' + position);
+    if (isUpdatingFromSocket.current) return;
+    if (!code) return;
+    log.player('Local play -> emit play socket', { code, pos: stateRef.current.position });
     setIsPlaying(true);
-    socketRef.current?.emit('play', { codeRoom: code, positionSec: position });
-    log.socket('Evenement play emis', { codeRoom: code, positionSec: position });
+    socketRef.current?.emit('play', { codeRoom: code, positionSec: stateRef.current.position });
   };
 
   const handlePause = () => {
-    if (isSyncingRef.current) { log.player('handlePause ignore - synchro socket en cours'); return; }
-    log.player('Bouton Pause clique - position actuelle : ' + position);
+    if (isUpdatingFromSocket.current) return;
+    if (!code) return;
     setIsPlaying(false);
-    socketRef.current?.emit('pause', { codeRoom: code, positionSec: position });
-    log.socket('Evenement pause emis', { codeRoom: code, positionSec: position });
+    // Debounce: YouTube briefly pauses during seeks.
+    // Delay socket emit so handleSeek can cancel it if a seek follows.
+    if (pendingPauseTimer.current) clearTimeout(pendingPauseTimer.current);
+    pendingPauseTimer.current = setTimeout(() => {
+      pendingPauseTimer.current = null;
+      log.player('Local pause -> emit pause socket', { code, pos: stateRef.current.position });
+      socketRef.current?.emit('pause', { codeRoom: code, positionSec: stateRef.current.position });
+    }, 600);
   };
 
   const handleSeek = (newPosition: number) => {
-    log.player(`Seek manuel -> ${newPosition}s`);
+    if (isUpdatingFromSocket.current) return;
+    if (!code) return;
+    // If a pause was pending (YouTube pauses briefly during seek), cancel it
+    const wasPlaying = pendingPauseTimer.current !== null;
+    if (pendingPauseTimer.current) {
+      clearTimeout(pendingPauseTimer.current);
+      pendingPauseTimer.current = null;
+      setIsPlaying(true);
+    }
+    log.player('Local seek -> emit seek socket', { code, pos: newPosition, wasPlaying });
+    isUpdatingFromSocket.current = true;
     setPosition(newPosition);
-    socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: isPlaying });
-    log.socket('Evenement seek emis', { codeRoom: code, positionSec: newPosition, wasPlaying: isPlaying });
-  };
-
-  const handleNextVideo = async () => {
-    log.room('Bouton Suivant clique');
-    try {
-      const response = await playlistApi.nextVideo(code);
-      const data = response.data;
-      log.api('nextVideo reponse', data);
-      setPlaylist({ ...playlist, currentIndex: data.currentIndex, entries: data.entries });
-      if (data.currentIndex >= 0 && data.entries?.length > 0) {
-        const currentEntry = data.entries[data.currentIndex];
-        if (currentEntry?.video) {
-          socketRef.current?.emit('changeVideo', { roomCode: code, video: currentEntry.video, sourceType: 'PLAYLIST' });
-          log.socket('Evenement changeVideo emis', currentEntry.video);
-          await loadRoomData();
-        }
-      }
-    } catch (error: any) {
-      log.error('Erreur handleNextVideo', error);
-      if (error.response?.status === 409) alert('Vous etes deja a la derniere video');
-      if (error.response?.status === 404) alert('Endpoint /playlist/next introuvable.');
+    socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying });
+    // If was playing before seek, re-emit play so all clients resume
+    if (wasPlaying) {
+      setTimeout(() => {
+        socketRef.current?.emit('play', { codeRoom: code, positionSec: newPosition });
+      }, 200);
     }
-  };
-
-  const handlePreviousVideo = async () => {
-    log.room('Bouton Precedent clique');
-    try {
-      const response = await playlistApi.previousVideo(code);
-      const data = response.data;
-      log.api('previousVideo reponse', data);
-      setPlaylist({ ...playlist, currentIndex: data.currentIndex, entries: data.entries });
-      if (data.currentIndex >= 0 && data.entries?.length > 0) {
-        const currentEntry = data.entries[data.currentIndex];
-        if (currentEntry?.video) {
-          socketRef.current?.emit('changeVideo', { roomCode: code, video: currentEntry.video, sourceType: 'PLAYLIST' });
-          log.socket('Evenement changeVideo emis', currentEntry.video);
-          await loadRoomData();
-        }
-      }
-    } catch (error: any) {
-      log.error('Erreur handlePreviousVideo', error);
-      if (error.response?.status === 409) alert('Vous etes deja a la premiere video');
-      if (error.response?.status === 404) alert('Endpoint /playlist/previous introuvable.');
-    }
-  };
-
-  const handleReorder = async (entryId: number, oldPosition: number, newPosition: number) => {
-    log.room(`Reorder entryId:${entryId} de ${oldPosition} vers ${newPosition}`);
-    try {
-      const response = await playlistApi.reorderPlaylist({ codeRoom: code, memberId, entryId, oldPosition, newPosition });
-      log.api('reorderPlaylist reponse', response.data);
-      await loadRoomData();
-      return response.data;
-    } catch (err: any) {
-      log.error('Erreur reorganisation', err);
-      alert('Erreur lors de la reorganisation: ' + err.message);
-      throw err;
-    }
-  };
-
-  const handleSearch = async (playDirect = true) => {
-    if (!searchUrl.trim()) return alert('Entrez une URL');
-    log.room(`Recherche video : ${searchUrl} - playDirect : ${playDirect}`);
-    let videoId = '';
-    if (searchUrl.includes('youtube.com/watch?v=')) videoId = searchUrl.split('v=')[1].split('&')[0];
-    else if (searchUrl.includes('youtu.be/')) videoId = searchUrl.split('youtu.be/')[1].split('?')[0];
-    else if (searchUrl.length === 11) videoId = searchUrl;
-    else return alert('URL YouTube invalide');
-    log.room(`videoId extrait : ${videoId}`);
-    try {
-      const youtubeRes = await roomsApi.getYouTubeInfo(videoId);
-      const youtubeData = youtubeRes.data;
-      log.api('getYouTubeInfo reponse', youtubeData);
-      if (playDirect) {
-        await roomsApi.playDirectVideo({ codeRoom: code, memberId, youtubeId: videoId, youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author, youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail });
-        log.room('playDirectVideo appele avec succes');
-      } else {
-        await playlistApi.addToPlaylist({ codeRoom: code, memberId, youtubeId: videoId, youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author, youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail });
-        log.room('addToPlaylist appele avec succes');
-        alert('Video ajoutee');
-      }
-      setSearchUrl('');
-      await loadRoomData();
-    } catch (err: any) {
-      log.error('Erreur recherche video', err);
-      alert('Erreur: ' + (err.response?.data?.message || err.message));
-    }
-  };
-
-  const handlePlayVideo = async (index: number) => {
-    log.room(`Lecture video index : ${index}`);
-    try {
-      await playlistApi.changeIndex(memberId, code, index);
-      socketRef.current?.emit('video-change', { codeRoom: code, videoId: playlist.entries[index]?.video?.youtubeId || '' });
-      log.socket('Evenement video-change emis');
-      await loadRoomData();
-    } catch (err: any) {
-      log.error('Erreur lecture video', err);
-      alert('Erreur: ' + (err.response?.data?.message || err.message));
-    }
-  };
-
-  const handleDelete = async (entryId: number) => {
-    if (!confirm('Supprimer ?')) return;
-    log.room(`Suppression video entryId : ${entryId}`);
-    try {
-      await playlistApi.deleteFromPlaylist(memberId, code, entryId);
-      log.api('deleteFromPlaylist succes');
-      await loadRoomData();
-    } catch (err: any) {
-      log.error('Erreur suppression', err);
-      alert('Erreur: ' + (err.response?.data?.message || err.message));
-    }
+    setTimeout(() => { isUpdatingFromSocket.current = false; }, 1500);
   };
 
   const formatTime = (seconds: number) => {
@@ -421,13 +351,15 @@ export default function RoomPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const handleTestSync = () => {
+    log.socket('Emission test sync');
+    socketRef.current?.emit('test-sync', { codeRoom: code });
+  };
+
   const handleQuitRoom = () => {
-    log.room('Quitter la room');
     if (socketRef.current) socketRef.current.disconnect();
     router.push('/');
   };
-
-  const currentMemberName = members.find(m => m.id === memberId)?.name || "";
 
   if (loading) return <div className={styles.loading}>Chargement...</div>;
 
@@ -436,31 +368,24 @@ export default function RoomPage() {
       <div className={styles.roomHeader}>
         <h1 className={styles.roomTitle}>Salon: {code}</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className={`${styles.connectionBadge} ${socketRef.current?.connected ? styles.connected : styles.disconnected}`}>
-            {socketRef.current?.connected ? 'Connecte' : 'Deconnecte'}
-          </div>
-          <button onClick={handleQuitRoom} className={styles.quitButton} title="Quitter le salon"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: 'linear-gradient(135deg, #dc2626, #b91c1c)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', transition: 'all 0.3s ease', boxShadow: '0 4px 12px rgba(220, 38, 38, 0.4)' }}>
-            Quitter
-          </button>
+          <button onClick={handleTestSync} className={styles.searchButton} style={{ background: '#4CAF50' }}>Test Sync</button>
+          <button onClick={handleQuitRoom} className={styles.quitButton}>Quitter</button>
         </div>
       </div>
 
       <div className={styles.searchSection}>
-        <h3>Rechercher YouTube:</h3>
-        <label htmlFor="youtube-url-input" className="sr-only">URL YouTube</label>
-        <input id="youtube-url-input" type="text" value={searchUrl} onChange={(e) => setSearchUrl(e.target.value)} placeholder="URL YouTube" className={styles.searchInput} onKeyPress={(e) => e.key === 'Enter' && handleSearch(true)} />
+        <input type="text" value={searchUrl} onChange={(e) => setSearchUrl(e.target.value)} placeholder="URL YouTube" className={styles.searchInput} onKeyPress={(e) => e.key === 'Enter' && handleSearch()} />
         <button onClick={() => handleSearch(true)} className={styles.searchButton}>Jouer</button>
-        <button onClick={() => handleSearch(false)} className={`${styles.searchButton} ${styles.addButton}`}>Playlist</button>
+        <button onClick={() => handleSearch(false)} className={`${styles.searchButton} ${styles.addButton}`}>+ Playlist</button>
       </div>
 
       <div className={styles.membersSection}>
         <h3>Membres ({members.length}):</h3>
         <div className={styles.membersList}>
           {members.map(member => (
-            member.id === memberId
-              ? <span key={member.id} className={`${styles.memberTag} ${styles.currentMember}`}>{member.name} (Vous)</span>
-              : <span key={member.id} className={styles.memberTag}>{member.name}</span>
+            <span key={member.id} className={`${styles.memberTag} ${member.id === memberId ? styles.currentMember : ''}`}>
+              {member.name} {member.id === memberId ? '(Vous)' : ''}
+            </span>
           ))}
         </div>
       </div>
@@ -468,7 +393,6 @@ export default function RoomPage() {
       {currentVideo && (
         <div className={styles.videoSection}>
           <h3>{currentVideo.title}</h3>
-          <p>Chaine: {currentVideo.channelTitle || currentVideo.author}</p>
           <div className={styles.playerContainer}>
             <VideoPlayer
               youtubeId={currentVideo.youtubeId}
@@ -478,46 +402,107 @@ export default function RoomPage() {
               syncSocket={socketRef.current}
               marqueurs={marqueurs}
               indexActuel={indexActuel}
-              onProgress={(time) => {
-                if (Math.floor(time) % 5 === 0) log.player(`onProgress : ${time.toFixed(1)}s`);
-                setPosition(time);
-              }}
-              onPlay={() => { log.player('onPlay declenche depuis VideoPlayer'); handlePlay(); }}
-              onPause={() => { log.player('onPause declenche depuis VideoPlayer'); handlePause(); }}
-              onSeek={(time) => {
-                log.player(`onSeek declenche depuis VideoPlayer -> ${time}s`);
-                setPosition(time);
-                socketRef.current?.emit('seek', { codeRoom: code, positionSec: time, wasPlaying: isPlaying });
-                log.socket('Evenement seek emis depuis VideoPlayer', { positionSec: time });
-              }}
-              onDuration={(duration) => { log.player(`Duree video recue : ${duration}s`); }}
+              onProgress={(time) => { if (!isUpdatingFromSocket.current) setPosition(time); }}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onSeek={handleSeek}
+              onDuration={() => {}}
               onNouveauMarqueur={handleNouveauMarqueur}
             />
           </div>
 
           <div className={styles.controlsSection}>
             <div className={styles.controlButtons}>
-              <button onClick={handlePreviousVideo} className={`${styles.controlButton} ${styles.previousButton}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>Precedent</button>
-              <button onClick={handlePlay} className={`${styles.controlButton} ${styles.playButton}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>Lecture</button>
-              <button onClick={handlePause} className={`${styles.controlButton} ${styles.pauseButton}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>Pause</button>
-              <button onClick={handleNextVideo} className={`${styles.controlButton} ${styles.nextButton}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>Suivant</button>
+              <button onClick={async () => {
+                try {
+                  const response = await playlistApi.previousVideo(code);
+                  const data = response.data;
+                  if (data.currentIndex >= 0 && data.entries?.length > 0) {
+                    const currentEntry = data.entries[data.currentIndex];
+                    if (currentEntry?.video) {
+                      socketRef.current?.emit('video-change', { codeRoom: code, videoId: currentEntry.video.youtubeId });
+                      await loadRoomData();
+                    }
+                  }
+                } catch (error: any) { log.error('Erreur previous video', error); }
+              }} className={styles.controlButton}>Precedent</button>
+              
+              <button onClick={handlePlay} className={`${styles.controlButton} ${styles.playButton}`}>Lecture</button>
+              <button onClick={handlePause} className={`${styles.controlButton} ${styles.pauseButton}`}>Pause</button>
+              
+              <button onClick={async () => {
+                try {
+                  const response = await playlistApi.nextVideo(code);
+                  const data = response.data;
+                  if (data.currentIndex >= 0 && data.entries?.length > 0) {
+                    const currentEntry = data.entries[data.currentIndex];
+                    if (currentEntry?.video) {
+                      socketRef.current?.emit('video-change', { codeRoom: code, videoId: currentEntry.video.youtubeId });
+                      await loadRoomData();
+                    }
+                  }
+                } catch (error: any) { log.error('Erreur next video', error); }
+              }} className={styles.controlButton}>Suivant</button>
             </div>
-            <div className={styles.progressSection}>
-              <div className={styles.statusInfo}>
-                <span><strong>Etat:</strong> {isPlaying ? 'En lecture' : 'En pause'}</span>
-                <span className={styles.positionInfo}><strong>Position:</strong> {formatTime(position)} / {currentVideo.durationSec ? formatTime(currentVideo.durationSec) : '??:??'}</span>
-                {playlist && playlist.entries && playlist.entries.length > 0 && (
-                  <span className={styles.playlistInfo}><strong>Playlist:</strong> {playlist.currentIndex + 1}/{playlist.entries.length}</span>
-                )}
-              </div>
+            <div className={styles.statusInfo}>
+              <span>{isPlaying ? '▶️ Lecture' : '⏸️ Pause'}</span>
+              <span>{formatTime(position)} / {formatTime(currentVideo.durationSec || 0)}</span>
             </div>
           </div>
         </div>
       )}
 
-      <PlaylistComponent playlist={playlist} code={code} memberId={memberId} onPlayVideo={handlePlayVideo} onDeleteVideo={handleDelete} onReorder={handleReorder} isLoading={loading} />
+      <PlaylistComponent 
+        playlist={playlist} 
+        code={code} 
+        memberId={memberId} 
+        onPlayVideo={async (index) => {
+          try {
+            await playlistApi.changeIndex(memberId, code, index);
+            const videoId = playlist.entries[index]?.video?.youtubeId;
+            if (videoId) socketRef.current?.emit('video-change', { codeRoom: code, videoId });
+            await loadRoomData();
+          } catch (err: any) { log.error('Erreur play video', err); }
+        }} 
+        onDeleteVideo={async (entryId) => {
+          if (!confirm('Supprimer ?')) return;
+          try {
+            await playlistApi.deleteFromPlaylist(memberId, code, entryId);
+            await loadRoomData();
+          } catch (err: any) { log.error('Erreur suppression', err); }
+        }} 
+        onReorder={async (entryId, oldPos, newPos) => {
+          const res = await playlistApi.reorderPlaylist({ codeRoom: code, memberId, entryId, oldPosition: oldPos, newPosition: newPos });
+          await loadRoomData();
+          return res.data;
+        }} 
+        isLoading={loading} 
+      />
 
-      <ChatWidget socket={socketRef.current} roomCode={code} pseudo={pseudo || currentMemberName || "Utilisateur"} userId={memberId} getCurrentTime={() => position} onSeek={(timecode) => handleSeek(timecode)} />
+      <ChatWidget socket={socketRef.current} roomCode={code} pseudo={pseudo} userId={memberId} getCurrentTime={() => position} onSeek={handleSeek} />
     </div>
   );
+
+  async function handleSearch(playDirect = true) {
+    if (!searchUrl.trim()) return;
+    let videoId = '';
+    if (searchUrl.includes('v=')) videoId = searchUrl.split('v=')[1].split('&')[0];
+    else if (searchUrl.includes('youtu.be/')) videoId = searchUrl.split('youtu.be/')[1].split('?')[0];
+    else if (searchUrl.length === 11) videoId = searchUrl;
+    
+    try {
+      const youtubeRes = await roomsApi.getYouTubeInfo(videoId);
+      const youtubeData = youtubeRes.data;
+      if (playDirect) {
+        await roomsApi.playDirectVideo({ codeRoom: code, memberId, youtubeId: videoId, youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author, youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail });
+        socketRef.current?.emit('video-change', { codeRoom: code, videoId });
+      } else {
+        await playlistApi.addToPlaylist({ codeRoom: code, memberId, youtubeId: videoId, youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author, youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail });
+      }
+      setSearchUrl('');
+      await loadRoomData();
+    } catch (err: any) {
+      log.error('Erreur recherche', err);
+    }
+  }
 }
