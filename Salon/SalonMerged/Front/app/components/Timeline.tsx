@@ -207,7 +207,7 @@ export default function Timeline({
                   width: '24px',
                   height: '24px',
                   // Utilise la catégorie pour déterminer la couleur
-                  backgroundColor: categoryColors[marker.category] || '#ffaa00',
+                  backgroundColor: categoryColors[marker.category as keyof typeof categoryColors] || '#ffaa00',
                   borderRadius: '50%',
                   border: '2px solid white',
                   cursor: 'pointer',
