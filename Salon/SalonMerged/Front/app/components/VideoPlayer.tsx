@@ -49,6 +49,31 @@ export default function VideoPlayer({
 
   const { etatSync, emitReady } = useSync(roomId, syncSocket);
 
+  // Track when we exit BUFFERING state (all-ready received) to prevent cascade
+  const prevEtatSyncRef = useRef(etatSync);
+  useEffect(() => {
+    if (prevEtatSyncRef.current === "BUFFERING" && etatSync !== "BUFFERING") {
+      lastAllReadyTimeRef.current = Date.now();
+    }
+    prevEtatSyncRef.current = etatSync;
+  }, [etatSync]);
+
+  // When the YouTube player starts buffering mid-playback, notify the server
+  // so it can pause other clients and wait for everyone to be ready.
+  const bufferingEmittedRef = useRef(false);
+  const lastAllReadyTimeRef = useRef(0);
+  const handleBuffer = () => {
+    if (seekingRef.current) return; // Don't signal during an active seek (handled by seek flow)
+    if (bufferingEmittedRef.current) return; // Already signaled for this buffering episode
+    if (etatSync === "BUFFERING") return; // Already in LOADING flow
+    // Anti-cascade: don't emit client-buffering within 3s of receiving all-ready
+    if (Date.now() - lastAllReadyTimeRef.current < 3000) return;
+    bufferingEmittedRef.current = true;
+    const currentPos = playerRef.current?.getCurrentTime() ?? 0;
+    console.log("[PLAYER] Buffering detected at", currentPos, "-> emitting client-buffering");
+    syncSocket?.emit('client-buffering', { codeRoom: roomId, positionSec: currentPos });
+  };
+
   // Detect user seeks while PAUSED (no onProgress fires, so we poll)
   useEffect(() => {
     if (isPlaying) return; // Only poll while paused
@@ -137,6 +162,15 @@ export default function VideoPlayer({
               onDuration(d);
               // Signal ready when player initially loads
               emitReady();
+            }}
+            onBuffer={handleBuffer}
+            onBufferEnd={() => {
+              bufferingEmittedRef.current = false;
+              // Buffer finished -> this client is ready
+              if (etatSync === "BUFFERING") {
+                console.log("[PLAYER] Buffer ended during LOADING -> emitting client-ready");
+                emitReady();
+              }
             }}
             onProgress={(state: any) => {
               if (!seekingRef.current) {

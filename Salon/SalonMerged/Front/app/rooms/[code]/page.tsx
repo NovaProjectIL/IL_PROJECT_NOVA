@@ -292,18 +292,19 @@ export default function RoomPage() {
       isUpdatingFromSocket.current = true;
       const targetPos = Number(data.timecode ?? 0);
       setPosition(targetPos);
-      // Pause during loading - playback resumes when all-ready fires
+      // Always pause during LOADING - all-ready will decide whether to resume
       setIsPlaying(false);
       setTimeout(() => { isUpdatingFromSocket.current = false; }, 1500);
     });
 
     // Wait-for-Ready: all clients buffered, resume together
     socket.on('all-ready', (data: any) => {
-      log.socket('All-ready reçu, resuming playback', data);
+      log.socket('All-ready reçu', data);
       isUpdatingFromSocket.current = true;
       const pos = Number(data.positionSec ?? 0);
+      const shouldPlay = data.shouldPlay !== false; // default true for backward compat
       setPosition(pos);
-      setIsPlaying(true);
+      setIsPlaying(shouldPlay);
       setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
     });
 
@@ -312,12 +313,21 @@ export default function RoomPage() {
       loadRoomData();
     });
 
-    socket.on('test-sync-receive', (data: any) => {
-      log.socket('TEST SYNC REÇU', data);
-      alert('Test sync reçu du socket: ' + data.from);
+    // A remote client started buffering: server orders everyone to pause
+    socket.on('force-pause', (data: any) => {
+      log.socket('Force-pause reçu (un client charge)', data);
+      isUpdatingFromSocket.current = true;
+      setIsPlaying(false);
+      // We're already at the right position and paused, so we're "ready"
+      setTimeout(() => {
+        socket.emit('client-ready', { codeRoom: code });
+        log.socket('Emitting client-ready after force-pause');
+      }, 500);
+      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
     });
 
     return () => {
+      socket.off('force-pause');
       socket.disconnect();
     };
   }, [code, memberId, calculateAdjustedPosition, loadRoomData]);
@@ -360,11 +370,6 @@ export default function RoomPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const handleTestSync = () => {
-    log.socket('Emission test sync');
-    socketRef.current?.emit('test-sync', { codeRoom: code });
-  };
-
   const handleQuitRoom = () => {
     if (socketRef.current) socketRef.current.disconnect();
     router.push('/');
@@ -377,7 +382,6 @@ export default function RoomPage() {
       <div className={styles.roomHeader}>
         <h1 className={styles.roomTitle}>Salon: {code}</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={handleTestSync} className={styles.searchButton} style={{ background: '#4CAF50' }}>Test Sync</button>
           <button onClick={handleQuitRoom} className={styles.quitButton}>Quitter</button>
         </div>
       </div>

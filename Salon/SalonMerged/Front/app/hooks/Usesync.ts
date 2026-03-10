@@ -72,26 +72,37 @@ export const useSync = (
       setDernierSeekForce(timecode);
       setEtatSync("BUFFERING");
       // Remember what state we should return to after all-ready
-      if (data?.status === "PLAYING") {
+      if (data?.wasPlaying) {
         lastPlaybackStateRef.current = "PLAYING";
+      } else {
+        lastPlaybackStateRef.current = "PAUSED";
       }
     };
 
     // Wait-for-Ready: all clients buffered, resume playback
     const onAllReady = (data: any) => {
       const positionSec = Number(data?.positionSec ?? 0);
-      console.log("[SYNC] all-ready recu - resuming at", positionSec);
-      lastPlaybackStateRef.current = "PLAYING";
-      setEtatSync("PLAYING");
+      const shouldPlay = data?.shouldPlay !== false;
+      console.log("[SYNC] all-ready recu", { positionSec, shouldPlay });
+      lastPlaybackStateRef.current = shouldPlay ? "PLAYING" : "PAUSED";
+      setEtatSync(shouldPlay ? "PLAYING" : "PAUSED");
+    };
+
+    // A remote client started buffering: server tells us to pause and wait
+    const onForcePause = (data: any) => {
+      console.log("[SYNC] force-pause recu (client buffering)", data);
+      setEtatSync("BUFFERING");
     };
 
     activeSocket.on("playback-updated", onPlaybackUpdated);
     activeSocket.on("force-seek", onForceSeek);
+    activeSocket.on("force-pause", onForcePause);
     activeSocket.on("all-ready", onAllReady);
 
     return () => {
       activeSocket.off("playback-updated", onPlaybackUpdated);
       activeSocket.off("force-seek", onForceSeek);
+      activeSocket.off("force-pause", onForcePause);
       activeSocket.off("all-ready", onAllReady);
       if (!hasExternalSocket && localSocketRef.current) {
         localSocketRef.current.disconnect();

@@ -177,13 +177,15 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const { playback } = await this.roomsService.seek(roomCode, positionSec);
       
       // 2. Enter LOADING state: all clients must re-buffer
+      // prepareForSeek saves the current status (PLAYING/PAUSED) before switching to LOADING
       this.roomStateService.prepareForSeek(roomCode, positionSec);
-      this.logger.log(`[SYNC] Room ${roomCode} -> LOADING, waiting for all clients to be ready`);
+      const wasPlaying = this.roomStateService.getStatusBeforeLoading(roomCode) === RoomGlobalStatus.PLAYING;
+      this.logger.log(`[SYNC] Room ${roomCode} -> LOADING (wasPlaying=${wasPlaying}), waiting for all clients`);
       
       // 3. Broadcast force-seek to ALL clients (including sender)
       this.server.to(roomCode).emit('force-seek', {
         timecode: positionSec,
-        status: playback.status,
+        wasPlaying,
         serverTimeRef: playback.serverTimeRef,
         timestamp: new Date(),
       });
@@ -201,6 +203,43 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (error) {
       this.logger.error('Error handleSeek:', error);
     }
+  }
+
+  @SubscribeMessage('client-buffering')
+  handleClientBuffering(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { codeRoom: string; positionSec?: number }
+  ) {
+    const { codeRoom, positionSec } = data;
+    if (!codeRoom) return;
+    const roomCode = codeRoom.toUpperCase();
+    
+    const state = this.roomStateService.getOrCreateRoomState(roomCode);
+    // Only trigger LOADING if the room was PLAYING (avoid re-triggering during existing LOADING)
+    if (state.status !== RoomGlobalStatus.PLAYING) {
+      this.logger.log(`[SYNC] client-buffering ignored in ${roomCode} (status=${state.status})`);
+      return;
+    }
+    
+    // Anti-cascade: ignore buffering events within 3s of a recent all-ready
+    const timeSinceAllReady = Date.now() - this.roomStateService.getLastAllReadyTime(roomCode);
+    if (timeSinceAllReady < 3000) {
+      this.logger.log(`[SYNC] client-buffering ignored in ${roomCode} (${timeSinceAllReady}ms since all-ready, cooldown)`);
+      return;
+    }
+    
+    const currentPos = positionSec ?? this.roomStateService.getAdjustedTimestamp(roomCode);
+    this.logger.log(`[SYNC] Client ${client.id} buffering in ${roomCode} at ${currentPos}s -> LOADING`);
+    
+    // Switch room to LOADING, reset all ready flags
+    this.roomStateService.prepareForSeek(roomCode, currentPos);
+    
+    // Order every OTHER client to pause (the buffering client is already paused/buffering)
+    client.to(roomCode).emit('force-pause', {
+      reason: 'client-buffering',
+      positionSec: currentPos,
+      timestamp: new Date(),
+    });
   }
 
   @SubscribeMessage('client-ready')
@@ -229,21 +268,30 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (state.status !== RoomGlobalStatus.LOADING) return;
     if (!state.allReady) return;
     
-    this.logger.log(`[SYNC] All clients ready in ${roomCode}! Resuming playback at ${state.currentTimestamp}s`);
+    const resumeTo = state.statusBeforeLoading;
+    this.logger.log(`[SYNC] All clients ready in ${roomCode}! Resuming to ${resumeTo} at ${state.currentTimestamp}s`);
     
-    // Transition to PLAYING
-    this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PLAYING, state.currentTimestamp);
+    // Record the time to prevent buffering cascade
+    this.roomStateService.setLastAllReadyTime(roomCode);
     
-    // Update DB as well
+    // Transition to the state we were in before LOADING
+    this.roomStateService.updateStatus(roomCode, resumeTo, state.currentTimestamp);
+    
+    // Update DB
     try {
-      await this.roomsService.play(roomCode, state.currentTimestamp);
+      if (resumeTo === RoomGlobalStatus.PLAYING) {
+        await this.roomsService.play(roomCode, state.currentTimestamp);
+      } else {
+        await this.roomsService.pause(roomCode, state.currentTimestamp);
+      }
     } catch (error) {
       this.logger.error('Error updating DB on all-ready:', error);
     }
     
-    // Broadcast to all clients: resume playback now
+    // Broadcast to all clients
     this.server.to(roomCode).emit('all-ready', {
       positionSec: state.currentTimestamp,
+      shouldPlay: resumeTo === RoomGlobalStatus.PLAYING,
       serverTimeRef: new Date(),
       timestamp: new Date(),
     });
@@ -268,15 +316,5 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  @SubscribeMessage('test-sync')
-  handleTestSync(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: { codeRoom: string }
-  ) {
-    const { codeRoom } = data;
-    const roomCode = codeRoom?.toUpperCase();
-    this.logger.log(`[SYNC] Test sync requested in ${roomCode}`);
-    const state = this.roomStateService.getFullState(roomCode);
-    this.server.to(roomCode).emit('test-sync-receive', { from: client.id, roomState: state, timestamp: new Date() });
-  }
+
 }

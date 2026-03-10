@@ -19,8 +19,10 @@ export interface ClientState {
 export interface RoomState {
   roomCode: string;
   status: RoomGlobalStatus;
+  statusBeforeLoading: RoomGlobalStatus; // Ce qu'on faisait AVANT de passer en LOADING.
   currentTimestamp: number;    // À quelle seconde on en est dans la vidéo.
   lastUpdateServerTime: number; // L'heure exacte du serveur au moment du dernier changement.
+  lastAllReadyTime: number;    // Quand le dernier all-ready a été émis (anti-cascade).
   clients: Map<string, ClientState>; // La liste de tous les gens connectés ici.
 }
 
@@ -41,8 +43,10 @@ export class RoomStateService {
       this.rooms.set(code, {
         roomCode: code,
         status: RoomGlobalStatus.PAUSED,
+        statusBeforeLoading: RoomGlobalStatus.PAUSED,
         currentTimestamp: 0,
         lastUpdateServerTime: Date.now(),
+        lastAllReadyTime: 0,
         clients: new Map<string, ClientState>(),
       });
     }
@@ -152,6 +156,10 @@ export class RoomStateService {
    */
   prepareForSeek(roomCode: string, timestamp: number) {
     const state = this.getOrCreateRoomState(roomCode);
+    // Remember what we were doing before LOADING so we can restore it.
+    if (state.status !== RoomGlobalStatus.LOADING) {
+      state.statusBeforeLoading = state.status;
+    }
     state.status = RoomGlobalStatus.LOADING;
     state.currentTimestamp = timestamp;
     state.lastUpdateServerTime = Date.now();
@@ -187,11 +195,27 @@ export class RoomStateService {
   /**
    * Petit résumé rapide de ce qui se passe dans le salon.
    */
+  setLastAllReadyTime(roomCode: string) {
+    const state = this.getOrCreateRoomState(roomCode);
+    state.lastAllReadyTime = Date.now();
+  }
+
+  getLastAllReadyTime(roomCode: string): number {
+    const state = this.getOrCreateRoomState(roomCode);
+    return state.lastAllReadyTime;
+  }
+
+  getStatusBeforeLoading(roomCode: string): RoomGlobalStatus {
+    const state = this.getOrCreateRoomState(roomCode);
+    return state.statusBeforeLoading;
+  }
+
   getFullState(roomCode: string) {
     const state = this.getOrCreateRoomState(roomCode);
     return {
       roomCode: state.roomCode,
       status: state.status,
+      statusBeforeLoading: state.statusBeforeLoading,
       currentTimestamp: this.getAdjustedTimestamp(roomCode),
       connectedCount: state.clients.size,
       readyCount: Array.from(state.clients.values()).filter(c => c.isReady).length,
