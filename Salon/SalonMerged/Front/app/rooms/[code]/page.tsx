@@ -115,7 +115,6 @@ export default function RoomPage() {
 
   const stateRef = useRef({ position, isPlaying });
   const isUpdatingFromSocket = useRef(false);
-  const pendingPauseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     stateRef.current = { position, isPlaying };
@@ -275,6 +274,8 @@ export default function RoomPage() {
       } else if (data.action === 'seek') {
         const targetPos = calculateAdjustedPosition(data.playback);
         setPosition(targetPos);
+        // Preserve play/pause state from server
+        setIsPlaying(data.playback.status === 'PLAYING');
       }
       
       setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
@@ -311,37 +312,18 @@ export default function RoomPage() {
   const handlePause = () => {
     if (isUpdatingFromSocket.current) return;
     if (!code) return;
+    log.player('Local pause -> emit pause socket', { code, pos: stateRef.current.position });
     setIsPlaying(false);
-    // Debounce: YouTube briefly pauses during seeks.
-    // Delay socket emit so handleSeek can cancel it if a seek follows.
-    if (pendingPauseTimer.current) clearTimeout(pendingPauseTimer.current);
-    pendingPauseTimer.current = setTimeout(() => {
-      pendingPauseTimer.current = null;
-      log.player('Local pause -> emit pause socket', { code, pos: stateRef.current.position });
-      socketRef.current?.emit('pause', { codeRoom: code, positionSec: stateRef.current.position });
-    }, 600);
+    socketRef.current?.emit('pause', { codeRoom: code, positionSec: stateRef.current.position });
   };
 
   const handleSeek = (newPosition: number) => {
     if (isUpdatingFromSocket.current) return;
     if (!code) return;
-    // If a pause was pending (YouTube pauses briefly during seek), cancel it
-    const wasPlaying = pendingPauseTimer.current !== null;
-    if (pendingPauseTimer.current) {
-      clearTimeout(pendingPauseTimer.current);
-      pendingPauseTimer.current = null;
-      setIsPlaying(true);
-    }
-    log.player('Local seek -> emit seek socket', { code, pos: newPosition, wasPlaying });
+    log.player('Local seek -> emit seek socket', { code, pos: newPosition });
     isUpdatingFromSocket.current = true;
     setPosition(newPosition);
-    socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying });
-    // If was playing before seek, re-emit play so all clients resume
-    if (wasPlaying) {
-      setTimeout(() => {
-        socketRef.current?.emit('play', { codeRoom: code, positionSec: newPosition });
-      }, 200);
-    }
+    socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: stateRef.current.isPlaying });
     setTimeout(() => { isUpdatingFromSocket.current = false; }, 1500);
   };
 

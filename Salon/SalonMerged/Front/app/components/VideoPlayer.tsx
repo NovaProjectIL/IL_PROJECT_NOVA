@@ -44,64 +44,59 @@ export default function VideoPlayer({
 
   const playerRef = useRef<any>(null);
   const [duree, setDuree] = useState<number>(0);
-  const isProgrammaticSeek = useRef(false);
-  const lastKnownTime = useRef<number>(0);
+  const seekingRef = useRef(false);
+  const expectedTimeRef = useRef<number>(0);
 
   const { etatSync, emitReady } = useSync(roomId, syncSocket);
 
-  // Detect user seeks by polling getCurrentTime (YouTube has no native onSeek event)
+  // Detect user seeks while PAUSED (no onProgress fires, so we poll)
   useEffect(() => {
+    if (isPlaying) return; // Only poll while paused
     const interval = setInterval(() => {
-      if (!playerRef.current || isProgrammaticSeek.current) return;
+      if (!playerRef.current || seekingRef.current) return;
       const time = playerRef.current.getCurrentTime();
       if (time == null) return;
-
-      const diff = Math.abs(time - lastKnownTime.current);
-      if (diff > 2 && lastKnownTime.current > 0) {
-        console.log("[PLAYER] Seek detected via polling:", lastKnownTime.current, "->", time);
+      const diff = Math.abs(time - expectedTimeRef.current);
+      if (diff > 2 && expectedTimeRef.current > 0) {
+        console.log("[PLAYER] Paused seek detected:", expectedTimeRef.current, "->", time);
+        seekingRef.current = true;
+        expectedTimeRef.current = time;
         onSeek(time);
+        setTimeout(() => { seekingRef.current = false; }, 800);
       }
-      lastKnownTime.current = time;
-    }, 500);
-
+    }, 400);
     return () => clearInterval(interval);
-  }, [onSeek]);
+  }, [isPlaying, onSeek]);
 
-  // Sync position if it drifts too much from the master time
+  // Force-seek the player when currentTime changes significantly (remote sync)
   useEffect(() => {
-    if (playerRef.current && duree > 0) {
-      const playerTime = playerRef.current.getCurrentTime();
-      const diff = Math.abs(playerTime - currentTime);
-      if (diff > 1) {
-        console.log("[PLAYER] Drift detected, seeking to", currentTime);
-        isProgrammaticSeek.current = true;
-        lastKnownTime.current = currentTime;
-        playerRef.current.seekTo(currentTime, "seconds");
-        setTimeout(() => { isProgrammaticSeek.current = false; }, 500);
-      }
+    if (!playerRef.current || duree <= 0) return;
+    const playerTime = playerRef.current.getCurrentTime();
+    const diff = Math.abs(playerTime - currentTime);
+    if (diff > 1.5) {
+      console.log("[PLAYER] Remote sync seeking to", currentTime, "(was at", playerTime, ")");
+      seekingRef.current = true;
+      expectedTimeRef.current = currentTime;
+      playerRef.current.seekTo(currentTime, "seconds");
+      setTimeout(() => { seekingRef.current = false; }, 800);
     }
   }, [currentTime, duree]);
 
-  // Imperative play/pause fallback: ensures the YouTube player
-  // actually obeys the isPlaying prop even when native controls are active
+  // Imperative play/pause fallback
   useEffect(() => {
     if (!playerRef.current) return;
     const internalPlayer = playerRef.current.getInternalPlayer();
     if (!internalPlayer || typeof internalPlayer.getPlayerState !== 'function') return;
-
-    // Small delay to let ReactPlayer's own prop handling run first
     const timer = setTimeout(() => {
       const state = internalPlayer.getPlayerState();
-      // YouTube states: 1=playing, 2=paused
       if (isPlaying && state === 2) {
-        console.log("[PLAYER] Forcing playVideo (prop sync fallback)");
+        console.log("[PLAYER] Forcing playVideo");
         internalPlayer.playVideo();
       } else if (!isPlaying && state === 1) {
-        console.log("[PLAYER] Forcing pauseVideo (prop sync fallback)");
+        console.log("[PLAYER] Forcing pauseVideo");
         internalPlayer.pauseVideo();
       }
-    }, 200);
-
+    }, 300);
     return () => clearTimeout(timer);
   }, [isPlaying]);
 
@@ -135,14 +130,32 @@ export default function VideoPlayer({
               onDuration(d);
             }}
             onProgress={(state: any) => {
-              onProgress(state.playedSeconds);
+              if (!seekingRef.current) {
+                expectedTimeRef.current = state.playedSeconds;
+                onProgress(state.playedSeconds);
+              }
             }}
             onPlay={() => {
+              if (seekingRef.current) return;
               if (etatSync === "BUFFERING") emitReady();
               onPlay();
             }}
             onPause={() => {
-              onPause();
+              if (seekingRef.current) return;
+              // Detect seeks while playing: YouTube pauses internally when
+              // the user drags the seekbar. Check if position jumped.
+              const actualTime = playerRef.current?.getCurrentTime() ?? 0;
+              const diff = Math.abs(actualTime - expectedTimeRef.current);
+              if (diff > 2) {
+                // This is a seek, not a real pause
+                console.log("[PLAYER] Playing seek detected via onPause:", expectedTimeRef.current, "->", actualTime);
+                seekingRef.current = true;
+                expectedTimeRef.current = actualTime;
+                onSeek(actualTime);
+                setTimeout(() => { seekingRef.current = false; }, 800);
+              } else {
+                onPause();
+              }
             }}
             onError={(e: any) => console.error("Erreur player:", e)}
           />
