@@ -1,7 +1,7 @@
 // app/lib/socket.ts
 import { io, Socket } from 'socket.io-client';
 
-const WS_URL = 'https://vulgarly-unforcible-loura.ngrok-free.dev';
+const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 class SocketService {
   private socket: Socket | null = null;

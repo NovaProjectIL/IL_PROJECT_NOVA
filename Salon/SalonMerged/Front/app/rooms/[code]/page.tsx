@@ -104,7 +104,7 @@ function ChatWidget({ pseudo = "", userId, socket, roomCode, getCurrentTime, onS
 // PAGE PRINCIPALE (RoomPage)
 // ============================================================================
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://vulgarly-unforcible-loura.ngrok-free.dev';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function RoomPage() {
   const router = useRouter();
