@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { Marqueur } from "../types/types";
+import styles from './VideoTimeline.module.css';
 
 type VideoTimelineProps = {
   // Duree totale de la video en secondes
@@ -77,6 +78,13 @@ export default function VideoTimeline({
     return (timecode / duree) * 100;
   };
 
+  const formatTime = (seconds: number) => {
+    const totalSeconds = Math.max(0, Math.floor(seconds));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+
   const groupes = grouperMarqueurs(marqueurs);
   const marqueursTriees = [...marqueurs].sort((a, b) => a.timecode - b.timecode);
 
@@ -89,39 +97,50 @@ export default function VideoTimeline({
       {/* TODO ZINEB : RT-03 - cette zone safe evite le blocage des overlays */}
       {/* -------------------------------------------------- */}
 
-      {/* Bouton pour poser un marqueur au timestamp actuel */}
-      <button
-        onClick={onPoserMarqueur}
-        disabled={duree === 0}
-      >
-        Poser un marqueur ici
-      </button>
+      {/* Marker Navigation Controls - Modern Purple Design */}
+      <div className={styles.markerControls}>
+        <button
+          onClick={onPoserMarqueur}
+          disabled={duree === 0}
+          className={styles.markerButton}
+          title="Poser un marqueur ici"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" height="20" width="20">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+          </svg>
+        </button>
 
-      {/* Boutons de navigation precedent / suivant */}
-      {/* Valides en Etape 4 des tests */}
-      <button
-        onClick={() => {
-          if (indexActuel > 0) {
-            onClicMarqueur(marqueursTriees[indexActuel - 1], indexActuel - 1);
-          }
-        }}
-        disabled={indexActuel <= 0}
-        style={{ marginLeft: "8px" }}
-      >
-        Precedent
-      </button>
+        <button
+          onClick={() => {
+            if (indexActuel > 0) {
+              onClicMarqueur(marqueursTriees[indexActuel - 1], indexActuel - 1);
+            }
+          }}
+          disabled={indexActuel <= 0}
+          className={styles.markerNavButton}
+          title="Précédent"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
+            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+          </svg>
+        </button>
 
-      <button
-        onClick={() => {
-          if (indexActuel < marqueursTriees.length - 1) {
-            onClicMarqueur(marqueursTriees[indexActuel + 1], indexActuel + 1);
-          }
-        }}
-        disabled={indexActuel >= marqueursTriees.length - 1}
-        style={{ marginLeft: "8px" }}
-      >
-        Suivant
-      </button>
+        <button
+          onClick={() => {
+            if (indexActuel < marqueursTriees.length - 1) {
+              onClicMarqueur(marqueursTriees[indexActuel + 1], indexActuel + 1);
+            }
+          }}
+          disabled={indexActuel >= marqueursTriees.length - 1}
+          className={styles.markerNavButton}
+          title="Suivant"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
+            <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+          </svg>
+        </button>
+      </div>
+
 
       {/* -------------------------------------------------- */}
       {/* BARRE DE TIMELINE avec epingles et clustering */}
@@ -216,7 +235,7 @@ export default function VideoTimeline({
                         }}
                         style={{ cursor: "pointer", padding: "2px" }}
                       >
-                        {m.label} ({m.timecode}s)
+                        Marker {idx + 1} — {formatTime(m.timecode)}
                       </div>
                     );
                   })}
@@ -230,23 +249,23 @@ export default function VideoTimeline({
       {/* -------------------------------------------------- */}
       {/* LISTE COMPLETE des marqueurs avec marqueur actuel en gras */}
       {/* -------------------------------------------------- */}
-      <h3>Marqueurs</h3>
-      {marqueursTriees.length === 0 && <p>Aucun marqueur pour linstant</p>}
-      {marqueursTriees.map((m, index) => (
-        <p
-          key={m.id}
-          onClick={() => onClicMarqueur(m, index)}
-          style={{
-            cursor: "pointer",
-            // Marqueur actuel en gras
-            fontWeight: index === indexActuel ? "bold" : "normal",
-            color: "black",
-          }}
-        >
-          {index === indexActuel ? ">> " : ""}
-          {m.label} - {m.timecode}s - {m.categorie}
-        </p>
-      ))}
+      <div className={styles.markerListContainer}>
+        <div className={styles.markerListHeader}>Marqueurs</div>
+        {marqueursTriees.length === 0 && (
+          <div className={styles.markerEmpty}>Aucun marqueur pour linstant</div>
+        )}
+        {marqueursTriees.map((m, index) => (
+          <button
+            key={m.id}
+            onClick={() => onClicMarqueur(m, index)}
+            className={`${styles.markerRow} ${index === indexActuel ? styles.markerRowActive : ""}`}
+            type="button"
+          >
+            <span className={styles.markerName}>Marker {index + 1}</span>
+            <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

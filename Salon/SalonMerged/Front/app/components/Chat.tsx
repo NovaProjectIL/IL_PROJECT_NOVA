@@ -30,9 +30,10 @@ const giphyApiKey = "TVQlPggmgsUzg4lyGiR2btZLfpyfw6Z1";
 const gf = new GiphyFetch(giphyApiKey);
 
 function formatTimecode(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socket, roomCode, getCurrentTime, onSeek }: ChatProps) {
@@ -72,7 +73,17 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
     socket.on('reconnect', identifyAndLoad);
 
     const handleReceiveMessage = (msg: Message) => {
-      setMessages((prev) => [...prev, msg]);
+      const rawTimecode =
+        msg.timecode ?? (msg as any).timeSec ?? (msg as any).timecodeSec ?? null;
+      const normalizedTimecode =
+        rawTimecode != null ? Number(rawTimecode) : null;
+
+      const normalizedMsg = {
+        ...msg,
+        timecode: normalizedTimecode,
+      };
+
+      setMessages((prev) => [...prev, normalizedMsg]);
       setTypingUsers((prev) => prev.filter((name) => name !== msg.username));
       if (onMessageReceived) onMessageReceived();
       scrollToBottom();
@@ -85,7 +96,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
             gifUrl: m.gifUrl,
             createdAt: m.createdAt,
             userId: m.userId,
-            timecode: m.timecode ?? null, // ← NOUVEAU
+            timecode: m.timecode ?? m.timeSec ?? m.timecodeSec ?? null,
         }));
         setMessages(formatted);
         scrollToBottom();
@@ -217,7 +228,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
                 <div className={`message-bubble ${isMe ? "message-me" : "message-other"}`}>
                   {m.message}
                   {/* ← NOUVEAU : badge timecode cliquable */}
-                  {m.timecode != null && m.timecode > 0 && (
+                  {m.timecode != null && (
                     <span
                       onClick={() => onSeek?.(m.timecode!)}
                       style={{
@@ -235,7 +246,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
                       }}
                       title="Aller à ce moment de la vidéo"
                     >
-                      ⏱ {formatTimecode(m.timecode)}
+                      {formatTimecode(m.timecode)}
                     </span>
                   )}
                 </div>
@@ -244,7 +255,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
                 <div className={`mt-2 ${isMe ? 'text-end' : 'text-start'}`}>
                   <img src={m.gifUrl} alt="GIF" className="gif-image" style={{maxHeight: '150px', maxWidth: '100%'}} />
                   {/* ← Badge timecode sur GIF aussi */}
-                  {m.timecode != null && m.timecode > 0 && (
+                  {m.timecode != null && (
                     <span
                       onClick={() => onSeek?.(m.timecode!)}
                       style={{
@@ -258,7 +269,7 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
                       }}
                       title="Aller à ce moment"
                     >
-                      ⏱ {formatTimecode(m.timecode)}
+                      {formatTimecode(m.timecode)}
                     </span>
                   )}
                 </div>

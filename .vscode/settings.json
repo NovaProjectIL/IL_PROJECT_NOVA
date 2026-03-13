@@ -1,0 +1,6 @@
+{
+    "chatgpt.commentCodeLensEnabled": false,
+    "chat.planAgent.defaultModel": "GPT-5 mini (copilot)",
+    "inlineChat.defaultModel": "GPT-5 mini (copilot)",
+    "github.copilot.selectedCompletionModel": "gpt-5-codex"
+}

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import io from 'socket.io-client';
 import PlaylistComponent from '@/app/components/PlaylistComponent';
-import Chat from '@/app/components/Chat';
+import ChatWidget from '@/app/components/ChatWidget';
 import styles from './RoomPage.module.css';
 import VideoPlayer from '@/app/components/VideoPlayer';
 import { roomsApi, playlistApi, marqueursApi } from '@/app/lib/api';
@@ -18,77 +18,6 @@ const log = {
   api: (msg: string, data?: any) => console.log(`[API] ${msg}`, data ?? ''),
   error: (msg: string, data?: any) => console.error(`[ERROR] ${msg}`, data ?? ''),
 };
-
-interface ChatWidgetProps {
-  pseudo?: string;
-  socket: any;
-  roomCode: string;
-  userId?: number;
-  getCurrentTime?: () => number;
-  onSeek?: (timecode: number) => void;
-}
-
-function ChatWidget({ pseudo = "", userId, socket, roomCode, getCurrentTime, onSeek }: ChatWidgetProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [sidebarWidth, setSidebarWidth] = useState(420);
-  const [isResizing, setIsResizing] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const stopResizing = () => setIsResizing(false);
-    const resize = (e: MouseEvent) => {
-      if (isResizing) {
-        const newWidth = window.innerWidth - e.clientX;
-        if (newWidth > 300 && newWidth < 800) setSidebarWidth(newWidth);
-      }
-    };
-    if (isResizing) {
-      window.addEventListener("mousemove", resize);
-      window.addEventListener("mouseup", stopResizing);
-    }
-    return () => {
-      window.removeEventListener("mousemove", resize);
-      window.removeEventListener("mouseup", stopResizing);
-    };
-  }, [isResizing]);
-
-  const handleMessageReceived = () => {
-    if (!isOpen) setUnreadCount((prev) => prev + 1);
-  };
-
-  useEffect(() => {
-    if (isOpen) setUnreadCount(0);
-  }, [isOpen]);
-
-  if (!roomCode) return null;
-
-  return (
-    <>
-      {!isOpen && (
-        <div className="chat-trigger-side" onClick={() => setIsOpen(true)} title="Ouvrir le chat">
-          <span className="chat-trigger-text">Chat</span>
-          {unreadCount > 0 && <span className="badge-notification animate-jump">{unreadCount > 9 ? "9+" : unreadCount}</span>}
-        </div>
-      )}
-      <div ref={sidebarRef} className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`} style={{ width: `${sidebarWidth}px` }}>
-        <div className="resize-handle" onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}><div className="resize-line"></div></div>
-        <div className="chat-panel">
-          <Chat
-            onClose={() => setIsOpen(false)}
-            pseudo={pseudo}
-            userId={userId}
-            onMessageReceived={handleMessageReceived}
-            socket={socket}
-            roomCode={roomCode}
-            getCurrentTime={getCurrentTime}
-            onSeek={onSeek}
-          />
-        </div>
-      </div>
-    </>
-  );
-}
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -427,7 +356,7 @@ export default function RoomPage() {
 
           <div className={styles.controlsSection}>
             <div className={styles.controlButtons}>
-              <button onClick={async () => {
+<button onClick={async () => {
                 try {
                   const response = await playlistApi.previousVideo(code);
                   const data = response.data;
@@ -439,10 +368,22 @@ export default function RoomPage() {
                     }
                   }
                 } catch (error: any) { log.error('Erreur previous video', error); }
-              }} className={styles.controlButton}>Precedent</button>
+              }} className={`${styles.controlButton} ${styles.previousButton}`} title="Précédent">
+                <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
+                  <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                </svg>
+              </button>
               
-              <button onClick={handlePlay} className={`${styles.controlButton} ${styles.playButton}`}>Lecture</button>
-              <button onClick={handlePause} className={`${styles.controlButton} ${styles.pauseButton}`}>Pause</button>
+              <button onClick={handlePlay} className={`${styles.controlButton} ${styles.playButton}`} title="Play">
+                <svg viewBox="0 0 24 24" fill="currentColor" height="28" width="28">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </button>
+              <button onClick={handlePause} className={`${styles.controlButton} ${styles.pauseButton}`} title="Pause">
+                <svg viewBox="0 0 24 24" fill="currentColor" height="28" width="28">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              </button>
               
               <button onClick={async () => {
                 try {
@@ -456,11 +397,28 @@ export default function RoomPage() {
                     }
                   }
                 } catch (error: any) { log.error('Erreur next video', error); }
-              }} className={styles.controlButton}>Suivant</button>
+              }} className={`${styles.controlButton} ${styles.nextButton}`} title="Suivant">
+                <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
+                  <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+                </svg>
+              </button>
             </div>
             <div className={styles.statusInfo}>
-              <span>{isPlaying ? '▶️ Lecture' : '⏸️ Pause'}</span>
-              <span>{formatTime(position)} / {formatTime(currentVideo.durationSec || 0)}</span>
+              <span className={styles.statusBadge}>
+                <span className={styles.statusIcon} aria-hidden="true">
+                  {isPlaying ? (
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                    </svg>
+                  )}
+                </span>
+                <span className={styles.statusText}>{isPlaying ? 'Lecture' : 'Pause'}</span>
+              </span>
+              <span className={styles.statusTime}>{formatTime(position)} / {formatTime(currentVideo.durationSec || 0)}</span>
             </div>
           </div>
         </div>

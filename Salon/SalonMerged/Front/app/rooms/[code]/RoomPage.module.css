@@ -355,60 +355,105 @@
 
 .controlButtons {
   display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
 }
 
 .controlButton {
-  padding: 10px 20px;
+  --gradient-angle: 135deg;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
   color: white;
   border: none;
-  border-radius: 10px;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 900;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: all 0.3s ease;
+  background: linear-gradient(var(--gradient-angle), #C084FC 0%, #A855F7 50%, #9333EA 100%);
+  background-size: 400% 400%;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 
+    0 8px 25px rgba(192, 132, 252, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  
+  /* Glassmorphism inner glow */
+  background-image: 
+    radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15) 0%, transparent 50%),
+    radial-gradient(circle at 70% 70%, rgba(255,255,255,0.1) 0%, transparent 50%);
+  
+  animation: gradientShift 3s ease infinite;
 }
 
-.playButton {
-  background: linear-gradient(135deg, #10b981, #059669);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
-.playButton:hover:not(.disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+.controlButton::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+  transform: translateX(-100%) scaleX(0);
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.pauseButton {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+.controlButton:hover::before {
+  transform: translateX(100%) scaleX(1);
 }
 
-.pauseButton:hover:not(.disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+.controlButton:hover {
+  transform: translateY(-2px) scale(1.08);
+  box-shadow: 
+    0 12px 40px rgba(192, 132, 252, 0.6),
+    0 0 30px rgba(168, 85, 247, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-.previousButton {
-  background: linear-gradient(135deg, var(--cherry-lightest), var(--cherry-dark));
-  box-shadow: 0 4px 12px rgba(197, 34, 51, 0.3);
+.controlButton:active {
+  transform: scale(0.95);
+  transition: transform 0.1s;
 }
 
-.previousButton:hover:not(.disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(197, 34, 51, 0.4);
+
+.controlButton svg {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+  transition: transform 0.2s ease;
 }
 
-.nextButton {
-  background: linear-gradient(135deg, var(--cherry-light), var(--cherry-darkest));
-  box-shadow: 0 4px 12px rgba(165, 28, 48, 0.3);
+.controlButton:hover svg {
+  transform: scale(1.1);
 }
 
-.nextButton:hover:not(.disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(165, 28, 48, 0.4);
+@media (max-width: 768px) {
+  .controlButtons {
+    gap: 12px;
+  }
+  
+  .controlButton {
+    width: 56px;
+    height: 56px;
+    font-size: 16px;
+  }
 }
+
+@media (max-width: 480px) {
+  .controlButtons {
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
 
 .controlButton.disabled {
   background: rgba(255, 255, 255, 0.1);
@@ -481,8 +526,40 @@
 
 .statusInfo {
   margin-top: 10px;
-  font-size: 0.9em;
-  color: rgba(255, 255, 255, 0.6);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.95em;
+  font-weight: 600;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statusIcon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.statusText {
+  letter-spacing: 0.01em;
+}
+
+.statusTime {
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .positionInfo {
@@ -535,6 +612,31 @@
   .memberTag {
     font-size: 12px;
     padding: 4px 8px;
+  }
+}
+
+/* Uniform control buttons for player */
+.controlButtons .playButton,
+.controlButtons .pauseButton,
+.controlButtons .previousButton,
+.controlButtons .nextButton {
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #C084FC 0%, #A855F7 50%, #9333EA 100%);
+  box-shadow:
+    0 8px 25px rgba(192, 132, 252, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+  .controlButtons .playButton,
+  .controlButtons .pauseButton,
+  .controlButtons .previousButton,
+  .controlButtons .nextButton {
+    width: 56px;
+    height: 56px;
   }
 }
 /* ========================================

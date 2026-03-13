@@ -72,6 +72,7 @@ export class ChatGateway {
         codeRoom: string;
         userId?: number;
         username?: string;
+        timecode?: number;
     },
   ) {
     // 1. SÉCURITÉ
@@ -112,7 +113,8 @@ export class ChatGateway {
           user,
           payload.message,
           payload.gifUrl,
-          roomCode
+          roomCode,
+          payload.timecode ?? null
         );
 
         console.log(`✅ Chat: Message envoyé dans ${roomCode} par ${user.name} (ID: ${user.id})`);
@@ -123,6 +125,7 @@ export class ChatGateway {
           userId: user.id, // ✅ FIX PRINCIPAL : Inclure l'userId
           message: savedMessage.content,
           gifUrl: savedMessage.gifUrl,
+          timecode: savedMessage.timecode ?? payload.timecode ?? null,
           createdAt: savedMessage.createdAt,
         });
     } catch (error) {
