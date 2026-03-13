@@ -371,6 +371,7 @@ export default function RoomPage() {
   };
 
   const handleQuitRoom = () => {
+    if (!confirm('Voulez-vous vraiment quitter le salon?')) return;
     if (socketRef.current) socketRef.current.disconnect();
     router.push('/');
   };
