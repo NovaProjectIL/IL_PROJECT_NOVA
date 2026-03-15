@@ -9,7 +9,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': 'true',
   },
-  timeout: 10000,
+  timeout: 20000,
 });
 
 api.interceptors.response.use(
@@ -25,6 +25,11 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    const originalConfig = error.config || {};
+    if (error.code === 'ECONNABORTED' && !originalConfig.__retry) {
+      originalConfig.__retry = true;
+      return api(originalConfig);
+    }
     const shouldDebug = process.env.NEXT_PUBLIC_DEBUG_API === 'true';
     if (shouldDebug) {
       console.warn('API Error:', {

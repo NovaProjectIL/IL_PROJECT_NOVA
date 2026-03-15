@@ -5,10 +5,10 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import io from 'socket.io-client';
 import PlaylistComponent from '@/app/components/PlaylistComponent';
 import ChatWidget from '@/app/components/ChatWidget';
+import { useMarkers } from '@/app/hooks/useMarkers';
 import styles from './RoomPage.module.css';
 import VideoPlayer from '@/app/components/VideoPlayer';
-import { roomsApi, playlistApi, marqueursApi } from '@/app/lib/api';
-import { Marqueur } from '@/app/types/types';
+import { roomsApi, playlistApi } from '@/app/lib/api';
 
 const log = {
   room: (msg: string, data?: any) => console.log(`[ROOM] ${msg}`, data ?? ''),
@@ -37,10 +37,11 @@ export default function RoomPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [roomInternalId, setRoomInternalId] = useState<number | null>(null);
+  const [showQuitModal, setShowQuitModal] = useState(false);
   const socketRef = useRef<any>(null);
 
-  const [marqueurs, setMarqueurs] = useState<Marqueur[]>([]);
   const [indexActuel, setIndexActuel] = useState<number>(-1);
+  const { marqueurs, setMarqueurs, creer: creerMarqueur } = useMarkers(roomInternalId, socketRef.current, code);
 
   const stateRef = useRef({ position, isPlaying });
   const isUpdatingFromSocket = useRef(false);
@@ -63,47 +64,6 @@ export default function RoomPage() {
       setIndexActuel(idx);
     }
   }, [position, marqueurs, indexActuel]);
-
-  const normaliserMarqueur = useCallback((raw: any): Marqueur => {
-    return {
-      id: String(raw.id),
-      timecode: Number(raw.timeSec ?? raw.timecode ?? 0),
-      label: raw.label ?? 'Marqueur',
-      categorie: raw.category ?? raw.categorie ?? 'COMMENT',
-      roomId: String(raw.room?.id ?? roomInternalId ?? ''),
-      auteurId: String(raw.createdBy?.id ?? raw.auteurId ?? ''),
-      auteurNom: raw.createdBy?.name ?? raw.auteurNom ?? 'Utilisateur',
-    } as Marqueur;
-  }, [roomInternalId]);
-
-  const chargerMarqueurs = useCallback(async (roomIdParam?: number | null) => {
-    const idToUse = roomIdParam ?? roomInternalId;
-    if (!idToUse) return;
-    try {
-      const response = await marqueursApi.getMarqueurs(idToUse);
-      const liste = Array.isArray(response.data) ? response.data.map(normaliserMarqueur) : [];
-      setMarqueurs(liste);
-    } catch (err) {
-      log.error('Erreur chargement marqueurs', err);
-    }
-  }, [roomInternalId, normaliserMarqueur]);
-
-  const handleNouveauMarqueur = async (timecode: number) => {
-    if (!roomInternalId || !currentVideo?.youtubeId || !Number.isFinite(memberId)) return;
-    try {
-      const response = await marqueursApi.creerMarqueur(roomInternalId, {
-        timeSec: timecode,
-        label: `Marqueur a ${Math.floor(timecode)}s`,
-        category: 'COMMENT',
-        videoId: currentVideo.youtubeId,
-        createdById: memberId,
-      });
-      const nouveauMarqueur = normaliserMarqueur(response.data);
-      setMarqueurs((prev) => [...prev, nouveauMarqueur]);
-    } catch (err) {
-      log.error('Erreur creation marqueur', err);
-    }
-  };
 
   const calculateAdjustedPosition = useCallback((playbackData: any) => {
     if (!playbackData) return 0;
@@ -150,14 +110,13 @@ export default function RoomPage() {
   useEffect(() => {
     if (!code) return;
     const initialLoad = async () => {
-      const stateData = await loadRoomData();
-      if (stateData?.roomId) await chargerMarqueurs(stateData.roomId);
+      await loadRoomData();
       setLoading(false);
     };
     initialLoad();
     const interval = setInterval(loadRoomData, 5000);
     return () => clearInterval(interval);
-  }, [code, loadRoomData, chargerMarqueurs]);
+  }, [code, loadRoomData]);
 
   useEffect(() => {
     if (!code) return;
@@ -210,6 +169,22 @@ export default function RoomPage() {
       setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
     });
 
+    socket.on('nouveau_marqueur', (marqueurBrut: any) => {
+      const m = {
+        id: String(marqueurBrut.id),
+        timecode: Number(marqueurBrut.timeSec ?? marqueurBrut.timecode ?? 0),
+        label: marqueurBrut.label ?? 'Marqueur',
+        categorie: marqueurBrut.category ?? marqueurBrut.categorie ?? 'COMMENT',
+        roomId: String(marqueurBrut.room?.id ?? roomInternalId ?? ''),
+        auteurId: String(marqueurBrut.createdBy?.id ?? marqueurBrut.auteurId ?? ''),
+        auteurNom: marqueurBrut.createdBy?.name ?? marqueurBrut.auteurNom ?? 'Utilisateur',
+      };
+      setMarqueurs((prev) => {
+        if (prev.find(x => x.id === m.id)) return prev;
+        return [...prev, m];
+      });
+    });
+
     socket.on('video-changed', (data: any) => {
       log.socket('Video changed reçu', data);
       loadRoomData();
@@ -256,10 +231,11 @@ export default function RoomPage() {
     });
 
     return () => {
+      socket.off('nouveau_marqueur');
       socket.off('force-pause');
       socket.disconnect();
     };
-  }, [code, memberId, calculateAdjustedPosition, loadRoomData]);
+  }, [code, memberId, roomInternalId, calculateAdjustedPosition, loadRoomData, setMarqueurs]);
 
   const handlePlay = () => {
     if (isUpdatingFromSocket.current) return;
@@ -300,7 +276,11 @@ export default function RoomPage() {
   };
 
   const handleQuitRoom = () => {
-    if (!confirm('Voulez-vous vraiment quitter le salon?')) return;
+    setShowQuitModal(true);
+  };
+
+  const confirmQuit = () => {
+    setShowQuitModal(false);
     if (socketRef.current) socketRef.current.disconnect();
     router.push('/');
   };
@@ -350,7 +330,10 @@ export default function RoomPage() {
               onPause={handlePause}
               onSeek={handleSeek}
               onDuration={() => {}}
-              onNouveauMarqueur={handleNouveauMarqueur}
+              onNouveauMarqueur={async (timecode) => {
+                if (!roomInternalId || !currentVideo?.youtubeId) return;
+                await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, socketRef.current, code);
+              }}
             />
           </div>
 
@@ -452,6 +435,70 @@ export default function RoomPage() {
       />
 
       <ChatWidget socket={socketRef.current} roomCode={code} pseudo={pseudo} userId={memberId} getCurrentTime={() => position} onSeek={handleSeek} />
+
+      {showQuitModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999,
+        }}>
+          <div style={{
+            background: 'rgba(88, 12, 31, 0.95)',
+            border: '1px solid rgba(197, 34, 51, 0.4)',
+            borderRadius: '20px',
+            padding: '40px',
+            maxWidth: '420px',
+            width: '90%',
+            textAlign: 'center',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🚪</div>
+            <h2 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 800, marginBottom: '12px' }}>
+              Quitter le salon ?
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '32px', lineHeight: '1.6' }}>
+              Tu vas quitter la session en cours. Les autres participants continueront sans toi.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowQuitModal(false)}
+                style={{
+                  padding: '12px 28px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  transition: 'all 0.2s',
+                }}
+              >
+                Rester
+              </button>
+              <button
+                onClick={confirmQuit}
+                style={{
+                  padding: '12px 28px',
+                  background: 'linear-gradient(135deg, #C52233, #74121D)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  boxShadow: '0 4px 12px rgba(197,34,51,0.5)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                Quitter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 

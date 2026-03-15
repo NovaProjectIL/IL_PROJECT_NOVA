@@ -140,26 +140,45 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { codeRoom: string; positionSec?: number }
   ) {
     const { codeRoom, positionSec } = data;
-    if (!codeRoom) return;
     const roomCode = codeRoom.toUpperCase();
-    this.logger.log(`[SYNC] Pause requested in ${roomCode} at ${positionSec}s`);
+    this.logger.log(`Pause demandée dans ${roomCode} à ${positionSec}s`);
     
     try {
-      const { playback } = await this.roomsService.pause(roomCode, positionSec);
-      this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PAUSED, playback.positionSec);
-      
+      const room = await this.roomsService.getRoomByCode(roomCode);
+      const currentPlayback = await this.roomsService.getPlaybackState(room.id);
+
+      let actualPosition = positionSec;
+      if (actualPosition === undefined || actualPosition === null) {
+        actualPosition = currentPlayback.positionSec || 0;
+      }
+
+      await this.roomsService.pause(roomCode, actualPosition);
+
       this.server.to(roomCode).emit('playback-updated', {
         action: 'pause',
-        playback: { 
-          status: playback.status,
-          positionSec: playback.positionSec,
-          serverTimeRef: playback.serverTimeRef,
+        playback: {
+          status: 'PAUSED',
+          positionSec: actualPosition,
+          serverTimeRef: new Date(),
         },
         timestamp: new Date(),
       });
+      
+      this.logger.log(`Pause broadcast à tous : position ${actualPosition}s`);
     } catch (error) {
-      this.logger.error('Error handlePause:', error);
+      this.logger.error('Erreur pause:', error);
+      this.server.to(roomCode).emit('playback-updated', {
+        action: 'pause',
+        playback: {
+          status: 'PAUSED',
+          positionSec: positionSec || 0,
+          serverTimeRef: new Date(),
+        },
+        timestamp: new Date(),
+      });
     }
+
+    return { success: true };
   }
 
   @SubscribeMessage('seek')
@@ -316,5 +335,16 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+  @SubscribeMessage('marker-created')
+  handleMarkerCreated(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { codeRoom: string; marker: any }
+  ) {
+    const { codeRoom, marker } = data;
+    if (!codeRoom || !marker) return;
+    const roomCode = codeRoom.toUpperCase();
+    client.to(roomCode).emit('nouveau_marqueur', marker);
+    this.logger.log(`Marqueur broadcast dans ${roomCode}: ${marker.label}`);
+  }
 
 }
