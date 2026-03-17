@@ -167,10 +167,32 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { codeRoom: string; positionSec: number; wasPlaying?: boolean }
   ) {
-    const { codeRoom, positionSec } = data;
-    if (!codeRoom) return;
+    const { codeRoom, positionSec } = data ?? {};
+
+    // --- Validation stricte de l'identifiant de room ---
+    if (!codeRoom || typeof codeRoom !== 'string' || codeRoom.trim() === '') {
+      this.logger.warn(`[SYNC] Seek rejeté (${client.id}): identifiant de room invalide`);
+      client.emit('seek-error', { message: 'Identifiant de room invalide' });
+      return;
+    }
+
+    // --- Validation stricte du timecode (doit être un nombre fini strictement positif) ---
+    if (typeof positionSec !== 'number' || !Number.isFinite(positionSec) || positionSec <= 0) {
+      this.logger.warn(`[SYNC] Seek rejeté (${client.id}): timecode invalide (${positionSec})`);
+      client.emit('seek-error', { message: 'Le timecode doit être un nombre strictement positif' });
+      return;
+    }
+
     const roomCode = codeRoom.toUpperCase();
-    this.logger.log(`[SYNC] Seek requested in ${roomCode} to ${positionSec}s`);
+
+    // --- Validation : le client doit appartenir à cette room ---
+    if (!this.roomStateService.isClientInRoom(roomCode, client.id)) {
+      this.logger.warn(`[SYNC] Seek rejeté (${client.id}): pas membre de la room ${roomCode}`);
+      client.emit('seek-error', { message: 'Vous n\'êtes pas membre de cette room' });
+      return;
+    }
+
+    this.logger.log(`[SYNC] Seek validé dans ${roomCode} vers ${positionSec}s`);
     
     try {
       // 1. Update DB
@@ -225,6 +247,13 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const timeSinceAllReady = Date.now() - this.roomStateService.getLastAllReadyTime(roomCode);
     if (timeSinceAllReady < 3000) {
       this.logger.log(`[SYNC] client-buffering ignored in ${roomCode} (${timeSinceAllReady}ms since all-ready, cooldown)`);
+      return;
+    }
+    
+    // Anti-cascade: ignore transient buffering right after a play/pause/seek transition
+    const timeSinceChange = Date.now() - state.lastUpdateServerTime;
+    if (timeSinceChange < 2000) {
+      this.logger.log(`[SYNC] client-buffering ignored in ${roomCode} (${timeSinceChange}ms since last status change, too soon)`);
       return;
     }
     

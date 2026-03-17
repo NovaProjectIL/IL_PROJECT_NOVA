@@ -47,7 +47,23 @@ export default function VideoPlayer({
   const seekingRef = useRef(false);
   const expectedTimeRef = useRef<number>(0);
 
+  // Stable refs for callbacks — prevent useEffect restarts on re-render
+  const onSeekRef = useRef(onSeek);
+  onSeekRef.current = onSeek;
+  const onPlayRef = useRef(onPlay);
+  onPlayRef.current = onPlay;
+  const onPauseRef = useRef(onPause);
+  onPauseRef.current = onPause;
+
   const { etatSync, emitReady } = useSync(roomId, syncSocket);
+
+  // Closure-safe refs — always current in async YouTube callbacks
+  const etatSyncRef = useRef(etatSync);
+  etatSyncRef.current = etatSync;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const emitReadyRef = useRef(emitReady);
+  emitReadyRef.current = emitReady;
 
   // Track when we exit BUFFERING state (all-ready received) to prevent cascade
   const prevEtatSyncRef = useRef(etatSync);
@@ -63,9 +79,10 @@ export default function VideoPlayer({
   const bufferingEmittedRef = useRef(false);
   const lastAllReadyTimeRef = useRef(0);
   const handleBuffer = () => {
+    if (!isPlayingRef.current) return; // Don't report buffering when player is paused
     if (seekingRef.current) return; // Don't signal during an active seek (handled by seek flow)
     if (bufferingEmittedRef.current) return; // Already signaled for this buffering episode
-    if (etatSync === "BUFFERING") return; // Already in LOADING flow
+    if (etatSyncRef.current === "BUFFERING") return; // Already in LOADING flow
     // Anti-cascade: don't emit client-buffering within 3s of receiving all-ready
     if (Date.now() - lastAllReadyTimeRef.current < 3000) return;
     bufferingEmittedRef.current = true;
@@ -82,18 +99,19 @@ export default function VideoPlayer({
       const time = playerRef.current.getCurrentTime();
       if (time == null) return;
       const diff = Math.abs(time - expectedTimeRef.current);
-      if (diff > 2 && expectedTimeRef.current > 0) {
+      if (diff > 2) {
         console.log("[PLAYER] Paused seek detected:", expectedTimeRef.current, "->", time);
         seekingRef.current = true;
         expectedTimeRef.current = time;
-        onSeek(time);
+        onSeekRef.current(time);
         setTimeout(() => { seekingRef.current = false; }, 800);
       }
     }, 400);
     return () => clearInterval(interval);
-  }, [isPlaying, onSeek]);
+  }, [isPlaying]);
 
   // Force-seek the player when currentTime changes significantly (remote sync)
+  // Also re-checks when isPlaying changes (e.g., all-ready) to catch position drift
   useEffect(() => {
     if (!playerRef.current || duree <= 0) return;
     const playerTime = playerRef.current.getCurrentTime();
@@ -101,18 +119,19 @@ export default function VideoPlayer({
     if (diff > 1.5) {
       console.log("[PLAYER] Remote sync seeking to", currentTime, "(was at", playerTime, ")");
       seekingRef.current = true;
-      expectedTimeRef.current = currentTime;
       playerRef.current.seekTo(currentTime, "seconds");
       // After seeking completes, signal ready to server
       setTimeout(() => {
         seekingRef.current = false;
-        if (etatSync === "BUFFERING") {
+        if (etatSyncRef.current === "BUFFERING") {
           console.log("[PLAYER] Seek complete, emitting client-ready");
-          emitReady();
+          emitReadyRef.current();
         }
       }, 800);
     }
-  }, [currentTime, duree]);
+    // Always keep expectedTimeRef aligned with React state
+    expectedTimeRef.current = currentTime;
+  }, [currentTime, duree, isPlaying]);
 
   // Imperative play/pause fallback
   useEffect(() => {
@@ -161,15 +180,18 @@ export default function VideoPlayer({
               setDuree(d);
               onDuration(d);
               // Signal ready when player initially loads
-              emitReady();
+              emitReadyRef.current();
             }}
             onBuffer={handleBuffer}
             onBufferEnd={() => {
+              const hadEmittedBuffering = bufferingEmittedRef.current;
               bufferingEmittedRef.current = false;
               // Buffer finished -> this client is ready
-              if (etatSync === "BUFFERING") {
-                console.log("[PLAYER] Buffer ended during LOADING -> emitting client-ready");
-                emitReady();
+              // Emit client-ready if: (a) server told us we're in LOADING (etatSync=BUFFERING)
+              // OR (b) WE were the one who triggered the LOADING (we emitted client-buffering)
+              if (etatSyncRef.current === "BUFFERING" || hadEmittedBuffering) {
+                console.log("[PLAYER] Buffer ended -> emitting client-ready (etatSync:", etatSyncRef.current, "hadEmitted:", hadEmittedBuffering, ")");
+                emitReadyRef.current();
               }
             }}
             onProgress={(state: any) => {
@@ -179,17 +201,24 @@ export default function VideoPlayer({
               }
             }}
             onPlay={() => {
+              // If React already told YouTube to play, this is an echo, not a user action
+              if (isPlayingRef.current) return;
               if (seekingRef.current) return;
-              if (etatSync === "BUFFERING") {
+              if (etatSyncRef.current === "BUFFERING") {
                 // During wait-for-ready, don't propagate play - just signal ready
                 console.log("[PLAYER] onPlay during BUFFERING - emitting ready");
-                emitReady();
+                emitReadyRef.current();
                 return;
               }
-              onPlay();
+              onPlayRef.current();
             }}
             onPause={() => {
+              // If React already told YouTube to pause, this is an echo, not a user action
+              if (!isPlayingRef.current) return;
               if (seekingRef.current) return;
+              // During LOADING/BUFFERING, ignore all pause events — they come from
+              // force-seek or force-pause, not from user interaction
+              if (etatSyncRef.current === "BUFFERING") return;
               // Detect seeks while playing: YouTube pauses internally when
               // the user drags the seekbar. Check if position jumped.
               const actualTime = playerRef.current?.getCurrentTime() ?? 0;
@@ -199,10 +228,10 @@ export default function VideoPlayer({
                 console.log("[PLAYER] Playing seek detected via onPause:", expectedTimeRef.current, "->", actualTime);
                 seekingRef.current = true;
                 expectedTimeRef.current = actualTime;
-                onSeek(actualTime);
+                onSeekRef.current(actualTime);
                 setTimeout(() => { seekingRef.current = false; }, 800);
               } else {
-                onPause();
+                onPauseRef.current();
               }
             }}
             onError={(e: any) => console.error("Erreur player:", e)}

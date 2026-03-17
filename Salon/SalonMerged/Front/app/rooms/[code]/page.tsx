@@ -114,7 +114,6 @@ export default function RoomPage() {
   const [indexActuel, setIndexActuel] = useState<number>(-1);
 
   const stateRef = useRef({ position, isPlaying });
-  const isUpdatingFromSocket = useRef(false);
 
   useEffect(() => {
     stateRef.current = { position, isPlaying };
@@ -249,7 +248,6 @@ export default function RoomPage() {
 
     socket.on('room-initial-state', (data: any) => {
       log.socket('État initial reçu', data);
-      isUpdatingFromSocket.current = true;
       if (data.playback?.video) {
         setCurrentVideo(data.playback.video);
         const adjusted = calculateAdjustedPosition(data.playback);
@@ -257,12 +255,10 @@ export default function RoomPage() {
         setIsPlaying(data.playback.status === 'PLAYING');
       }
       if (data.users) setMembers(data.users);
-      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
     });
 
     socket.on('playback-updated', (data: any) => {
       log.socket('Playback updated reçu', data);
-      isUpdatingFromSocket.current = true;
       
       if (data.action === 'play') {
         const targetPos = calculateAdjustedPosition(data.playback);
@@ -274,11 +270,8 @@ export default function RoomPage() {
       } else if (data.action === 'seek') {
         const targetPos = calculateAdjustedPosition(data.playback);
         setPosition(targetPos);
-        // Preserve play/pause state from server
-        setIsPlaying(data.playback.status === 'PLAYING');
+        // Don't set isPlaying: force-seek/all-ready handle play/pause during seek flow
       }
-      
-      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
     });
 
     socket.on('video-changed', (data: any) => {
@@ -289,23 +282,19 @@ export default function RoomPage() {
     // Wait-for-Ready: server orders all clients to seek to a position
     socket.on('force-seek', (data: any) => {
       log.socket('Force-seek reçu', data);
-      isUpdatingFromSocket.current = true;
       const targetPos = Number(data.timecode ?? 0);
       setPosition(targetPos);
       // Always pause during LOADING - all-ready will decide whether to resume
       setIsPlaying(false);
-      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1500);
     });
 
     // Wait-for-Ready: all clients buffered, resume together
     socket.on('all-ready', (data: any) => {
       log.socket('All-ready reçu', data);
-      isUpdatingFromSocket.current = true;
       const pos = Number(data.positionSec ?? 0);
       const shouldPlay = data.shouldPlay !== false; // default true for backward compat
       setPosition(pos);
       setIsPlaying(shouldPlay);
-      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
     });
 
     socket.on('user-joined', (data: any) => {
@@ -316,14 +305,12 @@ export default function RoomPage() {
     // A remote client started buffering: server orders everyone to pause
     socket.on('force-pause', (data: any) => {
       log.socket('Force-pause reçu (un client charge)', data);
-      isUpdatingFromSocket.current = true;
       setIsPlaying(false);
       // We're already at the right position and paused, so we're "ready"
       setTimeout(() => {
         socket.emit('client-ready', { codeRoom: code });
         log.socket('Emitting client-ready after force-pause');
       }, 500);
-      setTimeout(() => { isUpdatingFromSocket.current = false; }, 1000);
     });
 
     return () => {
@@ -333,7 +320,6 @@ export default function RoomPage() {
   }, [code, memberId, calculateAdjustedPosition, loadRoomData]);
 
   const handlePlay = () => {
-    if (isUpdatingFromSocket.current) return;
     if (!code) return;
     log.player('Local play -> emit play socket', { code, pos: stateRef.current.position });
     setIsPlaying(true);
@@ -341,7 +327,6 @@ export default function RoomPage() {
   };
 
   const handlePause = () => {
-    if (isUpdatingFromSocket.current) return;
     if (!code) return;
     log.player('Local pause -> emit pause socket', { code, pos: stateRef.current.position });
     setIsPlaying(false);
@@ -349,10 +334,8 @@ export default function RoomPage() {
   };
 
   const handleSeek = (newPosition: number) => {
-    if (isUpdatingFromSocket.current) return;
     if (!code) return;
     log.player('Local seek -> emit seek socket', { code, pos: newPosition });
-    isUpdatingFromSocket.current = true;
     setPosition(newPosition);
     socketRef.current?.emit('seek', { codeRoom: code, positionSec: newPosition, wasPlaying: stateRef.current.isPlaying });
     // The seeker already seeked locally, so force-seek won't trigger a remote-sync
@@ -361,7 +344,6 @@ export default function RoomPage() {
       socketRef.current?.emit('client-ready', { codeRoom: code });
       log.player('Seeker emitting client-ready after local seek');
     }, 800);
-    setTimeout(() => { isUpdatingFromSocket.current = false; }, 1500);
   };
 
   const formatTime = (seconds: number) => {
@@ -415,7 +397,7 @@ export default function RoomPage() {
               syncSocket={socketRef.current}
               marqueurs={marqueurs}
               indexActuel={indexActuel}
-              onProgress={(time) => { if (!isUpdatingFromSocket.current) setPosition(time); }}
+              onProgress={(time) => setPosition(time)}
               onPlay={handlePlay}
               onPause={handlePause}
               onSeek={handleSeek}
