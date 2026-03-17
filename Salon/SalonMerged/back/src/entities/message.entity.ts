@@ -20,6 +20,9 @@ export class Message {
   @Column({ type: 'text', nullable: true })
   gifUrl: string | null;
 
+  @Column({ type: 'int', nullable: true })
+  timecode: number | null;
+
   // when user deleted => user_id set to NULL, message stays
   @ManyToOne(() => User, (user) => user.messages, {
     eager: true,

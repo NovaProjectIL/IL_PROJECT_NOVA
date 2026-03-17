@@ -44,12 +44,13 @@ export class ChatService {
     content: string | undefined,
     gifUrl: string | undefined,
     codeRoom: string,
+    timecode: number | null = null,
   ): Promise<Message> {
     
     // 1. Trouver la Room
     const room = await this.roomRepo.findOne({ 
       where: { code: codeRoom },
-      relations: ['chatSession'] 
+      relations: ['chatSession', 'playbackState'] 
     });
 
     if (!room) {
@@ -64,9 +65,21 @@ export class ChatService {
     }
 
     // 3. Créer le message
+    let resolvedTimecode = timecode ?? null;
+    if (resolvedTimecode == null && room.playbackState) {
+      const playback = room.playbackState;
+      let position = playback.positionSec ?? 0;
+      if (playback.status === 'PLAYING' && playback.serverTimeRef) {
+        const elapsedMs = Date.now() - new Date(playback.serverTimeRef).getTime();
+        position += (elapsedMs / 1000) * (playback.playbackRate ?? 1);
+      }
+      resolvedTimecode = Math.max(0, Math.floor(position));
+    }
+
     const message = this.messageRepo.create({
       content: content ?? null,
       gifUrl: gifUrl ?? null,
+      timecode: resolvedTimecode,
       user: user,
       chatSession: session,
     });
@@ -91,6 +104,7 @@ export class ChatService {
       userId: m.user?.id ?? null, // ✅ FIX PRINCIPAL : Inclure l'userId
       message: m.content ?? undefined,
       gifUrl: m.gifUrl ?? undefined,
+      timecode: m.timecode ?? null,
       createdAt: m.createdAt,
     }));
   }

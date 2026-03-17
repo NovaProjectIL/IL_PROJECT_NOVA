@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Users, Play, MessageCircle, Lock, Zap, Palette, Sparkles, ArrowRight, Menu, X, User } from 'lucide-react';
 import Link from 'next/link';
@@ -21,6 +21,17 @@ export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 const [showQRCode, setShowQRCode] = useState(false);
 const [qrCodeData, setQrCodeData] = useState('');
+  const [particles, setParticles] = useState<{ left: string; top: string; animationDelay: string; animationDuration: string }[]>([]);
+
+  useEffect(() => {
+    const generated = [...Array(25)].map(() => ({
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 100}%`,
+      animationDelay: `${Math.random() * 5}s`,
+      animationDuration: `${3 + Math.random() * 4}s`,
+    }));
+    setParticles(generated);
+  }, []);
 
 
 
@@ -76,15 +87,15 @@ const handleJoinRoom = async () => {
     <div className="nova-container">
       {/* Background Effects */}
       <div className="particles">
-        {[...Array(25)].map((_, i) => (
+        {particles.map((particle, i) => (
           <div 
             key={i} 
             className="particle" 
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${3 + Math.random() * 4}s`
+              left: particle.left,
+              top: particle.top,
+              animationDelay: particle.animationDelay,
+              animationDuration: particle.animationDuration
             }} 
           />
         ))}

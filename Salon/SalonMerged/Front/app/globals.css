@@ -2211,8 +2211,9 @@ body {
    ================================================================= */
 
 :root {
-  --neon-purple: #b026ff;
-  --neon-blue: #4c6ef5;
+  --neon-purple: #a855f7;
+  --neon-blue: #c52233;
+  --neon-gold: #f4c430;
   --deep-space: #050505;
   /* --glass-bg: rgba(20, 20, 30, 0.6);  <-- Optionnel si conflit */
 }
@@ -2242,11 +2243,11 @@ body {
 .chat-panel {
   flex-grow: 1;
   height: 100%;
-  background: rgba(10, 10, 15, 0.4);
+  background: linear-gradient(160deg, rgba(88, 12, 31, 0.55), rgba(10, 10, 15, 0.45));
   -webkit-backdrop-filter: blur(40px) saturate(180%);
   backdrop-filter: blur(40px) saturate(180%);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: -20px 0 60px rgba(0,0,0,0.7);
+  border-left: 1px solid rgba(244, 196, 48, 0.18);
+  box-shadow: -25px 0 70px rgba(6, 5, 12, 0.7);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -2269,11 +2270,12 @@ body {
 
 .chat-header-rave {
   height: 80px;
-  padding: 0 30px;
+  padding: 0 26px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(8, 6, 12, 0.6) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 10;
 }
 
@@ -2291,12 +2293,13 @@ body {
 /* --- BULLES DE MESSAGES --- */
 .message-bubble {
   padding: 14px 20px;
-  border-radius: 24px;
+  border-radius: 22px;
   font-size: 0.95rem;
   line-height: 1.6;
   position: relative;
   max-width: 85%;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   opacity: 0;
   transform: scale(0.9);
@@ -2307,13 +2310,13 @@ body {
   background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
   color: white;
   border-bottom-right-radius: 4px;
-  box-shadow: 0 8px 25px rgba(76, 110, 245, 0.4);
+  box-shadow: 0 12px 32px rgba(197, 34, 51, 0.35);
 }
 
 .message-other {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 8, 16, 0.55);
+  border: 1px solid rgba(244, 196, 48, 0.18);
   color: #eee;
   border-bottom-left-radius: 4px;
   backdrop-filter: blur(10px);
@@ -2341,25 +2344,25 @@ body {
 /* --- ZONE DE SAISIE (INPUT) --- */
 .chat-input-rave {
   padding: 20px 25px 40px 25px;
-  background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+  background: linear-gradient(0deg, rgba(8, 6, 12, 0.9) 0%, transparent 100%);
   position: relative;
 }
 
 .input-group-rave {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(12, 8, 16, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 50px;
   padding: 8px 8px 8px 20px;
   display: flex;
   align-items: center;
   transition: all 0.3s ease;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.35);
 }
 
 .input-group-rave:focus-within {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: var(--neon-purple);
-  box-shadow: 0 0 25px rgba(176, 38, 255, 0.3);
+  background: rgba(18, 12, 20, 0.7);
+  border-color: var(--neon-gold);
+  box-shadow: 0 0 25px rgba(244, 196, 48, 0.25);
   transform: translateY(-2px);
 }
 
@@ -2376,18 +2379,18 @@ body {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: white;
+  background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
   border: none;
-  color: #7F00FF;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   margin-left: 10px;
-  box-shadow: 0 0 15px rgba(255,255,255,0.5);
+  box-shadow: 0 10px 24px rgba(197, 34, 51, 0.35);
 }
-.btn-send-rave:hover { transform: scale(1.1) rotate(10deg); }
+.btn-send-rave:hover { transform: scale(1.08); }
 .btn-send-rave:disabled { opacity: 0.5; transform: scale(0.9); cursor: not-allowed; }
 
 /* --- BOUTON TRIGGER (LANGUETTE) --- */
@@ -2398,9 +2401,9 @@ body {
   transform: translateY(-50%);
   width: 60px;
   height: 140px;
-  background: rgba(20, 20, 30, 0.8);
+  background: linear-gradient(180deg, rgba(88, 12, 31, 0.9), rgba(24, 10, 20, 0.9));
   backdrop-filter: blur(15px);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(244, 196, 48, 0.2);
   border-right: none;
   border-top-left-radius: 30px;
   border-bottom-left-radius: 30px;
@@ -2415,8 +2418,8 @@ body {
 
 .chat-trigger-side:hover {
   width: 70px;
-  background: rgba(30, 30, 45, 0.95);
-  box-shadow: -15px 0 40px rgba(176, 38, 255, 0.3);
+  background: linear-gradient(180deg, rgba(116, 18, 29, 0.95), rgba(24, 10, 20, 0.95));
+  box-shadow: -15px 0 40px rgba(197, 34, 51, 0.35);
 }
 
 .chat-trigger-text {
@@ -2426,7 +2429,7 @@ body {
   font-size: 1rem;
   letter-spacing: 3px;
   text-transform: uppercase;
-  background: linear-gradient(to bottom, #fff, #a0a0a0);
+  background: linear-gradient(to bottom, #fff, rgba(244, 196, 48, 0.8));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }

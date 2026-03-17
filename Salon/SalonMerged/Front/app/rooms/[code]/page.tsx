@@ -4,11 +4,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import io from 'socket.io-client';
 import PlaylistComponent from '@/app/components/PlaylistComponent';
-import Chat from '@/app/components/Chat';
+import ChatWidget from '@/app/components/ChatWidget';
+import { useMarkers } from '@/app/hooks/useMarkers';
 import styles from './RoomPage.module.css';
 import VideoPlayer from '@/app/components/VideoPlayer';
-import { roomsApi, playlistApi, marqueursApi } from '@/app/lib/api';
-import { Marqueur } from '@/app/types/types';
+import { roomsApi, playlistApi } from '@/app/lib/api';
 
 const log = {
   room: (msg: string, data?: any) => console.log(`[ROOM] ${msg}`, data ?? ''),
@@ -18,77 +18,6 @@ const log = {
   api: (msg: string, data?: any) => console.log(`[API] ${msg}`, data ?? ''),
   error: (msg: string, data?: any) => console.error(`[ERROR] ${msg}`, data ?? ''),
 };
-
-interface ChatWidgetProps {
-  pseudo?: string;
-  socket: any;
-  roomCode: string;
-  userId?: number;
-  getCurrentTime?: () => number;
-  onSeek?: (timecode: number) => void;
-}
-
-function ChatWidget({ pseudo = "", userId, socket, roomCode, getCurrentTime, onSeek }: ChatWidgetProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [sidebarWidth, setSidebarWidth] = useState(420);
-  const [isResizing, setIsResizing] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const stopResizing = () => setIsResizing(false);
-    const resize = (e: MouseEvent) => {
-      if (isResizing) {
-        const newWidth = window.innerWidth - e.clientX;
-        if (newWidth > 300 && newWidth < 800) setSidebarWidth(newWidth);
-      }
-    };
-    if (isResizing) {
-      window.addEventListener("mousemove", resize);
-      window.addEventListener("mouseup", stopResizing);
-    }
-    return () => {
-      window.removeEventListener("mousemove", resize);
-      window.removeEventListener("mouseup", stopResizing);
-    };
-  }, [isResizing]);
-
-  const handleMessageReceived = () => {
-    if (!isOpen) setUnreadCount((prev) => prev + 1);
-  };
-
-  useEffect(() => {
-    if (isOpen) setUnreadCount(0);
-  }, [isOpen]);
-
-  if (!roomCode) return null;
-
-  return (
-    <>
-      {!isOpen && (
-        <div className="chat-trigger-side" onClick={() => setIsOpen(true)} title="Ouvrir le chat">
-          <span className="chat-trigger-text">Chat</span>
-          {unreadCount > 0 && <span className="badge-notification animate-jump">{unreadCount > 9 ? "9+" : unreadCount}</span>}
-        </div>
-      )}
-      <div ref={sidebarRef} className={`chat-sidebar-container ${isOpen ? '' : 'closed'}`} style={{ width: `${sidebarWidth}px` }}>
-        <div className="resize-handle" onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}><div className="resize-line"></div></div>
-        <div className="chat-panel">
-          <Chat
-            onClose={() => setIsOpen(false)}
-            pseudo={pseudo}
-            userId={userId}
-            onMessageReceived={handleMessageReceived}
-            socket={socket}
-            roomCode={roomCode}
-            getCurrentTime={getCurrentTime}
-            onSeek={onSeek}
-          />
-        </div>
-      </div>
-    </>
-  );
-}
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -108,10 +37,11 @@ export default function RoomPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [roomInternalId, setRoomInternalId] = useState<number | null>(null);
+  const [showQuitModal, setShowQuitModal] = useState(false);
   const socketRef = useRef<any>(null);
 
-  const [marqueurs, setMarqueurs] = useState<Marqueur[]>([]);
   const [indexActuel, setIndexActuel] = useState<number>(-1);
+  const { marqueurs, setMarqueurs, creer: creerMarqueur } = useMarkers(roomInternalId, socketRef.current, code);
 
   const stateRef = useRef({ position, isPlaying });
 
@@ -133,47 +63,6 @@ export default function RoomPage() {
       setIndexActuel(idx);
     }
   }, [position, marqueurs, indexActuel]);
-
-  const normaliserMarqueur = useCallback((raw: any): Marqueur => {
-    return {
-      id: String(raw.id),
-      timecode: Number(raw.timeSec ?? raw.timecode ?? 0),
-      label: raw.label ?? 'Marqueur',
-      categorie: raw.category ?? raw.categorie ?? 'COMMENT',
-      roomId: String(raw.room?.id ?? roomInternalId ?? ''),
-      auteurId: String(raw.createdBy?.id ?? raw.auteurId ?? ''),
-      auteurNom: raw.createdBy?.name ?? raw.auteurNom ?? 'Utilisateur',
-    } as Marqueur;
-  }, [roomInternalId]);
-
-  const chargerMarqueurs = useCallback(async (roomIdParam?: number | null) => {
-    const idToUse = roomIdParam ?? roomInternalId;
-    if (!idToUse) return;
-    try {
-      const response = await marqueursApi.getMarqueurs(idToUse);
-      const liste = Array.isArray(response.data) ? response.data.map(normaliserMarqueur) : [];
-      setMarqueurs(liste);
-    } catch (err) {
-      log.error('Erreur chargement marqueurs', err);
-    }
-  }, [roomInternalId, normaliserMarqueur]);
-
-  const handleNouveauMarqueur = async (timecode: number) => {
-    if (!roomInternalId || !currentVideo?.youtubeId || !Number.isFinite(memberId)) return;
-    try {
-      const response = await marqueursApi.creerMarqueur(roomInternalId, {
-        timeSec: timecode,
-        label: `Marqueur a ${Math.floor(timecode)}s`,
-        category: 'COMMENT',
-        videoId: currentVideo.youtubeId,
-        createdById: memberId,
-      });
-      const nouveauMarqueur = normaliserMarqueur(response.data);
-      setMarqueurs((prev) => [...prev, nouveauMarqueur]);
-    } catch (err) {
-      log.error('Erreur creation marqueur', err);
-    }
-  };
 
   const calculateAdjustedPosition = useCallback((playbackData: any) => {
     if (!playbackData) return 0;
@@ -220,14 +109,13 @@ export default function RoomPage() {
   useEffect(() => {
     if (!code) return;
     const initialLoad = async () => {
-      const stateData = await loadRoomData();
-      if (stateData?.roomId) await chargerMarqueurs(stateData.roomId);
+      await loadRoomData();
       setLoading(false);
     };
     initialLoad();
     const interval = setInterval(loadRoomData, 5000);
     return () => clearInterval(interval);
-  }, [code, loadRoomData, chargerMarqueurs]);
+  }, [code, loadRoomData]);
 
   useEffect(() => {
     if (!code) return;
@@ -274,6 +162,22 @@ export default function RoomPage() {
       }
     });
 
+    socket.on('nouveau_marqueur', (marqueurBrut: any) => {
+      const m = {
+        id: String(marqueurBrut.id),
+        timecode: Number(marqueurBrut.timeSec ?? marqueurBrut.timecode ?? 0),
+        label: marqueurBrut.label ?? 'Marqueur',
+        categorie: marqueurBrut.category ?? marqueurBrut.categorie ?? 'COMMENT',
+        roomId: String(marqueurBrut.room?.id ?? roomInternalId ?? ''),
+        auteurId: String(marqueurBrut.createdBy?.id ?? marqueurBrut.auteurId ?? ''),
+        auteurNom: marqueurBrut.createdBy?.name ?? marqueurBrut.auteurNom ?? 'Utilisateur',
+      };
+      setMarqueurs((prev) => {
+        if (prev.find(x => x.id === m.id)) return prev;
+        return [...prev, m];
+      });
+    });
+
     socket.on('video-changed', (data: any) => {
       log.socket('Video changed reçu', data);
       loadRoomData();
@@ -314,10 +218,11 @@ export default function RoomPage() {
     });
 
     return () => {
+      socket.off('nouveau_marqueur');
       socket.off('force-pause');
       socket.disconnect();
     };
-  }, [code, memberId, calculateAdjustedPosition, loadRoomData]);
+  }, [code, memberId, roomInternalId, calculateAdjustedPosition, loadRoomData, setMarqueurs]);
 
   const handlePlay = () => {
     if (!code) return;
@@ -353,6 +258,11 @@ export default function RoomPage() {
   };
 
   const handleQuitRoom = () => {
+    setShowQuitModal(true);
+  };
+
+  const confirmQuit = () => {
+    setShowQuitModal(false);
     if (socketRef.current) socketRef.current.disconnect();
     router.push('/');
   };
@@ -402,13 +312,16 @@ export default function RoomPage() {
               onPause={handlePause}
               onSeek={handleSeek}
               onDuration={() => {}}
-              onNouveauMarqueur={handleNouveauMarqueur}
+              onNouveauMarqueur={async (timecode) => {
+                if (!roomInternalId || !currentVideo?.youtubeId) return;
+                await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, socketRef.current, code);
+              }}
             />
           </div>
 
           <div className={styles.controlsSection}>
             <div className={styles.controlButtons}>
-              <button onClick={async () => {
+<button onClick={async () => {
                 try {
                   const response = await playlistApi.previousVideo(code);
                   const data = response.data;
@@ -420,10 +333,22 @@ export default function RoomPage() {
                     }
                   }
                 } catch (error: any) { log.error('Erreur previous video', error); }
-              }} className={styles.controlButton}>Precedent</button>
+              }} className={`${styles.controlButton} ${styles.previousButton}`} title="Précédent">
+                <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
+                  <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                </svg>
+              </button>
               
-              <button onClick={handlePlay} className={`${styles.controlButton} ${styles.playButton}`}>Lecture</button>
-              <button onClick={handlePause} className={`${styles.controlButton} ${styles.pauseButton}`}>Pause</button>
+              <button onClick={handlePlay} className={`${styles.controlButton} ${styles.playButton}`} title="Play">
+                <svg viewBox="0 0 24 24" fill="currentColor" height="28" width="28">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </button>
+              <button onClick={handlePause} className={`${styles.controlButton} ${styles.pauseButton}`} title="Pause">
+                <svg viewBox="0 0 24 24" fill="currentColor" height="28" width="28">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              </button>
               
               <button onClick={async () => {
                 try {
@@ -437,11 +362,28 @@ export default function RoomPage() {
                     }
                   }
                 } catch (error: any) { log.error('Erreur next video', error); }
-              }} className={styles.controlButton}>Suivant</button>
+              }} className={`${styles.controlButton} ${styles.nextButton}`} title="Suivant">
+                <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
+                  <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+                </svg>
+              </button>
             </div>
             <div className={styles.statusInfo}>
-              <span>{isPlaying ? '▶️ Lecture' : '⏸️ Pause'}</span>
-              <span>{formatTime(position)} / {formatTime(currentVideo.durationSec || 0)}</span>
+              <span className={styles.statusBadge}>
+                <span className={styles.statusIcon} aria-hidden="true">
+                  {isPlaying ? (
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                    </svg>
+                  )}
+                </span>
+                <span className={styles.statusText}>{isPlaying ? 'Lecture' : 'Pause'}</span>
+              </span>
+              <span className={styles.statusTime}>{formatTime(position)} / {formatTime(currentVideo.durationSec || 0)}</span>
             </div>
           </div>
         </div>
@@ -475,6 +417,70 @@ export default function RoomPage() {
       />
 
       <ChatWidget socket={socketRef.current} roomCode={code} pseudo={pseudo} userId={memberId} getCurrentTime={() => position} onSeek={handleSeek} />
+
+      {showQuitModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999,
+        }}>
+          <div style={{
+            background: 'rgba(88, 12, 31, 0.95)',
+            border: '1px solid rgba(197, 34, 51, 0.4)',
+            borderRadius: '20px',
+            padding: '40px',
+            maxWidth: '420px',
+            width: '90%',
+            textAlign: 'center',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🚪</div>
+            <h2 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 800, marginBottom: '12px' }}>
+              Quitter le salon ?
+            </h2>
+            <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '32px', lineHeight: '1.6' }}>
+              Tu vas quitter la session en cours. Les autres participants continueront sans toi.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowQuitModal(false)}
+                style={{
+                  padding: '12px 28px',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  transition: 'all 0.2s',
+                }}
+              >
+                Rester
+              </button>
+              <button
+                onClick={confirmQuit}
+                style={{
+                  padding: '12px 28px',
+                  background: 'linear-gradient(135deg, #C52233, #74121D)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: 'white',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  boxShadow: '0 4px 12px rgba(197,34,51,0.5)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                Quitter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
