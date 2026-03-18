@@ -98,6 +98,14 @@
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.markerRowContent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
 .markerRow:last-child {
   margin-bottom: 0;
 }
@@ -122,6 +130,93 @@
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.85);
+}
+
+.markerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.markerActionButton,
+.markerActionDelete,
+.markerActionPrimary,
+.markerActionGhost {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.markerActionButton {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.markerActionButton:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.markerActionDelete {
+  background: rgba(197, 34, 51, 0.18);
+  color: #fca5a5;
+  border: 1px solid rgba(197, 34, 51, 0.35);
+}
+
+.markerActionDelete:hover {
+  background: rgba(197, 34, 51, 0.3);
+  color: #fff1f2;
+}
+
+.markerEditForm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.markerInput {
+  flex: 1;
+  min-width: 180px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 10, 18, 0.6);
+  color: white;
+  font-size: 0.85rem;
+}
+
+.markerInputTime {
+  width: 90px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 10, 18, 0.6);
+  color: white;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.markerActionPrimary {
+  background: linear-gradient(135deg, #C084FC 0%, #A855F7 50%, #9333EA 100%);
+  color: white;
+  box-shadow: 0 6px 18px rgba(168, 85, 247, 0.4);
+}
+
+.markerActionPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.markerActionGhost {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 @media (max-width: 768px) {

@@ -41,13 +41,19 @@ export default function RoomPage() {
   const socketRef = useRef<any>(null);
 
   const [indexActuel, setIndexActuel] = useState<number>(-1);
-  const { marqueurs, setMarqueurs, creer: creerMarqueur } = useMarkers(roomInternalId, socketRef.current, code);
+  const { marqueurs, setMarqueurs, creer: creerMarqueur, modifier: modifierMarqueur, supprimer: supprimerMarqueur } =
+    useMarkers(roomInternalId, socketRef.current, code, currentVideo?.youtubeId);
 
   const stateRef = useRef({ position, isPlaying });
+  const currentVideoIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = { position, isPlaying };
   }, [position, isPlaying]);
+
+  useEffect(() => {
+    currentVideoIdRef.current = currentVideo?.youtubeId ?? null;
+  }, [currentVideo?.youtubeId]);
 
   useEffect(() => {
     if (marqueurs.length === 0) {
@@ -162,6 +168,8 @@ export default function RoomPage() {
     socket.on('nouveau_marqueur', (marqueurBrut: any) => {
       const m = {
         id: String(marqueurBrut.id),
+        version: typeof marqueurBrut.version === 'number' ? marqueurBrut.version : undefined,
+        videoId: marqueurBrut.video?.youtubeId ?? marqueurBrut.videoId ?? marqueurBrut.video?.id ?? undefined,
         timecode: Number(marqueurBrut.timeSec ?? marqueurBrut.timecode ?? 0),
         label: marqueurBrut.label ?? 'Marqueur',
         categorie: marqueurBrut.category ?? marqueurBrut.categorie ?? 'COMMENT',
@@ -169,6 +177,7 @@ export default function RoomPage() {
         auteurId: String(marqueurBrut.createdBy?.id ?? marqueurBrut.auteurId ?? ''),
         auteurNom: marqueurBrut.createdBy?.name ?? marqueurBrut.auteurNom ?? 'Utilisateur',
       };
+      if (currentVideoIdRef.current && m.videoId && m.videoId !== currentVideoIdRef.current) return;
       setMarqueurs((prev) => {
         if (prev.find(x => x.id === m.id)) return prev;
         return [...prev, m];
@@ -313,6 +322,24 @@ export default function RoomPage() {
               onNouveauMarqueur={async (timecode) => {
                 if (!roomInternalId || !currentVideo?.youtubeId) return;
                 await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, socketRef.current, code);
+              }}
+              onModifierMarqueur={async (marqueur, data) => {
+                if (!roomInternalId) return;
+                if (typeof marqueur.version !== 'number') {
+                  log.error('Version du marqueur manquante, modification annulée', marqueur);
+                  return;
+                }
+                const version = marqueur.version;
+                await modifierMarqueur(roomInternalId, Number(marqueur.id), {
+                  version,
+                  ...(data.label !== undefined ? { label: data.label } : {}),
+                  ...(data.timecode !== undefined ? { timeSec: data.timecode } : {}),
+                  ...(data.categorie !== undefined ? { category: data.categorie } : {}),
+                });
+              }}
+              onSupprimerMarqueur={async (marqueur) => {
+                if (!roomInternalId) return;
+                await supprimerMarqueur(roomInternalId, Number(marqueur.id));
               }}
             />
           </div>

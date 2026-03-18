@@ -21,6 +21,8 @@ type VideoPlayerProps = {
   onSeek: (time: number) => void;
   onDuration: (duration: number) => void;
   onNouveauMarqueur?: (timecode: number) => void;
+  onModifierMarqueur?: (marqueur: Marqueur, data: { label?: string; timecode?: number; categorie?: Marqueur['categorie'] }) => Promise<void>;
+  onSupprimerMarqueur?: (marqueur: Marqueur) => Promise<void>;
 };
 
 export default function VideoPlayer({
@@ -37,6 +39,8 @@ export default function VideoPlayer({
   onSeek,
   onDuration,
   onNouveauMarqueur,
+  onModifierMarqueur,
+  onSupprimerMarqueur,
 }: VideoPlayerProps) {
 
   const [mounted, setMounted] = useState(false);
@@ -326,6 +330,8 @@ export default function VideoPlayer({
         indexActuel={indexActuel}
         onClicMarqueur={handleClicMarqueur}
         onPoserMarqueur={handlePoserMarqueur}
+        onModifierMarqueur={onModifierMarqueur}
+        onSupprimerMarqueur={onSupprimerMarqueur}
       />
     </div>
   );

@@ -23,6 +23,8 @@ type VideoTimelineProps = {
   // Callback appele quand l utilisateur clique sur "Poser un marqueur"
   // TODO WAFA : ce callback appellera ton API POST /markers
   onPoserMarqueur: () => void;
+  onModifierMarqueur?: (marqueur: Marqueur, data: { label?: string; timecode?: number; categorie?: Marqueur["categorie"] }) => Promise<void>;
+  onSupprimerMarqueur?: (marqueur: Marqueur) => Promise<void>;
 };
 
 // Seuil en secondes pour le clustering visuel
@@ -66,10 +68,16 @@ export default function VideoTimeline({
   indexActuel,
   onClicMarqueur,
   onPoserMarqueur,
+  onModifierMarqueur,
+  onSupprimerMarqueur,
 }: VideoTimelineProps) {
 
   // Groupe de marqueurs dont la liste est depliee
   const [groupeDeplie, setGroupeDeplie] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
+  const [draftTime, setDraftTime] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Calcule la position en pourcentage sur la timeline
   // Formule validee en Etape 2 des tests
@@ -83,6 +91,50 @@ export default function VideoTimeline({
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+
+  const parseTimeInput = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parts = trimmed.split(":");
+    if (parts.length === 1) {
+      const s = Number(parts[0]);
+      if (Number.isNaN(s)) return null;
+      return Math.max(0, s);
+    }
+    if (parts.length === 2) {
+      const m = Number(parts[0]);
+      const s = Number(parts[1]);
+      if (Number.isNaN(m) || Number.isNaN(s)) return null;
+      return Math.max(0, m * 60 + s);
+    }
+    return null;
+  };
+
+  const startEdit = (m: Marqueur) => {
+    setEditingId(m.id);
+    setDraftLabel(m.label);
+    setDraftTime(formatTime(m.timecode));
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setDraftLabel("");
+    setDraftTime("");
+  };
+
+  const handleSave = async (m: Marqueur) => {
+    if (!onModifierMarqueur) return;
+    const nextLabel = draftLabel.trim() || m.label;
+    const parsedTime = parseTimeInput(draftTime);
+    const nextTime = parsedTime === null ? m.timecode : parsedTime;
+    setIsSaving(true);
+    try {
+      await onModifierMarqueur(m, { label: nextLabel, timecode: nextTime });
+      cancelEdit();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const groupes = grouperMarqueurs(marqueurs);
@@ -254,17 +306,85 @@ export default function VideoTimeline({
         {marqueursTriees.length === 0 && (
           <div className={styles.markerEmpty}>Aucun marqueur pour linstant</div>
         )}
-        {marqueursTriees.map((m, index) => (
-          <button
-            key={m.id}
-            onClick={() => onClicMarqueur(m, index)}
-            className={`${styles.markerRow} ${index === indexActuel ? styles.markerRowActive : ""}`}
-            type="button"
-          >
-            <span className={styles.markerName}>Marker {index + 1}</span>
-            <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
-          </button>
-        ))}
+        {marqueursTriees.map((m, index) => {
+          const isEditing = editingId === m.id;
+          return (
+            <div
+              key={m.id}
+              onClick={() => {
+                if (!isEditing) onClicMarqueur(m, index);
+              }}
+              className={`${styles.markerRow} ${index === indexActuel ? styles.markerRowActive : ""}`}
+              role="button"
+              tabIndex={0}
+            >
+              {isEditing ? (
+                <div className={styles.markerEditForm} onClick={(e) => e.stopPropagation()}>
+                  <input
+                    className={styles.markerInput}
+                    value={draftLabel}
+                    onChange={(e) => setDraftLabel(e.target.value)}
+                    placeholder="Titre du marqueur"
+                    type="text"
+                  />
+                  <input
+                    className={styles.markerInputTime}
+                    value={draftTime}
+                    onChange={(e) => setDraftTime(e.target.value)}
+                    placeholder="MM:SS"
+                    type="text"
+                  />
+                  <div className={styles.markerActions}>
+                    <button
+                      className={styles.markerActionPrimary}
+                      onClick={() => handleSave(m)}
+                      disabled={isSaving}
+                      type="button"
+                    >
+                      Enregistrer
+                    </button>
+                    <button
+                      className={styles.markerActionGhost}
+                      onClick={cancelEdit}
+                      type="button"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className={styles.markerRowContent}>
+                    <span className={styles.markerName}>Marker {index + 1}</span>
+                    <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
+                  </div>
+                  <div className={styles.markerActions} onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className={styles.markerActionButton}
+                      onClick={() => startEdit(m)}
+                      type="button"
+                      title="Modifier"
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      className={styles.markerActionDelete}
+                      onClick={() => {
+                        if (onSupprimerMarqueur && window.confirm("Supprimer ce marqueur ?")) {
+                          onSupprimerMarqueur(m);
+                        }
+                      }}
+                      type="button"
+                      title="Supprimer"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
