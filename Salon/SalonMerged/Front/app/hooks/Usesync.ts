@@ -26,6 +26,8 @@ export const useSync = (
   const localSocketRef = useRef<Socket | null>(null);
   const lastPlaybackStateRef = useRef<"PLAYING" | "PAUSED">("PAUSED");
 
+  const etatSyncRef = useRef<EtatSync>("IDLE");
+
   useEffect(() => {
     const hasExternalSocket = !!externalSocket;
 
@@ -48,20 +50,26 @@ export const useSync = (
       const positionSec = Number(data?.playback?.positionSec ?? 0);
       console.log("[SYNC] playback-updated recu", { action, positionSec, data });
 
-      if (action === "seek") {
-        // Seek is now handled by force-seek; keep this for backward compat
-        // but don't override if we're already in BUFFERING from force-seek
-        if (etatSync !== "BUFFERING") {
-          setDernierSeekForce(positionSec);
-          setEtatSync("BUFFERING");
+      if (action === "play") {
+        // Don't override BUFFERING — the LOADING flow (force-seek/force-pause) takes priority
+        if (etatSyncRef.current === "BUFFERING") {
+          console.log("[SYNC] play ignored (currently BUFFERING)");
+          return;
         }
-      } else if (action === "play") {
         lastPlaybackStateRef.current = "PLAYING";
         setEtatSync("PLAYING");
+        etatSyncRef.current = "PLAYING";
       } else if (action === "pause") {
+        // Don't override BUFFERING — the LOADING flow takes priority
+        if (etatSyncRef.current === "BUFFERING") {
+          console.log("[SYNC] pause ignored (currently BUFFERING)");
+          return;
+        }
         lastPlaybackStateRef.current = "PAUSED";
         setEtatSync("PAUSED");
+        etatSyncRef.current = "PAUSED";
       }
+      // Note: seek is NOT handled here anymore — force-seek + all-ready handle the full seek flow
     };
 
     // Wait-for-Ready: server sends force-seek when someone seeks
@@ -71,6 +79,7 @@ export const useSync = (
       console.log("[SYNC] force-seek recu", { timecode, data });
       setDernierSeekForce(timecode);
       setEtatSync("BUFFERING");
+      etatSyncRef.current = "BUFFERING";
       // Remember what state we should return to after all-ready
       if (data?.wasPlaying) {
         lastPlaybackStateRef.current = "PLAYING";
@@ -85,13 +94,16 @@ export const useSync = (
       const shouldPlay = data?.shouldPlay !== false;
       console.log("[SYNC] all-ready recu", { positionSec, shouldPlay });
       lastPlaybackStateRef.current = shouldPlay ? "PLAYING" : "PAUSED";
-      setEtatSync(shouldPlay ? "PLAYING" : "PAUSED");
+      const newState = shouldPlay ? "PLAYING" : "PAUSED";
+      setEtatSync(newState);
+      etatSyncRef.current = newState;
     };
 
     // A remote client started buffering: server tells us to pause and wait
     const onForcePause = (data: any) => {
       console.log("[SYNC] force-pause recu (client buffering)", data);
       setEtatSync("BUFFERING");
+      etatSyncRef.current = "BUFFERING";
     };
 
     activeSocket.on("playback-updated", onPlaybackUpdated);
@@ -130,6 +142,7 @@ export const useSync = (
 
     setDernierSeekForce(timecode);
     setEtatSync("BUFFERING");
+    etatSyncRef.current = "BUFFERING";
   };
 
   const emitReady = () => {

@@ -4,6 +4,7 @@ import {
   SubscribeMessage,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
@@ -18,8 +19,10 @@ import { RoomStateService, RoomGlobalStatus } from './room-state.service';
     origin: '*',
     credentials: true,
   },
+  pingInterval: 5000,
+  pingTimeout: 10000,
 })
-export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   @WebSocketServer()
   server: Server;
   
@@ -30,6 +33,69 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly roomStateService: RoomStateService,
   ) {}
 
+  afterInit() {
+    // Task 4 : enregistrer le callback de timeout LOADING (8s)
+    this.roomStateService.onLoadingTimeout(async (roomCode: string) => {
+      await this.forceResumeFromTimeout(roomCode);
+    });
+  }
+
+  /**
+   * Task 4 : Quand une room reste bloquée en LOADING pendant plus de 8 secondes,
+   * le serveur abandonne l'attente, log l'incident, repasse en PLAYING
+   * et force tous les clients actifs à reprendre la vidéo.
+   */
+  private async forceResumeFromTimeout(roomCode: string) {
+    const state = this.roomStateService.getFullState(roomCode);
+    if (state.status !== RoomGlobalStatus.LOADING) return;
+
+    this.logger.warn(
+      `[TIMEOUT] Room ${roomCode} : LOADING timeout expiré (>8s). ` +
+      `${state.readyCount}/${state.connectedCount} clients prêts. Reprise forcée en PLAYING.`,
+    );
+
+    // Forcer la transition vers PLAYING
+    this.roomStateService.setLastAllReadyTime(roomCode);
+    this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PLAYING, state.currentTimestamp);
+
+    // Mettre à jour la base de données
+    try {
+      await this.roomsService.play(roomCode, state.currentTimestamp);
+    } catch (error) {
+      this.logger.error('[TIMEOUT] Erreur DB lors de la reprise forcée:', error);
+    }
+
+    // Notifier tous les clients de reprendre
+    this.server.to(roomCode).emit('all-ready', {
+      positionSec: state.currentTimestamp,
+      shouldPlay: true,
+      serverTimeRef: new Date(),
+      timestamp: new Date(),
+      reason: 'loading-timeout',
+    });
+  }
+
+  // ── Helpers de validation (Task 5) ──────────────────────────────────
+
+  /** Valide qu'un codeRoom est une chaîne non-vide et retourne la version normalisée. */
+  private validateRoomCode(codeRoom: unknown, clientId: string, event: string): string | null {
+    if (!codeRoom || typeof codeRoom !== 'string' || (codeRoom as string).trim() === '') {
+      this.logger.warn(`[SECURITY] ${event} rejeté (${clientId}): identifiant de room invalide`);
+      return null;
+    }
+    return (codeRoom as string).toUpperCase();
+  }
+
+  /** Vérifie que le client appartient bien à la room. */
+  private validateMembership(roomCode: string, client: Socket, event: string): boolean {
+    if (!this.roomStateService.isClientInRoom(roomCode, client.id)) {
+      this.logger.warn(`[SECURITY] ${event} rejeté (${client.id}): pas membre de la room ${roomCode}`);
+      client.emit('error', { message: `Action non autorisée : vous n'êtes pas membre de cette room` });
+      return false;
+    }
+    return true;
+  }
+
   handleConnection(client: Socket) {
     this.logger.log(`Client connecté: ${client.id}`);
   }
@@ -39,8 +105,25 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const roomCode = this.roomStateService.removeClient(client.id);
     if (roomCode) {
       this.logger.log(`[SYNC] Removed ${client.id} from room ${roomCode}`);
-      // If room was LOADING and this client leaving makes all remaining ready, resume
-      this.checkAndResumeIfAllReady(roomCode);
+      const state = this.roomStateService.getOrCreateRoomState(roomCode);
+
+      if (state.clients.size === 0) return;
+
+      if (state.status === RoomGlobalStatus.LOADING) {
+        // Room was loading — removing this client might make everyone ready
+        this.checkAndResumeIfAllReady(roomCode);
+      } else if (state.status === RoomGlobalStatus.PLAYING) {
+        // Client dropped during playback -> briefly pause to resync.
+        // Remaining clients will auto-ready within ~500ms and resume.
+        const pos = this.roomStateService.getAdjustedTimestamp(roomCode);
+        this.logger.log(`[SYNC] Client disconnected from ${roomCode} during PLAYING -> LOADING at ${pos}s`);
+        this.roomStateService.prepareForSeek(roomCode, pos);
+        this.server.to(roomCode).emit('force-pause', {
+          reason: 'client-disconnect',
+          positionSec: pos,
+          timestamp: new Date(),
+        });
+      }
     }
   }
 
@@ -49,10 +132,16 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { codeRoom: string; memberId: number }
   ) {
-    const { codeRoom, memberId } = data;
-    if (!codeRoom) return;
-    
-    const roomCode = codeRoom.toUpperCase();
+    // Validation du payload (pas de check membership car le client rejoint)
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'join-room');
+    if (!roomCode) return;
+
+    const memberId = data.memberId;
+    if (typeof memberId !== 'number' || !Number.isFinite(memberId)) {
+      this.logger.warn(`[SECURITY] join-room rejeté (${client.id}): memberId invalide (${memberId})`);
+      return;
+    }
+
     await client.join(roomCode);
     
     // Register client in in-memory state machine
@@ -111,9 +200,26 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { codeRoom: string; positionSec?: number }
   ) {
-    const { codeRoom, positionSec } = data;
-    if (!codeRoom) return;
-    const roomCode = codeRoom.toUpperCase();
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'play');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'play')) return;
+
+    // Block play during LOADING — all-ready will handle resume
+    const currentState = this.roomStateService.getOrCreateRoomState(roomCode);
+    if (currentState.status === RoomGlobalStatus.LOADING) {
+      this.logger.log(`[SYNC] play ignored in ${roomCode} (LOADING)`);
+      return;
+    }
+
+    const positionSec = data.positionSec;
+    // Valider positionSec si fourni
+    if (positionSec !== undefined && positionSec !== null) {
+      if (typeof positionSec !== 'number' || !Number.isFinite(positionSec) || positionSec < 0) {
+        this.logger.warn(`[SECURITY] play rejeté (${client.id}): positionSec invalide (${positionSec})`);
+        return;
+      }
+    }
+
     this.logger.log(`[SYNC] Play requested in ${roomCode} at ${positionSec}s`);
     
     try {
@@ -139,8 +245,26 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { codeRoom: string; positionSec?: number }
   ) {
-    const { codeRoom, positionSec } = data;
-    const roomCode = codeRoom.toUpperCase();
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'pause');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'pause')) return;
+
+    // Block pause during LOADING — the room is already paused for sync
+    const currentState = this.roomStateService.getOrCreateRoomState(roomCode);
+    if (currentState.status === RoomGlobalStatus.LOADING) {
+      this.logger.log(`[SYNC] pause ignored in ${roomCode} (LOADING)`);
+      return;
+    }
+
+    const positionSec = data.positionSec;
+    // Valider positionSec si fourni
+    if (positionSec !== undefined && positionSec !== null) {
+      if (typeof positionSec !== 'number' || !Number.isFinite(positionSec) || positionSec < 0) {
+        this.logger.warn(`[SECURITY] pause rejeté (${client.id}): positionSec invalide (${positionSec})`);
+        return;
+      }
+    }
+
     this.logger.log(`Pause demandée dans ${roomCode} à ${positionSec}s`);
     
     try {
@@ -153,6 +277,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       await this.roomsService.pause(roomCode, actualPosition);
+      this.roomStateService.updateStatus(roomCode, RoomGlobalStatus.PAUSED, actualPosition);
 
       this.server.to(roomCode).emit('playback-updated', {
         action: 'pause',
@@ -167,15 +292,6 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.log(`Pause broadcast à tous : position ${actualPosition}s`);
     } catch (error) {
       this.logger.error('Erreur pause:', error);
-      this.server.to(roomCode).emit('playback-updated', {
-        action: 'pause',
-        playback: {
-          status: 'PAUSED',
-          positionSec: positionSec || 0,
-          serverTimeRef: new Date(),
-        },
-        timestamp: new Date(),
-      });
     }
 
     return { success: true };
@@ -195,10 +311,10 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // --- Validation stricte du timecode (doit être un nombre fini strictement positif) ---
-    if (typeof positionSec !== 'number' || !Number.isFinite(positionSec) || positionSec <= 0) {
+    // --- Validation stricte du timecode (doit être un nombre fini positif ou zéro) ---
+    if (typeof positionSec !== 'number' || !Number.isFinite(positionSec) || positionSec < 0) {
       this.logger.warn(`[SYNC] Seek rejeté (${client.id}): timecode invalide (${positionSec})`);
-      client.emit('seek-error', { message: 'Le timecode doit être un nombre strictement positif' });
+      client.emit('seek-error', { message: 'Le timecode doit être un nombre positif' });
       return;
     }
 
@@ -230,17 +346,8 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
         serverTimeRef: playback.serverTimeRef,
         timestamp: new Date(),
       });
-      
-      // Also emit legacy playback-updated for backward compatibility
-      this.server.to(roomCode).emit('playback-updated', {
-        action: 'seek',
-        playback: { 
-          status: playback.status,
-          positionSec: playback.positionSec,
-          serverTimeRef: playback.serverTimeRef,
-        },
-        timestamp: new Date(),
-      });
+      // Note: we do NOT emit playback-updated for seek anymore — force-seek + all-ready
+      // handle the full seek flow. Emitting both caused duplicate state transitions.
     } catch (error) {
       this.logger.error('Error handleSeek:', error);
     }
@@ -251,9 +358,18 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { codeRoom: string; positionSec?: number }
   ) {
-    const { codeRoom, positionSec } = data;
-    if (!codeRoom) return;
-    const roomCode = codeRoom.toUpperCase();
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'client-buffering');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'client-buffering')) return;
+
+    // Valider positionSec si fourni
+    const positionSec = data.positionSec;
+    if (positionSec !== undefined && positionSec !== null) {
+      if (typeof positionSec !== 'number' || !Number.isFinite(positionSec) || positionSec < 0) {
+        this.logger.warn(`[SECURITY] client-buffering rejeté (${client.id}): positionSec invalide`);
+        return;
+      }
+    }
     
     const state = this.roomStateService.getOrCreateRoomState(roomCode);
     // Only trigger LOADING if the room was PLAYING (avoid re-triggering during existing LOADING)
@@ -271,7 +387,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     
     // Anti-cascade: ignore transient buffering right after a play/pause/seek transition
     const timeSinceChange = Date.now() - state.lastUpdateServerTime;
-    if (timeSinceChange < 2000) {
+    if (timeSinceChange < 1000) {
       this.logger.log(`[SYNC] client-buffering ignored in ${roomCode} (${timeSinceChange}ms since last status change, too soon)`);
       return;
     }
@@ -282,9 +398,12 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Switch room to LOADING, reset all ready flags
     this.roomStateService.prepareForSeek(roomCode, currentPos);
     
-    // Order every OTHER client to pause (the buffering client is already paused/buffering)
-    client.to(roomCode).emit('force-pause', {
+    // Notify ALL clients (including the buffering one) to pause and enter LOADING.
+    // Include the buffering client's ID so it can skip pausing its YouTube player
+    // (YouTube stops buffering when paused, which would cause a premature client-ready).
+    this.server.to(roomCode).emit('force-pause', {
       reason: 'client-buffering',
+      bufferingClientId: client.id,
       positionSec: currentPos,
       timestamp: new Date(),
     });
@@ -295,9 +414,9 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { codeRoom: string }
   ) {
-    const { codeRoom } = data;
-    if (!codeRoom) return;
-    const roomCode = codeRoom.toUpperCase();
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'client-ready');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'client-ready')) return;
     
     this.roomStateService.setClientReady(roomCode, client.id, true);
     const state = this.roomStateService.getFullState(roomCode);
@@ -350,9 +469,16 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { codeRoom: string; videoId: string }
   ) {
-    const { codeRoom, videoId } = data;
-    if (!codeRoom) return;
-    const roomCode = codeRoom.toUpperCase();
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'video-change');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'video-change')) return;
+
+    const videoId = data.videoId;
+    if (!videoId || typeof videoId !== 'string' || videoId.trim() === '') {
+      this.logger.warn(`[SECURITY] video-change rejeté (${client.id}): videoId invalide`);
+      return;
+    }
+
     this.logger.log(`[SYNC] Video change in ${roomCode} to ${videoId}`);
     
     // Reset room state for new video
@@ -369,9 +495,16 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { codeRoom: string; marker: any }
   ) {
-    const { codeRoom, marker } = data;
-    if (!codeRoom || !marker) return;
-    const roomCode = codeRoom.toUpperCase();
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'marker-created');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'marker-created')) return;
+
+    const marker = data.marker;
+    if (!marker || typeof marker !== 'object') {
+      this.logger.warn(`[SECURITY] marker-created rejeté (${client.id}): marker invalide`);
+      return;
+    }
+
     client.to(roomCode).emit('nouveau_marqueur', marker);
     this.logger.log(`Marqueur broadcast dans ${roomCode}: ${marker.label}`);
   }

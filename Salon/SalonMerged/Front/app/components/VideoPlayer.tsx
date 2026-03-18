@@ -47,6 +47,24 @@ export default function VideoPlayer({
   const seekingRef = useRef(false);
   const expectedTimeRef = useRef<number>(0);
 
+  // Tab visibility: true when user recently switched tabs (grace period prevents
+  // YouTube's spurious onPlay/onPause from propagating as real user actions)
+  const tabSwitchingRef = useRef(false);
+  const tabSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const onVisChange = () => {
+      tabSwitchingRef.current = true;
+      if (tabSwitchTimerRef.current) clearTimeout(tabSwitchTimerRef.current);
+      // 1.5s grace period: any onPlay/onPause within this window is from the browser, not user
+      tabSwitchTimerRef.current = setTimeout(() => { tabSwitchingRef.current = false; }, 1500);
+    };
+    document.addEventListener('visibilitychange', onVisChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisChange);
+      if (tabSwitchTimerRef.current) clearTimeout(tabSwitchTimerRef.current);
+    };
+  }, []);
+
   // Stable refs for callbacks — prevent useEffect restarts on re-render
   const onSeekRef = useRef(onSeek);
   onSeekRef.current = onSeek;
@@ -71,25 +89,77 @@ export default function VideoPlayer({
     if (prevEtatSyncRef.current === "BUFFERING" && etatSync !== "BUFFERING") {
       lastAllReadyTimeRef.current = Date.now();
     }
+    // When we ENTER BUFFERING (force-pause received) and our player is NOT actually
+    // buffering, we are immediately ready. Emit client-ready after a short delay.
+    if (prevEtatSyncRef.current !== "BUFFERING" && etatSync === "BUFFERING") {
+      if (!isBufferingRef.current) {
+        console.log("[PLAYER] force-pause received but not buffering -> emitting client-ready");
+        setTimeout(() => {
+          // Re-check: still in BUFFERING and still not buffering
+          if (etatSyncRef.current === "BUFFERING" && !isBufferingRef.current) {
+            emitReadyRef.current();
+          }
+        }, 500);
+      }
+    }
     prevEtatSyncRef.current = etatSync;
   }, [etatSync]);
 
-  // When the YouTube player starts buffering mid-playback, notify the server
-  // so it can pause other clients and wait for everyone to be ready.
+  // Also listen directly to all-ready on the socket — the buffering client's etatSync
+  // may never transition through BUFFERING, so the above useEffect wouldn't fire for it.
+  useEffect(() => {
+    if (!syncSocket) return;
+    const onAllReady = () => {
+      lastAllReadyTimeRef.current = Date.now();
+    };
+    syncSocket.on('all-ready', onAllReady);
+    return () => { syncSocket.off('all-ready', onAllReady); };
+  }, [syncSocket]);
+
+  // Buffering detection refs
   const bufferingEmittedRef = useRef(false);
   const lastAllReadyTimeRef = useRef(0);
-  const handleBuffer = () => {
-    if (!isPlayingRef.current) return; // Don't report buffering when player is paused
-    if (seekingRef.current) return; // Don't signal during an active seek (handled by seek flow)
-    if (bufferingEmittedRef.current) return; // Already signaled for this buffering episode
-    if (etatSyncRef.current === "BUFFERING") return; // Already in LOADING flow
-    // Anti-cascade: don't emit client-buffering within 3s of receiving all-ready
-    if (Date.now() - lastAllReadyTimeRef.current < 3000) return;
-    bufferingEmittedRef.current = true;
-    const currentPos = playerRef.current?.getCurrentTime() ?? 0;
-    console.log("[PLAYER] Buffering detected at", currentPos, "-> emitting client-buffering");
-    syncSocket?.emit('client-buffering', { codeRoom: roomId, positionSec: currentPos });
-  };
+  const isBufferingRef = useRef(false);
+
+  // Poll YouTube's internal player state every 300ms to detect buffering (state=3).
+  // ReactPlayer's onBuffer/onBufferEnd events are unreliable and often don't fire.
+  useEffect(() => {
+    let lastEmitTime = 0;
+
+    const interval = setInterval(() => {
+      if (!playerRef.current) return;
+      const ip = playerRef.current.getInternalPlayer();
+      if (!ip || typeof ip.getPlayerState !== 'function') return;
+
+      const ytState = ip.getPlayerState();
+      const isYTBuffering = ytState === 3;
+      const wasBuf = isBufferingRef.current;
+      isBufferingRef.current = isYTBuffering;
+
+      // Currently buffering — try to report to server.
+      // Re-emit every 2s in case the server rejected due to cooldown.
+      if (isYTBuffering && etatSyncRef.current !== 'BUFFERING') {
+        const now = Date.now();
+        if (now - lastEmitTime > 2000) {
+          lastEmitTime = now;
+          const pos = playerRef.current?.getCurrentTime() ?? 0;
+          console.log('[PLAYER] Poll: YouTube buffering (state=3) at', pos, '-> client-buffering');
+          syncSocket?.emit('client-buffering', { codeRoom: roomId, positionSec: pos });
+        }
+      }
+
+      // Transition OUT of buffering (state 3 -> something else)
+      if (!isYTBuffering && wasBuf) {
+        lastEmitTime = 0;
+        if (etatSyncRef.current === 'BUFFERING') {
+          console.log('[PLAYER] Poll: buffer ended (ytState:', ytState, ') -> client-ready');
+          emitReadyRef.current();
+        }
+      }
+    }, 300);
+
+    return () => clearInterval(interval);
+  }, [syncSocket, roomId]);
 
   // Detect user seeks while PAUSED (no onProgress fires, so we poll)
   useEffect(() => {
@@ -182,15 +252,13 @@ export default function VideoPlayer({
               // Signal ready when player initially loads
               emitReadyRef.current();
             }}
-            onBuffer={handleBuffer}
+            onBuffer={() => { isBufferingRef.current = true; }}
             onBufferEnd={() => {
-              const hadEmittedBuffering = bufferingEmittedRef.current;
+              isBufferingRef.current = false;
+              const hadEmitted = bufferingEmittedRef.current;
               bufferingEmittedRef.current = false;
-              // Buffer finished -> this client is ready
-              // Emit client-ready if: (a) server told us we're in LOADING (etatSync=BUFFERING)
-              // OR (b) WE were the one who triggered the LOADING (we emitted client-buffering)
-              if (etatSyncRef.current === "BUFFERING" || hadEmittedBuffering) {
-                console.log("[PLAYER] Buffer ended -> emitting client-ready (etatSync:", etatSyncRef.current, "hadEmitted:", hadEmittedBuffering, ")");
+              if (etatSyncRef.current === "BUFFERING" || hadEmitted) {
+                console.log("[PLAYER] onBufferEnd -> client-ready");
                 emitReadyRef.current();
               }
             }}
@@ -204,6 +272,14 @@ export default function VideoPlayer({
               // If React already told YouTube to play, this is an echo, not a user action
               if (isPlayingRef.current) return;
               if (seekingRef.current) return;
+              // Ignore play events fired during tab switches (browser throttling).
+              // YouTube auto-resumes when the tab regains focus — force it back to paused.
+              if (tabSwitchingRef.current) {
+                console.log("[PLAYER] onPlay ignored (tab switch) -> forcing pause back");
+                const ip = playerRef.current?.getInternalPlayer();
+                if (ip && typeof ip.pauseVideo === 'function') ip.pauseVideo();
+                return;
+              }
               if (etatSyncRef.current === "BUFFERING") {
                 // During wait-for-ready, don't propagate play - just signal ready
                 console.log("[PLAYER] onPlay during BUFFERING - emitting ready");
@@ -216,6 +292,11 @@ export default function VideoPlayer({
               // If React already told YouTube to pause, this is an echo, not a user action
               if (!isPlayingRef.current) return;
               if (seekingRef.current) return;
+              // Ignore pause events fired during tab switches (browser throttling)
+              if (tabSwitchingRef.current) {
+                console.log("[PLAYER] onPause ignored (tab switch grace period)");
+                return;
+              }
               // During LOADING/BUFFERING, ignore all pause events — they come from
               // force-seek or force-pause, not from user interaction
               if (etatSyncRef.current === "BUFFERING") return;

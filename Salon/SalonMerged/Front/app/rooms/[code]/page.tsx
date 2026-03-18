@@ -155,11 +155,8 @@ export default function RoomPage() {
       } else if (data.action === 'pause') {
         setPosition(data.playback.positionSec || 0);
         setIsPlaying(false);
-      } else if (data.action === 'seek') {
-        const targetPos = calculateAdjustedPosition(data.playback);
-        setPosition(targetPos);
-        // Don't set isPlaying: force-seek/all-ready handle play/pause during seek flow
       }
+      // Note: seek actions are handled entirely by force-seek + all-ready flow
     });
 
     socket.on('nouveau_marqueur', (marqueurBrut: any) => {
@@ -208,13 +205,14 @@ export default function RoomPage() {
 
     // A remote client started buffering: server orders everyone to pause
     socket.on('force-pause', (data: any) => {
-      log.socket('Force-pause reçu (un client charge)', data);
-      setIsPlaying(false);
-      // We're already at the right position and paused, so we're "ready"
-      setTimeout(() => {
-        socket.emit('client-ready', { codeRoom: code });
-        log.socket('Emitting client-ready after force-pause');
-      }, 500);
+      log.socket('Force-pause reçu', data);
+      // If I am the client that is buffering, do NOT pause my YouTube player.
+      // YouTube stops buffering when paused, which would cause a premature client-ready
+      // and create a play/pause loop. Let YouTube keep loading so it can actually finish.
+      const iAmBuffering = data.bufferingClientId && data.bufferingClientId === socket.id;
+      if (!iAmBuffering) {
+        setIsPlaying(false);
+      }
     });
 
     return () => {

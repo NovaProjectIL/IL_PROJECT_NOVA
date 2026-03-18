@@ -32,6 +32,42 @@ export class RoomStateService {
   // On stocke tous les salons dans une "Map" (une sorte de gros dictionnaire en mémoire).
   private rooms = new Map<string, RoomState>();
 
+  // Timers de sécurité : si une room reste en LOADING plus de 8s, on force la reprise.
+  private loadingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+  // Callback appelé quand le timeout expire — injecté par le Gateway.
+  private loadingTimeoutCallback: ((roomCode: string) => void) | null = null;
+
+  /** Le Gateway enregistre sa callback pour être notifié quand un timeout expire. */
+  onLoadingTimeout(callback: (roomCode: string) => void) {
+    this.loadingTimeoutCallback = callback;
+  }
+
+  /** Démarre le timer de 8s pour une room en LOADING. */
+  private startLoadingTimeout(roomCode: string) {
+    this.clearLoadingTimeout(roomCode);
+    const TIMEOUT_MS = 8_000;
+    const timer = setTimeout(() => {
+      const state = this.rooms.get(roomCode);
+      if (!state || state.status !== RoomGlobalStatus.LOADING) return;
+      this.logger.warn(
+        `[TIMEOUT] Room ${roomCode} bloquée en LOADING depuis ${TIMEOUT_MS}ms — reprise forcée`,
+      );
+      if (this.loadingTimeoutCallback) {
+        this.loadingTimeoutCallback(roomCode);
+      }
+    }, TIMEOUT_MS);
+    this.loadingTimeouts.set(roomCode, timer);
+  }
+
+  /** Annule le timer si la room sort de LOADING normalement. */
+  clearLoadingTimeout(roomCode: string) {
+    const existing = this.loadingTimeouts.get(roomCode);
+    if (existing) {
+      clearTimeout(existing);
+      this.loadingTimeouts.delete(roomCode);
+    }
+  }
+
   /**
    * Si le salon n'existe pas encore en mémoire, on le crée.
    * C'est ici qu'on prépare l'endroit où on va stocker les gens et le temps de la vidéo.
@@ -64,6 +100,11 @@ export class RoomStateService {
     
     if (timestamp !== undefined) {
       state.currentTimestamp = timestamp;
+    }
+
+    // Si on quitte LOADING (ex: all-ready), annuler le timer de sécurité.
+    if (status !== RoomGlobalStatus.LOADING) {
+      this.clearLoadingTimeout(roomCode);
     }
   }
 
@@ -167,6 +208,9 @@ export class RoomStateService {
     for (const client of state.clients.values()) {
       client.isReady = false;
     }
+
+    // Démarrer le timer de sécurité de 8s.
+    this.startLoadingTimeout(roomCode);
   }
 
   /**
