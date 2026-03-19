@@ -38,7 +38,9 @@ export default function RoomPage() {
   const [loading, setLoading] = useState(true);
   const [roomInternalId, setRoomInternalId] = useState<number | null>(null);
   const [showQuitModal, setShowQuitModal] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const socketRef = useRef<any>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [indexActuel, setIndexActuel] = useState<number>(-1);
   const { marqueurs, setMarqueurs, creer: creerMarqueur, modifier: modifierMarqueur, supprimer: supprimerMarqueur } =
@@ -274,6 +276,15 @@ export default function RoomPage() {
     router.push('/');
   };
 
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 2000);
+  };
+
   if (loading) return <div className={styles.loading}>Chargement...</div>;
 
   return (
@@ -290,6 +301,11 @@ export default function RoomPage() {
         <button onClick={() => handleSearch(true)} className={styles.searchButton}>Jouer</button>
         <button onClick={() => handleSearch(false)} className={`${styles.searchButton} ${styles.addButton}`}>+ Playlist</button>
       </div>
+      {toastMessage && (
+        <div className={styles.toastNotice} role="status" aria-live="polite">
+          {toastMessage}
+        </div>
+      )}
 
       <div className={styles.membersSection}>
         <h3>Membres ({members.length}):</h3>
@@ -510,7 +526,10 @@ export default function RoomPage() {
   );
 
   async function handleSearch(playDirect = true) {
-    if (!searchUrl.trim()) return;
+    if (!searchUrl.trim()) {
+      showToast("Veuillez ajouter un lien d'abord");
+      return;
+    }
     let videoId = '';
     if (searchUrl.includes('v=')) videoId = searchUrl.split('v=')[1].split('&')[0];
     else if (searchUrl.includes('youtu.be/')) videoId = searchUrl.split('youtu.be/')[1].split('?')[0];

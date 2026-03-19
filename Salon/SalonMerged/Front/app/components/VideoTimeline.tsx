@@ -287,7 +287,7 @@ export default function VideoTimeline({
                         }}
                         style={{ cursor: "pointer", padding: "2px" }}
                       >
-                        Marker {idx + 1} — {formatTime(m.timecode)}
+                        {m.label || `Marker ${idx + 1}`} — {formatTime(m.timecode)}
                       </div>
                     );
                   })}
@@ -355,7 +355,7 @@ export default function VideoTimeline({
               ) : (
                 <>
                   <div className={styles.markerRowContent}>
-                    <span className={styles.markerName}>Marker {index + 1}</span>
+                    <span className={styles.markerName}>{m.label || `Marker ${index + 1}`}</span>
                     <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
                   </div>
                   <div className={styles.markerActions} onClick={(e) => e.stopPropagation()}>
