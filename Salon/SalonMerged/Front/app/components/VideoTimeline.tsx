@@ -139,6 +139,8 @@ export default function VideoTimeline({
 
   const groupes = grouperMarqueurs(marqueurs);
   const marqueursTriees = [...marqueurs].sort((a, b) => a.timecode - b.timecode);
+  const activeMarkerId = marqueursTriees[indexActuel]?.id ?? null;
+  const labelFor = (m: Marqueur, idx: number) => m.label?.trim() || `Marker ${idx + 1}`;
 
   return (
     <div>
@@ -194,108 +196,75 @@ export default function VideoTimeline({
       </div>
 
 
-      {/* -------------------------------------------------- */}
-      {/* BARRE DE TIMELINE avec epingles et clustering */}
-      {/* -------------------------------------------------- */}
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "8px",
-          background: "#ccc",
-          marginTop: "30px",
-          marginBottom: "40px",
-        }}
-      >
-        {groupes.map((groupe, index) => {
-          const position = calculerPosition(groupe.timecodeRepresentant);
-          const estGroupe = groupe.marqueurs.length > 1;
-          const estDeplie = groupeDeplie === index;
+      <div className={styles.timelineWrap}>
+        <div className={styles.timelineBar}>
+          <div className={styles.timelineShine} />
+          {groupes.map((groupe, index) => {
+            const position = calculerPosition(groupe.timecodeRepresentant);
+            const estGroupe = groupe.marqueurs.length > 1;
+            const estDeplie = groupeDeplie === index;
+            const isActive = !!activeMarkerId && groupe.marqueurs.some((m) => m.id === activeMarkerId);
 
-          return (
-            <div key={index}>
-
-              {/* Epingle simple ou pastille de groupe */}
-              <div
-                onClick={() => {
-                  if (estGroupe) {
-                    // Groupe : on deplie ou replie la liste
-                    setGroupeDeplie(estDeplie ? null : index);
-                  } else {
-                    // Epingle simple : on navigue directement
-                    const idx = marqueursTriees.findIndex(
-                      (m) => m.id === groupe.marqueurs[0].id
-                    );
-                    onClicMarqueur(groupe.marqueurs[0], idx);
-                  }
-                }}
-                title={
-                  estGroupe
-                    ? `${groupe.marqueurs.length} marqueurs groupes`
-                    : groupe.marqueurs[0].label
-                }
-                style={{
-                  position: "absolute",
-                  left: `${position}%`,
-                  // On centre l epingle sur sa position
-                  transform: "translateX(-50%)",
-                  top: "-10px",
-                  width: estGroupe ? "28px" : "20px",
-                  height: estGroupe ? "28px" : "20px",
-                  borderRadius: "50%",
-                  // Orange si groupe, bleu si epingle isolee
-                  background: estGroupe ? "orange" : "blue",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "white",
-                  fontSize: "11px",
-                  fontWeight: "bold",
-                }}
-              >
-                {/* Nombre de marqueurs affiché seulement si groupe */}
-                {estGroupe ? groupe.marqueurs.length : ""}
-              </div>
-
-              {/* Liste depliee quand on clique sur une pastille de groupe */}
-              {estGroupe && estDeplie && (
+            return (
+              <div key={index}>
                 <div
-                  style={{
-                    position: "absolute",
-                    left: `${position}%`,
-                    top: "20px",
-                    background: "white",
-                    border: "1px solid black",
-                    padding: "4px",
-                    zIndex: 10,
-                    minWidth: "180px",
-                    color: "black",
+                  onClick={() => {
+                    if (estGroupe) {
+                      setGroupeDeplie(estDeplie ? null : index);
+                    } else {
+                      const idx = marqueursTriees.findIndex(
+                        (m) => m.id === groupe.marqueurs[0].id
+                      );
+                      onClicMarqueur(groupe.marqueurs[0], idx);
+                    }
                   }}
+                  title={
+                    estGroupe
+                      ? `${groupe.marqueurs.length} marqueurs groupes`
+                      : groupe.marqueurs[0].label
+                  }
+                  style={{ left: `${position}%` }}
+                  className={`${styles.timelineMarker} ${estGroupe ? styles.timelineMarkerCluster : styles.timelineMarkerSingle} ${isActive ? styles.timelineMarkerActive : ""}`}
                 >
-                  {groupe.marqueurs.map((m) => {
-                    const idx = marqueursTriees.findIndex(
-                      (mm) => mm.id === m.id
-                    );
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onClicMarqueur(m, idx);
-                          setGroupeDeplie(null);
-                        }}
-                        style={{ cursor: "pointer", padding: "2px" }}
-                      >
-                        {m.label || `Marker ${idx + 1}`} — {formatTime(m.timecode)}
-                      </div>
-                    );
-                  })}
+                  <span className={styles.markerTooltip}>
+                    {estGroupe ? `${groupe.marqueurs.length} marqueurs` : formatTime(groupe.marqueurs[0].timecode)}
+                  </span>
+                  {estGroupe ? (
+                    <span className={styles.timelineMarkerCount}>{groupe.marqueurs.length}</span>
+                  ) : (
+                    <span className={styles.timelineMarkerDot} />
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+                {estGroupe && estDeplie && (
+                  <div
+                    className={styles.clusterPopover}
+                    style={{ left: `${position}%` }}
+                  >
+                    {groupe.marqueurs.map((m) => {
+                      const idx = marqueursTriees.findIndex(
+                        (mm) => mm.id === m.id
+                      );
+                      const label = labelFor(m, idx);
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onClicMarqueur(m, idx);
+                            setGroupeDeplie(null);
+                          }}
+                          className={styles.clusterItem}
+                        >
+                          {label} — {formatTime(m.timecode)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* -------------------------------------------------- */}
@@ -308,6 +277,7 @@ export default function VideoTimeline({
         )}
         {marqueursTriees.map((m, index) => {
           const isEditing = editingId === m.id;
+          const label = labelFor(m, index);
           return (
             <div
               key={m.id}
@@ -355,7 +325,7 @@ export default function VideoTimeline({
               ) : (
                 <>
                   <div className={styles.markerRowContent}>
-                    <span className={styles.markerName}>{m.label || `Marker ${index + 1}`}</span>
+                    <span className={styles.markerName}>{label}</span>
                     <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
                   </div>
                   <div className={styles.markerActions} onClick={(e) => e.stopPropagation()}>
