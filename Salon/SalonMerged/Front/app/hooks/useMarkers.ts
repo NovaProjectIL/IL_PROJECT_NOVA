@@ -81,7 +81,7 @@ export function useMarkers(roomInternalId: number | null, socket: any, roomCode:
   const modifier = useCallback(async (
     roomId: number,
     markerId: number,
-    data: { version: number; timeSec?: number; label?: string; category?: Marqueur['categorie'] }
+    data: { version: number; memberId: number; timeSec?: number; label?: string; category?: Marqueur['categorie'] }
   ) => {
     try {
       const res = await marqueursApi.modifierMarqueur(roomId, markerId, data);
@@ -94,9 +94,9 @@ export function useMarkers(roomInternalId: number | null, socket: any, roomCode:
     }
   }, []);
 
-  const supprimer = useCallback(async (roomId: number, markerId: number) => {
+  const supprimer = useCallback(async (roomId: number, markerId: number, memberId: number) => {
     try {
-      await marqueursApi.supprimerMarqueur(roomId, markerId);
+      await marqueursApi.supprimerMarqueur(roomId, markerId, memberId);
       setMarqueurs(prev => prev.filter(m => m.id !== String(markerId)));
     } catch (e) {
       console.error('[useMarkers] Erreur suppression', e);

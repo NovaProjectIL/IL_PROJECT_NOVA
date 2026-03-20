@@ -72,6 +72,26 @@
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.8);
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.markerExportBtn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(229, 9, 20, 0.4);
+  background: linear-gradient(135deg, #E50914, #B20710);
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.markerExportBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(229, 9, 20, 0.35);
 }
 
 .markerEmpty {

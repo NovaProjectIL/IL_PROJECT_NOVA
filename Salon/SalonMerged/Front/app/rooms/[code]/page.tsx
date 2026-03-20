@@ -8,7 +8,7 @@ import ChatWidget from '@/app/components/ChatWidget';
 import { useMarkers } from '@/app/hooks/useMarkers';
 import styles from './RoomPage.module.css';
 import VideoPlayer from '@/app/components/VideoPlayer';
-import { roomsApi, playlistApi } from '@/app/lib/api';
+import { roomsApi, playlistApi, marqueursApi } from '@/app/lib/api';
 
 const log = {
   room: (msg: string, data?: any) => console.log(`[ROOM] ${msg}`, data ?? ''),
@@ -45,6 +45,8 @@ export default function RoomPage() {
   const [indexActuel, setIndexActuel] = useState<number>(-1);
   const { marqueurs, setMarqueurs, creer: creerMarqueur, modifier: modifierMarqueur, supprimer: supprimerMarqueur } =
     useMarkers(roomInternalId, socketRef.current, code, currentVideo?.youtubeId);
+  const currentMember = members.find((m) => Number(m.id) === Number(memberId));
+  const canEditMarkers = currentMember?.role === "ANALYST" || currentMember?.role === "CREATOR";
 
   const stateRef = useRef({ position, isPlaying });
   const currentVideoIdRef = useRef<string | null>(null);
@@ -330,15 +332,17 @@ export default function RoomPage() {
               syncSocket={socketRef.current}
               marqueurs={marqueurs}
               indexActuel={indexActuel}
+              canEditMarkers={canEditMarkers}
+              onExportCsv={handleExportCsv}
               onProgress={(time) => setPosition(time)}
               onPlay={handlePlay}
               onPause={handlePause}
               onSeek={handleSeek}
               onDuration={() => {}}
-              onNouveauMarqueur={async (timecode) => {
+              onNouveauMarqueur={canEditMarkers ? async (timecode) => {
                 if (!roomInternalId || !currentVideo?.youtubeId) return;
                 await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, socketRef.current, code);
-              }}
+              } : undefined}
               onModifierMarqueur={async (marqueur, data) => {
                 if (!roomInternalId) return;
                 if (typeof marqueur.version !== 'number') {
@@ -348,6 +352,7 @@ export default function RoomPage() {
                 const version = marqueur.version;
                 await modifierMarqueur(roomInternalId, Number(marqueur.id), {
                   version,
+                  memberId,
                   ...(data.label !== undefined ? { label: data.label } : {}),
                   ...(data.timecode !== undefined ? { timeSec: data.timecode } : {}),
                   ...(data.categorie !== undefined ? { category: data.categorie } : {}),
@@ -355,7 +360,7 @@ export default function RoomPage() {
               }}
               onSupprimerMarqueur={async (marqueur) => {
                 if (!roomInternalId) return;
-                await supprimerMarqueur(roomInternalId, Number(marqueur.id));
+                await supprimerMarqueur(roomInternalId, Number(marqueur.id), memberId);
               }}
             />
           </div>
@@ -489,6 +494,23 @@ export default function RoomPage() {
     </div>
   );
 
+  async function handleExportCsv() {
+    if (!roomInternalId) return;
+    try {
+      const res = await marqueursApi.exporterCsv(roomInternalId);
+      const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `room-${code}-marqueurs.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      log.error('Erreur export CSV', err);
+    }
+  }
   async function handleSearch(playDirect = true) {
     if (!searchUrl.trim()) {
       showToast("Veuillez ajouter un lien d'abord");
@@ -515,3 +537,5 @@ export default function RoomPage() {
     }
   }
 }
+
+

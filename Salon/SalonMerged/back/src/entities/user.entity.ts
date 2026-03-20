@@ -17,7 +17,7 @@ export class User {
   @Column()
   name: string;
 
-  @Column({ default: 'MEMBER' })
+  @Column({ default: 'OBSERVER' })
   role: string;
 
   @Column({ type: 'timestamptz', default: () => 'now()' })

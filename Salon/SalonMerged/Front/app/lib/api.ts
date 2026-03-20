@@ -180,6 +180,7 @@ export const marqueursApi = {
     markerId: number,
     data: {
       version: number;
+      memberId: number;
       timeSec?: number;
       label?: string;
       content?: string;
@@ -187,8 +188,11 @@ export const marqueursApi = {
     },
   ) => api.patch(`/rooms/${roomId}/markers/${markerId}`, data),
 
-  supprimerMarqueur: (roomId: number, markerId: number) =>
-    api.delete(`/rooms/${roomId}/markers/${markerId}`),
+  supprimerMarqueur: (roomId: number, markerId: number, memberId: number) =>
+    api.delete(`/rooms/${roomId}/markers/${markerId}`, { params: { memberId } }),
+
+  exporterCsv: (roomId: number) =>
+    api.get(`/rooms/${roomId}/markers/export`, { responseType: 'blob' }),
 };
 
 export default api;

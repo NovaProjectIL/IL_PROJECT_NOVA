@@ -125,7 +125,7 @@ export class RoomsService {
     const creator = this.usersRepo.create({
       room,
       name: finalName,
-      role: 'CREATOR',
+      role: 'OBSERVER',
     });
     await this.usersRepo.save(creator);
 
@@ -207,7 +207,7 @@ export class RoomsService {
     const user = this.usersRepo.create({
       room,
       name: finalName,
-      role: 'MEMBER',
+      role: 'OBSERVER',
     });
     await this.usersRepo.save(user);
 

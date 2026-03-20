@@ -25,6 +25,8 @@ type VideoTimelineProps = {
   onPoserMarqueur: () => void;
   onModifierMarqueur?: (marqueur: Marqueur, data: { label?: string; timecode?: number; categorie?: Marqueur["categorie"] }) => Promise<void>;
   onSupprimerMarqueur?: (marqueur: Marqueur) => Promise<void>;
+  canEditMarkers?: boolean;
+  onExportCsv?: () => void;
 };
 
 // Seuil en secondes pour le clustering visuel
@@ -70,6 +72,8 @@ export default function VideoTimeline({
   onPoserMarqueur,
   onModifierMarqueur,
   onSupprimerMarqueur,
+  canEditMarkers = true,
+  onExportCsv,
 }: VideoTimelineProps) {
 
   // Groupe de marqueurs dont la liste est depliee
@@ -155,7 +159,7 @@ export default function VideoTimeline({
       <div className={styles.markerControls}>
         <button
           onClick={onPoserMarqueur}
-          disabled={duree === 0}
+          disabled={duree === 0 || !canEditMarkers}
           className={styles.markerButton}
           title="Poser un marqueur ici"
         >
@@ -271,7 +275,14 @@ export default function VideoTimeline({
       {/* LISTE COMPLETE des marqueurs avec marqueur actuel en gras */}
       {/* -------------------------------------------------- */}
       <div className={styles.markerListContainer}>
-        <div className={styles.markerListHeader}>Marqueurs</div>
+        <div className={styles.markerListHeader}>
+          <span>Marqueurs</span>
+          {onExportCsv && (
+            <button className={styles.markerExportBtn} onClick={onExportCsv} type="button">
+              Exporter CSV
+            </button>
+          )}
+        </div>
         {marqueursTriees.length === 0 && (
           <div className={styles.markerEmpty}>Aucun marqueur pour linstant</div>
         )}
@@ -328,28 +339,30 @@ export default function VideoTimeline({
                     <span className={styles.markerName}>{label}</span>
                     <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
                   </div>
-                  <div className={styles.markerActions} onClick={(e) => e.stopPropagation()}>
-                    <button
-                      className={styles.markerActionButton}
-                      onClick={() => startEdit(m)}
-                      type="button"
-                      title="Modifier"
-                    >
-                      Modifier
-                    </button>
-                    <button
-                      className={styles.markerActionDelete}
-                      onClick={() => {
-                        if (onSupprimerMarqueur && window.confirm("Supprimer ce marqueur ?")) {
-                          onSupprimerMarqueur(m);
-                        }
-                      }}
-                      type="button"
-                      title="Supprimer"
-                    >
-                      Supprimer
-                    </button>
-                  </div>
+                  {canEditMarkers && (
+                    <div className={styles.markerActions} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className={styles.markerActionButton}
+                        onClick={() => startEdit(m)}
+                        type="button"
+                        title="Modifier"
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        className={styles.markerActionDelete}
+                        onClick={() => {
+                          if (onSupprimerMarqueur && window.confirm("Supprimer ce marqueur ?")) {
+                            onSupprimerMarqueur(m);
+                          }
+                        }}
+                        type="button"
+                        title="Supprimer"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>

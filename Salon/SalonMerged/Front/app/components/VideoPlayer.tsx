@@ -23,6 +23,8 @@ type VideoPlayerProps = {
   onNouveauMarqueur?: (timecode: number) => void;
   onModifierMarqueur?: (marqueur: Marqueur, data: { label?: string; timecode?: number; categorie?: Marqueur['categorie'] }) => Promise<void>;
   onSupprimerMarqueur?: (marqueur: Marqueur) => Promise<void>;
+  canEditMarkers?: boolean;
+  onExportCsv?: () => void;
 };
 
 export default function VideoPlayer({
@@ -41,6 +43,8 @@ export default function VideoPlayer({
   onNouveauMarqueur,
   onModifierMarqueur,
   onSupprimerMarqueur,
+  canEditMarkers = true,
+  onExportCsv,
 }: VideoPlayerProps) {
 
   const [mounted, setMounted] = useState(false);
@@ -332,6 +336,8 @@ export default function VideoPlayer({
         onPoserMarqueur={handlePoserMarqueur}
         onModifierMarqueur={onModifierMarqueur}
         onSupprimerMarqueur={onSupprimerMarqueur}
+        canEditMarkers={canEditMarkers}
+        onExportCsv={onExportCsv}
       />
     </div>
   );
