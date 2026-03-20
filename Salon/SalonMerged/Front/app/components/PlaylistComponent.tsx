@@ -312,9 +312,40 @@ export default function PlaylistComponent({
           <DragOverlay>
             {activeId ? (
               <div className="playlist-item dragging-overlay">
-                <div className="video-title">
-                  {playlist.entries.find(e => e.id === activeId)?.video?.title || 'Déplacement...'}
-                </div>
+                {(() => {
+                  const activeEntry = playlist.entries.find(e => e.id === activeId);
+                  if (!activeEntry) {
+                    return <div className="video-title">Déplacement...</div>;
+                  }
+                  return (
+                    <div className="drag-overlay-content">
+                      <div className="drag-overlay-thumb">
+                        {activeEntry.video?.thumbnailUrl ? (
+                          <img
+                            src={activeEntry.video.thumbnailUrl}
+                            alt={activeEntry.video.title}
+                            className="drag-overlay-image"
+                          />
+                        ) : (
+                          <div className="drag-overlay-placeholder">
+                            <Film size={20} />
+                          </div>
+                        )}
+                        <span className="drag-overlay-duration">
+                          {formatTime(activeEntry.video?.durationSec)}
+                        </span>
+                      </div>
+                      <div className="drag-overlay-info">
+                        <div className="drag-overlay-title">
+                          {activeEntry.video?.title || "Sans titre"}
+                        </div>
+                        <div className="drag-overlay-channel">
+                          {activeEntry.video?.youtubeId?.substring(0, 8)}...
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             ) : null}
           </DragOverlay>
