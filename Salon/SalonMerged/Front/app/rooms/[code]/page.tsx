@@ -460,61 +460,25 @@ export default function RoomPage() {
       <ChatWidget socket={socketRef.current} roomCode={code} pseudo={pseudo} userId={memberId} getCurrentTime={() => position} onSeek={handleSeek} />
 
       {showQuitModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999,
-        }}>
-          <div style={{
-            background: 'rgba(88, 12, 31, 0.95)',
-            border: '1px solid rgba(197, 34, 51, 0.4)',
-            borderRadius: '20px',
-            padding: '40px',
-            maxWidth: '420px',
-            width: '90%',
-            textAlign: 'center',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-          }}>
-            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🚪</div>
-            <h2 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 800, marginBottom: '12px' }}>
-              Quitter le salon ?
-            </h2>
-            <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '32px', lineHeight: '1.6' }}>
+        <div className={styles.quitOverlay}>
+          <div className={styles.quitModal}>
+            <div className={styles.quitIcon}>EXIT</div>
+            <h2 className={styles.quitTitle}>Quitter le salon ?</h2>
+            <p className={styles.quitText}>
               Tu vas quitter la session en cours. Les autres participants continueront sans toi.
             </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <div className={styles.quitActions}>
               <button
                 onClick={() => setShowQuitModal(false)}
-                style={{
-                  padding: '12px 28px',
-                  background: 'rgba(255,255,255,0.1)',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: '12px',
-                  color: 'white',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  transition: 'all 0.2s',
-                }}
+                className={`${styles.quitBtn} ${styles.quitBtnGhost}`}
+                type="button"
               >
                 Rester
               </button>
               <button
                 onClick={confirmQuit}
-                style={{
-                  padding: '12px 28px',
-                  background: 'linear-gradient(135deg, #C52233, #74121D)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  color: 'white',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  boxShadow: '0 4px 12px rgba(197,34,51,0.5)',
-                  transition: 'all 0.2s',
-                }}
+                className={`${styles.quitBtn} ${styles.quitBtnDanger}`}
+                type="button"
               >
                 Quitter
               </button>

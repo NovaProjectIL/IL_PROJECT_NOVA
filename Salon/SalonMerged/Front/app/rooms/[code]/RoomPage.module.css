@@ -57,7 +57,7 @@
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: linear-gradient(135deg, #ef4444, #dc2626);
+  background: linear-gradient(135deg, #E50914, #B20710);
   color: white;
   border: none;
   border-radius: 50px;
@@ -65,7 +65,7 @@
   font-weight: 700;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 6px 18px rgba(229, 9, 20, 0.45);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   position: relative;
@@ -86,7 +86,7 @@
 
 .quitButton:hover {
   transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(239, 68, 68, 0.6);
+  box-shadow: 0 10px 26px rgba(229, 9, 20, 0.6);
   background: linear-gradient(135deg, #dc2626, #b91c1c);
 }
 
@@ -192,8 +192,8 @@
   margin: 0 auto;
   padding: 10px 18px;
   border-radius: 999px;
-  background: rgba(88, 12, 31, 0.9);
-  border: 1px solid rgba(244, 196, 48, 0.35);
+  background: rgba(20, 20, 24, 0.9);
+  border: 1px solid rgba(229, 9, 20, 0.45);
   color: rgba(255, 255, 255, 0.9);
   font-size: 0.9rem;
   font-weight: 600;
@@ -1329,3 +1329,75 @@
   }
 }
 
+
+.quitOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 6, 8, 0.85);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.quitModal {
+  background: rgba(16, 16, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  padding: 42px 36px;
+  max-width: 440px;
+  width: min(92vw, 440px);
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.quitIcon {
+  font-size: 2.8rem;
+  margin-bottom: 14px;
+}
+
+.quitTitle {
+  margin: 0 0 10px;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.quitText {
+  margin: 0 0 28px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+}
+
+.quitActions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.quitBtn {
+  padding: 12px 26px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.quitBtnGhost {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.quitBtnDanger {
+  background: linear-gradient(135deg, #E50914, #B20710);
+  color: white;
+  box-shadow: 0 8px 20px rgba(229, 9, 20, 0.45);
+}
+
+.quitBtn:hover {
+  transform: translateY(-2px);
+}
