@@ -1,6 +1,6 @@
 // markers.controller.ts
 import { Controller, Get, Post, Patch, Delete, Param, Body, ParseIntPipe, UseGuards, Res } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { MarkersService } from './markers.service';
 import { CreateMarkerDto } from './dto/create-marker.dto';
 import { UpdateMarkerDto } from './dto/update-marker.dto';
