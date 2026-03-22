@@ -10,6 +10,7 @@ import { EndRoomDto } from './dto/end-room.dto';
 import { PlayDirectDto } from './dto/play-direct.dto';
 import { VideoEndedDto } from './dto/video-ended.dto';
 import { GetPlaybackDto } from './dto/get-playback.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
 import * as QRCode from 'qrcode';
 
 @Controller('rooms')
@@ -175,6 +176,17 @@ export class RoomsController {
         joinedAt: u.joinedAt,
       })),
     };
+  }
+
+  @Post('role')
+  async updateRole(@Body() body: UpdateRoleDto) {
+    const { codeRoom, requesterId, targetMemberId, role } = body;
+    return this.roomsService.updateMemberRole(
+      codeRoom.toUpperCase(),
+      requesterId,
+      targetMemberId,
+      role,
+    );
   }
 
   @Get('state')

@@ -125,7 +125,7 @@ export class RoomsService {
     const creator = this.usersRepo.create({
       room,
       name: finalName,
-      role: 'OBSERVER',
+      role: 'CREATOR',
     });
     await this.usersRepo.save(creator);
 
@@ -178,6 +178,50 @@ export class RoomsService {
       oldName,
       newName: user.name,
       roomCode: room.code,
+    };
+  }
+
+  async updateMemberRole(
+    codeRoom: string,
+    requesterId: number,
+    targetMemberId: number,
+    role: 'ANALYST' | 'OBSERVER',
+  ) {
+    this.logger.log(`Mise à jour du rôle ${role} pour ${targetMemberId} dans ${codeRoom}`);
+
+    const room = await this.roomsRepo.findOne({
+      where: { code: codeRoom },
+      relations: ['users'],
+    });
+
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    const requester = room.users.find((m) => m.id === requesterId);
+    if (!requester) {
+      throw new NotFoundException('Requester not found in this room');
+    }
+
+    if (requester.role !== 'CREATOR') {
+      throw new ForbiddenException('Only the room creator can update roles');
+    }
+
+    const target = room.users.find((m) => m.id === targetMemberId);
+    if (!target) {
+      throw new NotFoundException('Target member not found in this room');
+    }
+
+    target.role = role;
+    await this.usersRepo.save(target);
+
+    this.logger.log(`Rôle mis à jour: ${target.name} -> ${role}`);
+
+    return {
+      roomCode: room.code,
+      memberId: target.id,
+      memberName: target.name,
+      role: target.role,
     };
   }
 

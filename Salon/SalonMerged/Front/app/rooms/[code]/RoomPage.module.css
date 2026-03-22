@@ -271,6 +271,10 @@
 }
 
 .memberTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   padding: 8px 14px;
   background: rgba(12, 8, 16, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -278,6 +282,43 @@
   font-size: 14px;
   color: rgba(255, 255, 255, 0.8);
   transition: all 0.3s ease;
+}
+
+.memberName {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.roleBadge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(229, 9, 20, 0.18);
+  border: 1px solid rgba(229, 9, 20, 0.35);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #fca5a5;
+}
+
+.roleButton {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #E50914, #B20710);
+  color: #fff;
+  border: none;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  box-shadow: 0 6px 16px rgba(229, 9, 20, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.roleButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(229, 9, 20, 0.5);
 }
 
 .memberTag:hover {

@@ -39,14 +39,14 @@ function SortablePlaylistItem({
   index,
   playlist,
   onPlayVideo,
-  onDeleteVideo,
+  onRequestDelete,
   isDragging
 }: {
   entry: PlaylistEntry;
   index: number;
   playlist: Playlist;
   onPlayVideo: (index: number) => void;
-  onDeleteVideo: (entryId: number) => void;
+  onRequestDelete: (entry: PlaylistEntry) => void;
   isDragging: boolean;
 }) {
   const {
@@ -136,9 +136,7 @@ function SortablePlaylistItem({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (confirm('Supprimer cette vidéo de la playlist ?')) {
-              onDeleteVideo(entry.id);
-            }
+            onRequestDelete(entry);
           }}
           className="action-button delete-button"
           title="Supprimer de la playlist"
@@ -163,6 +161,7 @@ export default function PlaylistComponent({
 }: PlaylistComponentProps) {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [isReordering, setIsReordering] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PlaylistEntry | null>(null);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as number);
@@ -197,6 +196,12 @@ export default function PlaylistComponent({
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    await onDeleteVideo(pendingDelete.id);
+    setPendingDelete(null);
   };
 
   if (isLoading) {
@@ -296,15 +301,15 @@ export default function PlaylistComponent({
           >
             <div className="playlist-items">
               {playlist.entries.map((entry, index) => (
-                <SortablePlaylistItem
-                  key={entry.id}
-                  entry={entry}
-                  index={index}
-                  playlist={playlist}
-                  onPlayVideo={onPlayVideo}
-                  onDeleteVideo={onDeleteVideo}
-                  isDragging={activeId === entry.id}
-                />
+              <SortablePlaylistItem
+                key={entry.id}
+                entry={entry}
+                index={index}
+                playlist={playlist}
+                onPlayVideo={onPlayVideo}
+                onRequestDelete={(item) => setPendingDelete(item)}
+                isDragging={activeId === entry.id}
+              />
               ))}
             </div>
           </SortableContext>
@@ -351,6 +356,34 @@ export default function PlaylistComponent({
           </DragOverlay>
         </DndContext>
       </div>
+
+      {pendingDelete && (
+        <div className="playlist-confirm-overlay" role="dialog" aria-modal="true">
+          <div className="playlist-confirm-modal">
+            <div className="playlist-confirm-icon">DEL</div>
+            <h3>Supprimer cette vidéo ?</h3>
+            <p>
+              Cette action retirera <strong>{pendingDelete.video?.title || 'cette vidéo'}</strong> de la playlist.
+            </p>
+            <div className="playlist-confirm-actions">
+              <button
+                className="playlist-confirm-btn ghost"
+                type="button"
+                onClick={() => setPendingDelete(null)}
+              >
+                Annuler
+              </button>
+              <button
+                className="playlist-confirm-btn danger"
+                type="button"
+                onClick={confirmDelete}
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="playlist-footer">
         <div className="footer-info">

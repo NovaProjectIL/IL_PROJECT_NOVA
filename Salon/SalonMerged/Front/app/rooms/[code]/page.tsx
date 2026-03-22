@@ -47,6 +47,7 @@ export default function RoomPage() {
     useMarkers(roomInternalId, socketRef.current, code, currentVideo?.youtubeId);
   const currentMember = members.find((m) => Number(m.id) === Number(memberId));
   const canEditMarkers = currentMember?.role === "ANALYST" || currentMember?.role === "CREATOR";
+  const isCreator = currentMember?.role === "CREATOR";
 
   const stateRef = useRef({ position, isPlaying });
   const currentVideoIdRef = useRef<string | null>(null);
@@ -287,6 +288,30 @@ export default function RoomPage() {
     }, 2000);
   };
 
+  const formatRole = (role?: string) => {
+    if (!role) return 'Observateur';
+    if (role === 'CREATOR') return 'Principal';
+    if (role === 'ANALYST') return 'Analyste';
+    return 'Observateur';
+  };
+
+  const grantMarkerRights = async (targetMemberId: number) => {
+    if (!code || !memberId) return;
+    try {
+      await roomsApi.updateMemberRole({
+        codeRoom: code,
+        requesterId: memberId,
+        targetMemberId,
+        role: 'ANALYST',
+      });
+      await loadRoomData();
+      showToast('Droits marqueur accordÃ©s');
+    } catch (err: any) {
+      log.error('Erreur update role', err);
+      showToast('Impossible de modifier le rÃ´le');
+    }
+  };
+
   if (loading) return <div className={styles.loading}>Chargement...</div>;
 
   return (
@@ -314,7 +339,19 @@ export default function RoomPage() {
         <div className={styles.membersList}>
           {members.map(member => (
             <span key={member.id} className={`${styles.memberTag} ${member.id === memberId ? styles.currentMember : ''}`}>
-              {member.name} {member.id === memberId ? '(Vous)' : ''}
+              <span className={styles.memberName}>
+                {member.name} {member.id === memberId ? '(Vous)' : ''}
+              </span>
+              <span className={styles.roleBadge}>{formatRole(member.role)}</span>
+              {isCreator && member.id !== memberId && member.role !== 'ANALYST' && (
+                <button
+                  type="button"
+                  className={styles.roleButton}
+                  onClick={() => grantMarkerRights(member.id)}
+                >
+                  Donner droits marqueur
+                </button>
+              )}
             </span>
           ))}
         </div>

@@ -1563,6 +1563,82 @@ h1, h2, h3, .display-title {
   font-size: 1rem;
 }
 
+/* Playlist delete confirm (Netflix style) */
+.playlist-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.65);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.playlist-confirm-modal {
+  width: min(420px, 92vw);
+  background: linear-gradient(135deg, rgba(24, 8, 16, 0.98), rgba(12, 6, 12, 0.98));
+  border-radius: 22px;
+  border: 1px solid rgba(229, 9, 20, 0.35);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  padding: 26px;
+  color: #fff;
+  text-align: center;
+}
+
+.playlist-confirm-icon {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: rgba(229, 9, 20, 0.18);
+  border: 1px solid rgba(229, 9, 20, 0.45);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #fca5a5;
+}
+
+.playlist-confirm-modal h3 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.playlist-confirm-modal p {
+  margin: 0 0 18px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.playlist-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.playlist-confirm-btn {
+  min-width: 130px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.playlist-confirm-btn.ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.playlist-confirm-btn.danger {
+  background: linear-gradient(135deg, #E50914, #B20710);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(229, 9, 20, 0.35);
+}
+
 /* ========================================
    HERO SECTION
    ======================================== */
@@ -1961,14 +2037,14 @@ h1, h2, h3, .display-title {
 }
 
 .nova-btn-secondary {
-  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  background: linear-gradient(135deg, var(--cherry-lightest) 0%, var(--cherry-dark) 100%);
   color: white;
-  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 8px 24px rgba(197, 34, 51, 0.4);
 }
 
 .nova-btn-secondary:hover:not(:disabled) {
   transform: translateY(-3px);
-  box-shadow: 0 12px 32px rgba(139, 92, 246, 0.6);
+  box-shadow: 0 12px 32px rgba(197, 34, 51, 0.6);
 }
 
 .nova-btn:active:not(:disabled) {

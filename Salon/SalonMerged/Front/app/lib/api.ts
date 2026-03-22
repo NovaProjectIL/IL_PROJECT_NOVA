@@ -118,6 +118,9 @@ export const roomsApi = {
     api.get('/rooms/youtube-info', { params: { videoId } }),
 
   healthCheck: () => api.get('/rooms/health'),
+
+  updateMemberRole: (data: { codeRoom: string; requesterId: number; targetMemberId: number; role: 'ANALYST' | 'OBSERVER' }) =>
+    api.post('/rooms/role', data),
 };
 
 // ==================== PLAYLIST API ====================
