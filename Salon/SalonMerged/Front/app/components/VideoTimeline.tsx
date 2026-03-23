@@ -22,8 +22,8 @@ type VideoTimelineProps = {
   onClicMarqueur: (marqueur: Marqueur, index: number) => void;
   // Callback appele quand l utilisateur clique sur "Poser un marqueur"
   // TODO WAFA : ce callback appellera ton API POST /markers
-  onPoserMarqueur: () => void;
-  onModifierMarqueur?: (marqueur: Marqueur, data: { label?: string; timecode?: number; categorie?: Marqueur["categorie"] }) => Promise<void>;
+  onPoserMarqueur: (categorie: Marqueur["categorie"]) => void;
+  onModifierMarqueur?: (marqueur: Marqueur, data: { label?: string; timecode?: number; categorie?: Marqueur["categorie"]; content?: string | null }) => Promise<void>;
   onSupprimerMarqueur?: (marqueur: Marqueur) => Promise<void>;
   canEditMarkers?: boolean;
   onExportCsv?: () => void;
@@ -32,6 +32,18 @@ type VideoTimelineProps = {
 // Seuil en secondes pour le clustering visuel
 // Deux marqueurs a moins de 10s l un de l autre sont groupes
 const SEUIL_CLUSTERING = 10;
+
+const CATEGORIES: { value: Marqueur["categorie"]; label: string; color: string }[] = [
+  { value: "COMMENT", label: "COMMENT", color: "#38bdf8" },
+  { value: "ERROR", label: "ERROR", color: "#ef4444" },
+  { value: "HIGHLIGHT", label: "HIGHLIGHT", color: "#f59e0b" },
+  { value: "QUESTION", label: "QUESTION", color: "#8b5cf6" },
+];
+
+const getCategoryMeta = (categorie: Marqueur["categorie"]) => {
+  const found = CATEGORIES.find((c) => c.value === categorie);
+  return found ?? CATEGORIES[0];
+};
 
 // Type pour un groupe de marqueurs
 type Groupe = {
@@ -81,6 +93,9 @@ export default function VideoTimeline({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftLabel, setDraftLabel] = useState("");
   const [draftTime, setDraftTime] = useState("");
+  const [draftComment, setDraftComment] = useState("");
+  const [draftCategory, setDraftCategory] = useState<Marqueur["categorie"]>("COMMENT");
+  const [selectedCategory, setSelectedCategory] = useState<Marqueur["categorie"]>("COMMENT");
   const [isSaving, setIsSaving] = useState(false);
 
   // Calcule la position en pourcentage sur la timeline
@@ -119,12 +134,16 @@ export default function VideoTimeline({
     setEditingId(m.id);
     setDraftLabel(m.label);
     setDraftTime(formatTime(m.timecode));
+    setDraftComment(m.content ?? "");
+    setDraftCategory(m.categorie ?? "COMMENT");
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setDraftLabel("");
     setDraftTime("");
+    setDraftComment("");
+    setDraftCategory("COMMENT");
   };
 
   const handleSave = async (m: Marqueur) => {
@@ -132,9 +151,15 @@ export default function VideoTimeline({
     const nextLabel = draftLabel.trim() || m.label;
     const parsedTime = parseTimeInput(draftTime);
     const nextTime = parsedTime === null ? m.timecode : parsedTime;
+    const nextContent = draftComment.trim();
     setIsSaving(true);
     try {
-      await onModifierMarqueur(m, { label: nextLabel, timecode: nextTime });
+      await onModifierMarqueur(m, {
+        label: nextLabel,
+        timecode: nextTime,
+        categorie: draftCategory,
+        content: nextContent ? nextContent : null,
+      });
       cancelEdit();
     } finally {
       setIsSaving(false);
@@ -158,7 +183,7 @@ export default function VideoTimeline({
       {/* Marker Navigation Controls - Modern Purple Design */}
       <div className={styles.markerControls}>
         <button
-          onClick={onPoserMarqueur}
+          onClick={() => onPoserMarqueur(selectedCategory)}
           disabled={duree === 0 || !canEditMarkers}
           className={styles.markerButton}
           title="Poser un marqueur ici"
@@ -167,6 +192,25 @@ export default function VideoTimeline({
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
           </svg>
         </button>
+
+        <div className={styles.markerCategorySelectWrap}>
+          <span
+            className={styles.markerCategoryDot}
+            style={{ ["--cat-color" as any]: getCategoryMeta(selectedCategory).color }}
+          />
+          <select
+            className={styles.markerCategorySelect}
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value as Marqueur["categorie"])}
+            disabled={!canEditMarkers || duree === 0}
+          >
+            {CATEGORIES.map((cat) => (
+              <option key={cat.value} value={cat.value} style={{ color: cat.color }}>
+                {cat.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <button
           onClick={() => {
@@ -208,6 +252,7 @@ export default function VideoTimeline({
             const estGroupe = groupe.marqueurs.length > 1;
             const estDeplie = groupeDeplie === index;
             const isActive = !!activeMarkerId && groupe.marqueurs.some((m) => m.id === activeMarkerId);
+            const singleMeta = !estGroupe ? getCategoryMeta(groupe.marqueurs[0].categorie ?? "COMMENT") : null;
 
             return (
               <div key={index}>
@@ -227,7 +272,10 @@ export default function VideoTimeline({
                       ? `${groupe.marqueurs.length} marqueurs groupes`
                       : groupe.marqueurs[0].label
                   }
-                  style={{ left: `${position}%` }}
+                  style={{
+                    left: `${position}%`,
+                    ...(singleMeta ? { ["--marker-color" as any]: singleMeta.color } : {}),
+                  }}
                   className={`${styles.timelineMarker} ${estGroupe ? styles.timelineMarkerCluster : styles.timelineMarkerSingle} ${isActive ? styles.timelineMarkerActive : ""}`}
                 >
                   <span className={styles.markerTooltip}>
@@ -289,6 +337,7 @@ export default function VideoTimeline({
         {marqueursTriees.map((m, index) => {
           const isEditing = editingId === m.id;
           const label = labelFor(m, index);
+          const meta = getCategoryMeta(m.categorie ?? "COMMENT");
           return (
             <div
               key={m.id}
@@ -315,6 +364,30 @@ export default function VideoTimeline({
                     placeholder="MM:SS"
                     type="text"
                   />
+                  <div className={styles.markerCategorySelectWrap}>
+                    <span
+                      className={styles.markerCategoryDot}
+                      style={{ ["--cat-color" as any]: getCategoryMeta(draftCategory).color }}
+                    />
+                    <select
+                      className={styles.markerCategorySelect}
+                      value={draftCategory}
+                      onChange={(e) => setDraftCategory(e.target.value as Marqueur["categorie"])}
+                    >
+                      {CATEGORIES.map((cat) => (
+                        <option key={cat.value} value={cat.value} style={{ color: cat.color }}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <textarea
+                    className={styles.markerCommentInput}
+                    value={draftComment}
+                    onChange={(e) => setDraftComment(e.target.value)}
+                    placeholder="Commentaire (optionnel)"
+                    rows={3}
+                  />
                   <div className={styles.markerActions}>
                     <button
                       className={styles.markerActionPrimary}
@@ -336,9 +409,15 @@ export default function VideoTimeline({
               ) : (
                 <>
                   <div className={styles.markerRowContent}>
+                    <span className={styles.markerCategoryBadge} style={{ ["--cat-color" as any]: meta.color }}>
+                      {meta.label}
+                    </span>
                     <span className={styles.markerName}>{label}</span>
                     <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
                   </div>
+                  {m.content && (
+                    <div className={styles.markerComment}>{m.content}</div>
+                  )}
                   {canEditMarkers && (
                     <div className={styles.markerActions} onClick={(e) => e.stopPropagation()}>
                       <button

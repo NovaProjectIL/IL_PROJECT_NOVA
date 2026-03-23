@@ -102,9 +102,13 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client déconnecté: ${client.id}`);
-    const roomCode = this.roomStateService.removeClient(client.id);
-    if (roomCode) {
+    const removed = this.roomStateService.removeClient(client.id);
+    if (removed) {
+      const { roomCode, memberId } = removed;
       this.logger.log(`[SYNC] Removed ${client.id} from room ${roomCode}`);
+      if (memberId !== undefined) {
+        this.server.to(roomCode).emit('user-left', { memberId, timestamp: new Date() });
+      }
       const state = this.roomStateService.getOrCreateRoomState(roomCode);
 
       if (state.clients.size === 0) return;
@@ -507,6 +511,25 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
 
     client.to(roomCode).emit('nouveau_marqueur', marker);
     this.logger.log(`Marqueur broadcast dans ${roomCode}: ${marker.label}`);
+  }
+
+  @SubscribeMessage('marker-updated')
+  handleMarkerUpdated(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { codeRoom: string; marker: any }
+  ) {
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'marker-updated');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'marker-updated')) return;
+
+    const marker = data.marker;
+    if (!marker || typeof marker !== 'object') {
+      this.logger.warn(`[SECURITY] marker-updated rejetÃ© (${client.id}): marker invalide`);
+      return;
+    }
+
+    client.to(roomCode).emit('marker-updated', marker);
+    this.logger.log(`Marqueur modifiÃ© broadcast dans ${roomCode}: ${marker.label}`);
   }
 
 }

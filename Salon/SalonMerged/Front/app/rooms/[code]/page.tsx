@@ -177,6 +177,7 @@ export default function RoomPage() {
         videoId: marqueurBrut.video?.youtubeId ?? marqueurBrut.videoId ?? marqueurBrut.video?.id ?? undefined,
         timecode: Number(marqueurBrut.timeSec ?? marqueurBrut.timecode ?? 0),
         label: marqueurBrut.label ?? 'Marqueur',
+        content: marqueurBrut.content ?? null,
         categorie: marqueurBrut.category ?? marqueurBrut.categorie ?? 'COMMENT',
         roomId: String(marqueurBrut.room?.id ?? roomInternalId ?? ''),
         auteurId: String(marqueurBrut.createdBy?.id ?? marqueurBrut.auteurId ?? ''),
@@ -217,6 +218,21 @@ export default function RoomPage() {
       loadRoomData();
     });
 
+    socket.on('user-left', (data: any) => {
+      log.socket('User left reçu', data);
+      const leftId = Number(data?.memberId);
+      if (Number.isFinite(leftId)) {
+        setMembers((prev) => prev.filter((m) => Number(m.id) !== leftId));
+      } else {
+        loadRoomData();
+      }
+    });
+
+    socket.on('room-closed', () => {
+      showToast('Le principal a quitté. Salle fermée.');
+      router.push('/');
+    });
+
     // A remote client started buffering: server orders everyone to pause
     socket.on('force-pause', (data: any) => {
       log.socket('Force-pause reçu', data);
@@ -232,9 +248,11 @@ export default function RoomPage() {
     return () => {
       socket.off('nouveau_marqueur');
       socket.off('force-pause');
+      socket.off('user-left');
+      socket.off('room-closed');
       socket.disconnect();
     };
-  }, [code, memberId, roomInternalId, calculateAdjustedPosition, loadRoomData, setMarqueurs]);
+  }, [code, memberId, roomInternalId, calculateAdjustedPosition, loadRoomData, router, setMarqueurs]);
 
   const handlePlay = () => {
     if (!code) return;
@@ -311,6 +329,22 @@ export default function RoomPage() {
       showToast('Impossible de modifier le rÃ´le');
     }
   };
+  const revokeMarkerRights = async (targetMemberId: number) => {
+    if (!code || !memberId) return;
+    try {
+      await roomsApi.updateMemberRole({
+        codeRoom: code,
+        requesterId: memberId,
+        targetMemberId,
+        role: 'OBSERVER',
+      });
+      await loadRoomData();
+      showToast('Droits marqueur retirés');
+    } catch (err: any) {
+      log.error('Erreur update role', err);
+      showToast('Impossible de modifier le rôle');
+    }
+  };
 
   if (loading) return <div className={styles.loading}>Chargement...</div>;
 
@@ -352,6 +386,15 @@ export default function RoomPage() {
                   Donner droits marqueur
                 </button>
               )}
+              {isCreator && member.id !== memberId && member.role === 'ANALYST' && (
+                <button
+                  type="button"
+                  className={styles.roleButton}
+                  onClick={() => revokeMarkerRights(member.id)}
+                >
+                  Retirer droits marqueur
+                </button>
+              )}
             </span>
           ))}
         </div>
@@ -376,9 +419,9 @@ export default function RoomPage() {
               onPause={handlePause}
               onSeek={handleSeek}
               onDuration={() => {}}
-              onNouveauMarqueur={canEditMarkers ? async (timecode) => {
+              onNouveauMarqueur={canEditMarkers ? async (timecode, categorie) => {
                 if (!roomInternalId || !currentVideo?.youtubeId) return;
-                await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, socketRef.current, code);
+                await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, categorie, socketRef.current, code);
               } : undefined}
               onModifierMarqueur={async (marqueur, data) => {
                 if (!roomInternalId) return;
@@ -393,7 +436,8 @@ export default function RoomPage() {
                   ...(data.label !== undefined ? { label: data.label } : {}),
                   ...(data.timecode !== undefined ? { timeSec: data.timecode } : {}),
                   ...(data.categorie !== undefined ? { category: data.categorie } : {}),
-                });
+                  ...(data.content !== undefined ? { content: data.content } : {}),
+                }, socketRef.current, code);
               }}
               onSupprimerMarqueur={async (marqueur) => {
                 if (!roomInternalId) return;
@@ -574,5 +618,10 @@ export default function RoomPage() {
     }
   }
 }
+
+
+
+
+
 
 

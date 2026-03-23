@@ -339,6 +339,17 @@ export class RoomsService {
       throw new NotFoundException('Member not found in this room');
     }
 
+    if (user.role === 'CREATOR') {
+      await this.roomsRepo.remove(room);
+      this.logger.log(`Salle ${codeRoom} supprimÃ©e car le CREATOR a quittÃ©.`);
+      return {
+        roomDeleted: true,
+        roomId: room.id,
+        removedMemberId: user.id,
+        removedMemberName: user.name,
+      };
+    }
+
     await this.usersRepo.remove(user);
 
     const remainingCount = await this.usersRepo.count({

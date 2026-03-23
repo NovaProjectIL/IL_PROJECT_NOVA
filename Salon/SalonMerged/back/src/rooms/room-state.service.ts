@@ -152,8 +152,9 @@ export class RoomStateService {
   removeClient(clientId: string) {
     for (const [roomCode, state] of this.rooms.entries()) {
       if (state.clients.has(clientId)) {
+        const memberId = state.clients.get(clientId)?.memberId;
         state.clients.delete(clientId);
-        return roomCode;
+        return { roomCode, memberId };
       }
     }
     return null;

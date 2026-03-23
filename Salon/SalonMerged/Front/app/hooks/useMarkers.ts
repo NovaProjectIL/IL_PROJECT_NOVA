@@ -8,6 +8,7 @@ const normaliser = (raw: any): Marqueur => ({
   videoId: raw.video?.youtubeId ?? raw.videoId ?? raw.video?.id ?? undefined,
   timecode: Number(raw.timeSec ?? raw.timecode ?? 0),
   label: raw.label ?? 'Marqueur',
+  content: raw.content ?? null,
   categorie: raw.category ?? raw.categorie ?? 'COMMENT',
   roomId: String(raw.room?.id ?? ''),
   auteurId: String(raw.createdBy?.id ?? ''),
@@ -44,13 +45,29 @@ export function useMarkers(roomInternalId: number | null, socket: any, roomCode:
 
   useEffect(() => {
     if (!socket) return;
-    const handler = (raw: any) => {
+    const onCreated = (raw: any) => {
       const m = normaliser(raw);
       if (videoId && m.videoId !== videoId) return;
       setMarqueurs(prev => prev.find(x => x.id === m.id) ? prev : [...prev, m]);
     };
-    socket.on('nouveau_marqueur', handler);
-    return () => socket.off('nouveau_marqueur', handler);
+    const onUpdated = (raw: any) => {
+      const m = normaliser(raw);
+      if (videoId && m.videoId !== videoId) return;
+      setMarqueurs(prev => prev.map(x => x.id === m.id ? m : x));
+    };
+    const onDeleted = (data: any) => {
+      const id = String(data?.id ?? data?.markerId ?? '');
+      if (!id) return;
+      setMarqueurs(prev => prev.filter(m => m.id !== id));
+    };
+    socket.on('nouveau_marqueur', onCreated);
+    socket.on('marker-updated', onUpdated);
+    socket.on('marker-deleted', onDeleted);
+    return () => {
+      socket.off('nouveau_marqueur', onCreated);
+      socket.off('marker-updated', onUpdated);
+      socket.off('marker-deleted', onDeleted);
+    };
   }, [socket, videoId]);
 
   const creer = useCallback(async (
@@ -58,6 +75,7 @@ export function useMarkers(roomInternalId: number | null, socket: any, roomCode:
     memberId: number,
     timecode: number,
     youtubeId: string,
+    categorie: Marqueur['categorie'] = 'COMMENT',
     socketRef?: any,
     codeRoom?: string
   ) => {
@@ -65,7 +83,7 @@ export function useMarkers(roomInternalId: number | null, socket: any, roomCode:
       const res = await marqueursApi.creerMarqueur(roomId, {
         timeSec: timecode,
         label: `Marqueur à ${Math.floor(timecode)}s`,
-        category: 'COMMENT',
+        category: categorie,
         videoId: youtubeId,
         createdById: memberId,
       });
@@ -81,12 +99,15 @@ export function useMarkers(roomInternalId: number | null, socket: any, roomCode:
   const modifier = useCallback(async (
     roomId: number,
     markerId: number,
-    data: { version: number; memberId: number; timeSec?: number; label?: string; category?: Marqueur['categorie'] }
+    data: { version: number; memberId: number; timeSec?: number; label?: string; category?: Marqueur['categorie']; content?: string | null },
+    socketRef?: any,
+    codeRoom?: string
   ) => {
     try {
       const res = await marqueursApi.modifierMarqueur(roomId, markerId, data);
       const updated = normaliser(res.data);
       setMarqueurs(prev => prev.map(m => m.id === updated.id ? updated : m));
+      socketRef?.emit('marker-updated', { codeRoom, marker: updated });
       return updated;
     } catch (e) {
       console.error('[useMarkers] Erreur modification', e);
