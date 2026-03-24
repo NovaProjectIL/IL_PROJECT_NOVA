@@ -116,6 +116,19 @@ export default function VideoPlayer({
     return () => { syncSocket.off('all-ready', onAllReady); };
   }, [syncSocket]);
 
+  // Periodic sync-check: server asks for our actual position to detect drift.
+  // Respond immediately with the real YouTube player time.
+  useEffect(() => {
+    if (!syncSocket) return;
+    const onSyncCheck = () => {
+      if (!playerRef.current) return;
+      const currentPos = playerRef.current.getCurrentTime() ?? 0;
+      syncSocket.emit('position-report', { codeRoom: roomId, positionSec: currentPos });
+    };
+    syncSocket.on('sync-check', onSyncCheck);
+    return () => { syncSocket.off('sync-check', onSyncCheck); };
+  }, [syncSocket, roomId]);
+
   // Buffering detection refs
   const bufferingEmittedRef = useRef(false);
   const lastAllReadyTimeRef = useRef(0);

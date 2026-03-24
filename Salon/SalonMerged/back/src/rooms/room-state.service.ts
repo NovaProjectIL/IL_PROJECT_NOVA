@@ -13,6 +13,8 @@ export interface ClientState {
   memberId: number; // Son ID dans la base de données.
   isReady: boolean; // Est-ce que son lecteur YouTube a fini de charger ?
   joinedAt: Date;   // À quelle heure il est arrivé.
+  reportedPosition: number; // Dernière position signalée par le client (sync-check).
+  lastReportTime: number;   // Quand le client a signalé sa position.
 }
 
 // La structure d'un salon dans la mémoire du serveur.
@@ -143,6 +145,8 @@ export class RoomStateService {
       memberId,
       isReady: false,
       joinedAt: new Date(),
+      reportedPosition: 0,
+      lastReportTime: 0,
     });
   }
 
@@ -265,5 +269,61 @@ export class RoomStateService {
       readyCount: Array.from(state.clients.values()).filter(c => c.isReady).length,
       allReady: this.areAllClientsReady(roomCode),
     };
+  }
+
+  // ── Periodic sync-check helpers ─────────────────────────────────────
+
+  /** Met à jour la position signalée par un client (réponse à sync-check). */
+  updateClientPosition(roomCode: string, clientId: string, position: number) {
+    const code = roomCode.toUpperCase();
+    const state = this.rooms.get(code);
+    if (!state) return;
+    const client = state.clients.get(clientId);
+    if (client) {
+      client.reportedPosition = position;
+      client.lastReportTime = Date.now();
+    }
+  }
+
+  /**
+   * Compare les positions signalées par tous les clients.
+   * Ne prend en compte que les positions reçues dans les 3 dernières secondes.
+   * Retourne le drift max entre le client le plus avancé et le plus en retard.
+   */
+  getPositionDrift(roomCode: string): { drifted: boolean; maxDrift: number; positions: number[] } {
+    const code = roomCode.toUpperCase();
+    const state = this.rooms.get(code);
+    if (!state || state.clients.size < 2) {
+      return { drifted: false, maxDrift: 0, positions: [] };
+    }
+
+    const now = Date.now();
+    const positions: number[] = [];
+    for (const client of state.clients.values()) {
+      if (now - client.lastReportTime < 3000) {
+        positions.push(client.reportedPosition);
+      }
+    }
+
+    if (positions.length < 2) {
+      return { drifted: false, maxDrift: 0, positions };
+    }
+
+    const min = Math.min(...positions);
+    const max = Math.max(...positions);
+    const maxDrift = max - min;
+
+    return { drifted: maxDrift > 2, maxDrift, positions };
+  }
+
+  /** Retourne les codes des rooms en PLAYING avec >1 client connecté. */
+  getPlayingRooms(): string[] {
+    const result: string[] = [];
+    for (const [code, state] of this.rooms.entries()) {
+      if (state.status === RoomGlobalStatus.PLAYING && state.clients.size > 1) {
+        result.push(code);
+      }
+    }
+    return result;
   }
 }

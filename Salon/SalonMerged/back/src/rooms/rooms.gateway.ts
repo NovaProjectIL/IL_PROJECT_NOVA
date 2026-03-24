@@ -27,6 +27,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
   server: Server;
   
   private logger = new Logger('RoomsGateway');
+  private syncCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly roomsService: RoomsService,
@@ -38,6 +39,9 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     this.roomStateService.onLoadingTimeout(async (roomCode: string) => {
       await this.forceResumeFromTimeout(roomCode);
     });
+
+    // Periodic sync-check: every 5s, verify all clients are at the same position
+    this.startPeriodicSyncCheck();
   }
 
   /**
@@ -72,6 +76,59 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       serverTimeRef: new Date(),
       timestamp: new Date(),
       reason: 'loading-timeout',
+    });
+  }
+
+  // ── Periodic position sync-check ──────────────────────────────────
+
+  /**
+   * Every 5 seconds, for each PLAYING room with >1 client,
+   * ask all clients for their actual YouTube player position.
+   * After a 1.5s collection window, compare positions.
+   * If max drift > 2s, enter LOADING and force-seek everyone to the server reference.
+   */
+  private startPeriodicSyncCheck() {
+    this.syncCheckTimer = setInterval(() => {
+      const playingRooms = this.roomStateService.getPlayingRooms();
+      for (const roomCode of playingRooms) {
+        // Skip rooms that just finished a sync cycle
+        const timeSinceAllReady = Date.now() - this.roomStateService.getLastAllReadyTime(roomCode);
+        if (timeSinceAllReady < 5000) continue;
+
+        this.server.to(roomCode).emit('sync-check', { timestamp: Date.now() });
+
+        // Evaluate after 1.5s collection window
+        setTimeout(() => this.evaluateSyncCheck(roomCode), 1500);
+      }
+    }, 5000);
+  }
+
+  private async evaluateSyncCheck(roomCode: string) {
+    const state = this.roomStateService.getOrCreateRoomState(roomCode);
+    // Only act if still PLAYING
+    if (state.status !== RoomGlobalStatus.PLAYING) return;
+    // Double-check cooldown (another sync may have happened during the collection window)
+    const timeSinceAllReady = Date.now() - this.roomStateService.getLastAllReadyTime(roomCode);
+    if (timeSinceAllReady < 5000) return;
+
+    const { drifted, maxDrift, positions } = this.roomStateService.getPositionDrift(roomCode);
+    if (!drifted) return;
+
+    const referencePos = this.roomStateService.getAdjustedTimestamp(roomCode);
+    this.logger.warn(
+      `[SYNC-CHECK] Drift détecté dans ${roomCode} : ${maxDrift.toFixed(1)}s ` +
+      `(positions : [${positions.map(p => p.toFixed(1)).join(', ')}], ` +
+      `référence : ${referencePos.toFixed(1)}s) → re-sync`,
+    );
+
+    // Reuse existing LOADING → all-ready flow
+    this.roomStateService.prepareForSeek(roomCode, referencePos);
+    this.server.to(roomCode).emit('force-seek', {
+      timecode: referencePos,
+      wasPlaying: true,
+      serverTimeRef: new Date(),
+      timestamp: new Date(),
+      reason: 'periodic-sync-check',
     });
   }
 
@@ -462,6 +519,21 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       serverTimeRef: new Date(),
       timestamp: new Date(),
     });
+  }
+
+  @SubscribeMessage('position-report')
+  handlePositionReport(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { codeRoom: string; positionSec: number }
+  ) {
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'position-report');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'position-report')) return;
+
+    const positionSec = data.positionSec;
+    if (typeof positionSec !== 'number' || !Number.isFinite(positionSec) || positionSec < 0) return;
+
+    this.roomStateService.updateClientPosition(roomCode, client.id, positionSec);
   }
 
   @SubscribeMessage('video-change')
