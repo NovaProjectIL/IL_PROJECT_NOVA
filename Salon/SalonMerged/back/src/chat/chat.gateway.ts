@@ -49,11 +49,17 @@ export class ChatGateway {
   @SubscribeMessage('typing')
   handleTyping(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { isTyping: boolean, codeRoom: string }
+    @MessageBody() payload: { isTyping: boolean, codeRoom: string; username?: string; userId?: number }
   ) {
     if (!payload.codeRoom) return;
 
-    const user = client.data.user;
+    let user = client.data.user;
+    if (!user && payload.userId) {
+      user = { id: payload.userId, name: payload.username || 'Utilisateur' };
+    }
+    if (!user && payload.username) {
+      user = { id: 0, name: payload.username };
+    }
     if (!user) return;
 
     client.to(payload.codeRoom.toUpperCase()).emit('userTyping', {

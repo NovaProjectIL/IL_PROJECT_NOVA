@@ -3,6 +3,18 @@ import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+const getFallbackBaseUrl = () => {
+  if (typeof window === 'undefined') return null;
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return 'http://127.0.0.1:3001';
+  }
+  if (host) {
+    return `http://${host}:3001`;
+  }
+  return null;
+};
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -29,6 +41,15 @@ api.interceptors.response.use(
     if (error.code === 'ECONNABORTED' && !originalConfig.__retry) {
       originalConfig.__retry = true;
       return api(originalConfig);
+    }
+    if (error.message === 'Network Error' && !originalConfig.__retryBase) {
+      const fallbackBaseUrl = getFallbackBaseUrl();
+      if (fallbackBaseUrl && fallbackBaseUrl !== api.defaults.baseURL) {
+        originalConfig.__retryBase = true;
+        originalConfig.baseURL = fallbackBaseUrl;
+        api.defaults.baseURL = fallbackBaseUrl;
+        return api(originalConfig);
+      }
     }
     const shouldDebug = process.env.NEXT_PUBLIC_DEBUG_API === 'true';
     if (shouldDebug) {
@@ -97,6 +118,9 @@ export const roomsApi = {
     api.get('/rooms/youtube-info', { params: { videoId } }),
 
   healthCheck: () => api.get('/rooms/health'),
+
+  updateMemberRole: (data: { codeRoom: string; requesterId: number; targetMemberId: number; role: 'ANALYST' | 'OBSERVER' }) =>
+    api.post('/rooms/role', data),
 };
 
 // ==================== PLAYLIST API ====================
@@ -159,6 +183,7 @@ export const marqueursApi = {
     markerId: number,
     data: {
       version: number;
+      memberId: number;
       timeSec?: number;
       label?: string;
       content?: string;
@@ -166,8 +191,11 @@ export const marqueursApi = {
     },
   ) => api.patch(`/rooms/${roomId}/markers/${markerId}`, data),
 
-  supprimerMarqueur: (roomId: number, markerId: number) =>
-    api.delete(`/rooms/${roomId}/markers/${markerId}`),
+  supprimerMarqueur: (roomId: number, markerId: number, memberId: number) =>
+    api.delete(`/rooms/${roomId}/markers/${markerId}`, { params: { memberId } }),
+
+  exporterCsv: (roomId: number) =>
+    api.get(`/rooms/${roomId}/markers/export`, { responseType: 'blob' }),
 };
 
 export default api;

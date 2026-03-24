@@ -8,7 +8,7 @@ import ChatWidget from '@/app/components/ChatWidget';
 import { useMarkers } from '@/app/hooks/useMarkers';
 import styles from './RoomPage.module.css';
 import VideoPlayer from '@/app/components/VideoPlayer';
-import { roomsApi, playlistApi } from '@/app/lib/api';
+import { roomsApi, playlistApi, marqueursApi } from '@/app/lib/api';
 
 const log = {
   room: (msg: string, data?: any) => console.log(`[ROOM] ${msg}`, data ?? ''),
@@ -38,16 +38,27 @@ export default function RoomPage() {
   const [loading, setLoading] = useState(true);
   const [roomInternalId, setRoomInternalId] = useState<number | null>(null);
   const [showQuitModal, setShowQuitModal] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const socketRef = useRef<any>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [indexActuel, setIndexActuel] = useState<number>(-1);
-  const { marqueurs, setMarqueurs, creer: creerMarqueur } = useMarkers(roomInternalId, socketRef.current, code);
+  const { marqueurs, setMarqueurs, creer: creerMarqueur, modifier: modifierMarqueur, supprimer: supprimerMarqueur } =
+    useMarkers(roomInternalId, socketRef.current, code, currentVideo?.youtubeId);
+  const currentMember = members.find((m) => Number(m.id) === Number(memberId));
+  const canEditMarkers = currentMember?.role === "ANALYST" || currentMember?.role === "CREATOR";
+  const isCreator = currentMember?.role === "CREATOR";
 
   const stateRef = useRef({ position, isPlaying });
+  const currentVideoIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = { position, isPlaying };
   }, [position, isPlaying]);
+
+  useEffect(() => {
+    currentVideoIdRef.current = currentVideo?.youtubeId ?? null;
+  }, [currentVideo?.youtubeId]);
 
   useEffect(() => {
     if (marqueurs.length === 0) {
@@ -162,13 +173,17 @@ export default function RoomPage() {
     socket.on('nouveau_marqueur', (marqueurBrut: any) => {
       const m = {
         id: String(marqueurBrut.id),
+        version: typeof marqueurBrut.version === 'number' ? marqueurBrut.version : undefined,
+        videoId: marqueurBrut.video?.youtubeId ?? marqueurBrut.videoId ?? marqueurBrut.video?.id ?? undefined,
         timecode: Number(marqueurBrut.timeSec ?? marqueurBrut.timecode ?? 0),
         label: marqueurBrut.label ?? 'Marqueur',
+        content: marqueurBrut.content ?? null,
         categorie: marqueurBrut.category ?? marqueurBrut.categorie ?? 'COMMENT',
         roomId: String(marqueurBrut.room?.id ?? roomInternalId ?? ''),
         auteurId: String(marqueurBrut.createdBy?.id ?? marqueurBrut.auteurId ?? ''),
         auteurNom: marqueurBrut.createdBy?.name ?? marqueurBrut.auteurNom ?? 'Utilisateur',
       };
+      if (currentVideoIdRef.current && m.videoId && m.videoId !== currentVideoIdRef.current) return;
       setMarqueurs((prev) => {
         if (prev.find(x => x.id === m.id)) return prev;
         return [...prev, m];
@@ -203,6 +218,21 @@ export default function RoomPage() {
       loadRoomData();
     });
 
+    socket.on('user-left', (data: any) => {
+      log.socket('User left reçu', data);
+      const leftId = Number(data?.memberId);
+      if (Number.isFinite(leftId)) {
+        setMembers((prev) => prev.filter((m) => Number(m.id) !== leftId));
+      } else {
+        loadRoomData();
+      }
+    });
+
+    socket.on('room-closed', () => {
+      showToast('Le principal a quitté. Salle fermée.');
+      router.push('/');
+    });
+
     // A remote client started buffering: server orders everyone to pause
     socket.on('force-pause', (data: any) => {
       log.socket('Force-pause reçu', data);
@@ -218,9 +248,11 @@ export default function RoomPage() {
     return () => {
       socket.off('nouveau_marqueur');
       socket.off('force-pause');
+      socket.off('user-left');
+      socket.off('room-closed');
       socket.disconnect();
     };
-  }, [code, memberId, roomInternalId, calculateAdjustedPosition, loadRoomData, setMarqueurs]);
+  }, [code, memberId, roomInternalId, calculateAdjustedPosition, loadRoomData, router, setMarqueurs]);
 
   const handlePlay = () => {
     if (!code) return;
@@ -265,6 +297,55 @@ export default function RoomPage() {
     router.push('/');
   };
 
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 2000);
+  };
+
+  const formatRole = (role?: string) => {
+    if (!role) return 'Observateur';
+    if (role === 'CREATOR') return 'Principal';
+    if (role === 'ANALYST') return 'Analyste';
+    return 'Observateur';
+  };
+
+  const grantMarkerRights = async (targetMemberId: number) => {
+    if (!code || !memberId) return;
+    try {
+      await roomsApi.updateMemberRole({
+        codeRoom: code,
+        requesterId: memberId,
+        targetMemberId,
+        role: 'ANALYST',
+      });
+      await loadRoomData();
+      showToast('Droits marqueur accordÃ©s');
+    } catch (err: any) {
+      log.error('Erreur update role', err);
+      showToast('Impossible de modifier le rÃ´le');
+    }
+  };
+  const revokeMarkerRights = async (targetMemberId: number) => {
+    if (!code || !memberId) return;
+    try {
+      await roomsApi.updateMemberRole({
+        codeRoom: code,
+        requesterId: memberId,
+        targetMemberId,
+        role: 'OBSERVER',
+      });
+      await loadRoomData();
+      showToast('Droits marqueur retirés');
+    } catch (err: any) {
+      log.error('Erreur update role', err);
+      showToast('Impossible de modifier le rôle');
+    }
+  };
+
   if (loading) return <div className={styles.loading}>Chargement...</div>;
 
   return (
@@ -281,13 +362,39 @@ export default function RoomPage() {
         <button onClick={() => handleSearch(true)} className={styles.searchButton}>Jouer</button>
         <button onClick={() => handleSearch(false)} className={`${styles.searchButton} ${styles.addButton}`}>+ Playlist</button>
       </div>
+      {toastMessage && (
+        <div className={styles.toastNotice} role="status" aria-live="polite">
+          {toastMessage}
+        </div>
+      )}
 
       <div className={styles.membersSection}>
         <h3>Membres ({members.length}):</h3>
         <div className={styles.membersList}>
           {members.map(member => (
             <span key={member.id} className={`${styles.memberTag} ${member.id === memberId ? styles.currentMember : ''}`}>
-              {member.name} {member.id === memberId ? '(Vous)' : ''}
+              <span className={styles.memberName}>
+                {member.name} {member.id === memberId ? '(Vous)' : ''}
+              </span>
+              <span className={styles.roleBadge}>{formatRole(member.role)}</span>
+              {isCreator && member.id !== memberId && member.role !== 'ANALYST' && (
+                <button
+                  type="button"
+                  className={styles.roleButton}
+                  onClick={() => grantMarkerRights(member.id)}
+                >
+                  Donner droits marqueur
+                </button>
+              )}
+              {isCreator && member.id !== memberId && member.role === 'ANALYST' && (
+                <button
+                  type="button"
+                  className={styles.roleButton}
+                  onClick={() => revokeMarkerRights(member.id)}
+                >
+                  Retirer droits marqueur
+                </button>
+              )}
             </span>
           ))}
         </div>
@@ -305,14 +412,36 @@ export default function RoomPage() {
               syncSocket={socketRef.current}
               marqueurs={marqueurs}
               indexActuel={indexActuel}
+              canEditMarkers={canEditMarkers}
+              onExportCsv={handleExportCsv}
               onProgress={(time) => setPosition(time)}
               onPlay={handlePlay}
               onPause={handlePause}
               onSeek={handleSeek}
               onDuration={() => {}}
-              onNouveauMarqueur={async (timecode) => {
+              onNouveauMarqueur={canEditMarkers ? async (timecode, categorie) => {
                 if (!roomInternalId || !currentVideo?.youtubeId) return;
-                await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, socketRef.current, code);
+                await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, categorie, socketRef.current, code);
+              } : undefined}
+              onModifierMarqueur={async (marqueur, data) => {
+                if (!roomInternalId) return;
+                if (typeof marqueur.version !== 'number') {
+                  log.error('Version du marqueur manquante, modification annulée', marqueur);
+                  return;
+                }
+                const version = marqueur.version;
+                await modifierMarqueur(roomInternalId, Number(marqueur.id), {
+                  version,
+                  memberId,
+                  ...(data.label !== undefined ? { label: data.label } : {}),
+                  ...(data.timecode !== undefined ? { timeSec: data.timecode } : {}),
+                  ...(data.categorie !== undefined ? { category: data.categorie } : {}),
+                  ...(data.content !== undefined ? { content: data.content } : {}),
+                }, socketRef.current, code);
+              }}
+              onSupprimerMarqueur={async (marqueur) => {
+                if (!roomInternalId) return;
+                await supprimerMarqueur(roomInternalId, Number(marqueur.id), memberId);
               }}
             />
           </div>
@@ -417,61 +546,25 @@ export default function RoomPage() {
       <ChatWidget socket={socketRef.current} roomCode={code} pseudo={pseudo} userId={memberId} getCurrentTime={() => position} onSeek={handleSeek} />
 
       {showQuitModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999,
-        }}>
-          <div style={{
-            background: 'rgba(88, 12, 31, 0.95)',
-            border: '1px solid rgba(197, 34, 51, 0.4)',
-            borderRadius: '20px',
-            padding: '40px',
-            maxWidth: '420px',
-            width: '90%',
-            textAlign: 'center',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-          }}>
-            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🚪</div>
-            <h2 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 800, marginBottom: '12px' }}>
-              Quitter le salon ?
-            </h2>
-            <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '32px', lineHeight: '1.6' }}>
+        <div className={styles.quitOverlay}>
+          <div className={styles.quitModal}>
+            <div className={styles.quitIcon}>EXIT</div>
+            <h2 className={styles.quitTitle}>Quitter le salon ?</h2>
+            <p className={styles.quitText}>
               Tu vas quitter la session en cours. Les autres participants continueront sans toi.
             </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <div className={styles.quitActions}>
               <button
                 onClick={() => setShowQuitModal(false)}
-                style={{
-                  padding: '12px 28px',
-                  background: 'rgba(255,255,255,0.1)',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: '12px',
-                  color: 'white',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  transition: 'all 0.2s',
-                }}
+                className={`${styles.quitBtn} ${styles.quitBtnGhost}`}
+                type="button"
               >
                 Rester
               </button>
               <button
                 onClick={confirmQuit}
-                style={{
-                  padding: '12px 28px',
-                  background: 'linear-gradient(135deg, #C52233, #74121D)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  color: 'white',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  boxShadow: '0 4px 12px rgba(197,34,51,0.5)',
-                  transition: 'all 0.2s',
-                }}
+                className={`${styles.quitBtn} ${styles.quitBtnDanger}`}
+                type="button"
               >
                 Quitter
               </button>
@@ -482,8 +575,28 @@ export default function RoomPage() {
     </div>
   );
 
+  async function handleExportCsv() {
+    if (!roomInternalId) return;
+    try {
+      const res = await marqueursApi.exporterCsv(roomInternalId);
+      const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `room-${code}-marqueurs.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      log.error('Erreur export CSV', err);
+    }
+  }
   async function handleSearch(playDirect = true) {
-    if (!searchUrl.trim()) return;
+    if (!searchUrl.trim()) {
+      showToast("Veuillez ajouter un lien d'abord");
+      return;
+    }
     let videoId = '';
     if (searchUrl.includes('v=')) videoId = searchUrl.split('v=')[1].split('&')[0];
     else if (searchUrl.includes('youtu.be/')) videoId = searchUrl.split('youtu.be/')[1].split('?')[0];
@@ -505,3 +618,10 @@ export default function RoomPage() {
     }
   }
 }
+
+
+
+
+
+
+

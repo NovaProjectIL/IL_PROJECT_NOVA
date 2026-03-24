@@ -1,6 +1,7 @@
 import { Body, Controller, Post, Get, Query } from '@nestjs/common';
 import axios from 'axios'; // IMPORT AJOUTÉ
 import { RoomsService } from './rooms.service';
+import { RoomsGateway } from './rooms.gateway';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { CreateInviteDto } from './dto/create-invite.dto';
@@ -10,11 +11,15 @@ import { EndRoomDto } from './dto/end-room.dto';
 import { PlayDirectDto } from './dto/play-direct.dto';
 import { VideoEndedDto } from './dto/video-ended.dto';
 import { GetPlaybackDto } from './dto/get-playback.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
 import * as QRCode from 'qrcode';
 
 @Controller('rooms')
 export class RoomsController {
-  constructor(private readonly roomsService: RoomsService) {}
+  constructor(
+    private readonly roomsService: RoomsService,
+    private readonly roomsGateway: RoomsGateway,
+  ) {}
 
   // Méthode pour parser la durée ISO 8601 de YouTube
   private parseISODuration(duration: string): number {
@@ -177,6 +182,17 @@ export class RoomsController {
     };
   }
 
+  @Post('role')
+  async updateRole(@Body() body: UpdateRoleDto) {
+    const { codeRoom, requesterId, targetMemberId, role } = body;
+    return this.roomsService.updateMemberRole(
+      codeRoom.toUpperCase(),
+      requesterId,
+      targetMemberId,
+      role,
+    );
+  }
+
   @Get('state')
   async stateRoom(@Query() dto: CreateStateDto) {
     const codeRoom = dto.codeRoom;
@@ -280,10 +296,23 @@ export class RoomsController {
   @Post("leave")
   async leaveRoom(@Body() body: DeleteMemberDto) {
     const { memberId, codeRoom } = body;
-    
-    // Cette méthode supprime PHYSIQUEMENT l'utilisateur
-    const { roomDeleted, roomId, removedMemberId, removedMemberName } = 
-      await this.roomsService.removeUserFromRoom(memberId, codeRoom.toUpperCase());
+    const roomCode = codeRoom.toUpperCase();
+
+    const { roomDeleted, roomId, removedMemberId, removedMemberName } =
+      await this.roomsService.removeUserFromRoom(memberId, roomCode);
+
+    if (roomDeleted) {
+      this.roomsGateway.server?.to(roomCode).emit('room-closed', {
+        roomId,
+        reason: 'creator-left',
+        timestamp: new Date(),
+      });
+    } else {
+      this.roomsGateway.server?.to(roomCode).emit('user-left', {
+        memberId: removedMemberId,
+        timestamp: new Date(),
+      });
+    }
 
     return {
       roomDeleted,
@@ -700,3 +729,4 @@ export class RoomsController {
     };
   }
 }
+

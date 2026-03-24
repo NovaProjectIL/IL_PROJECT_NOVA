@@ -85,7 +85,11 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
 
       setMessages((prev) => [...prev, normalizedMsg]);
       setTypingUsers((prev) => prev.filter((name) => name !== msg.username));
-      if (onMessageReceived) onMessageReceived();
+      const isMe =
+        normalizedMsg.userId
+          ? normalizedMsg.userId === currentUserId.current
+          : normalizedMsg.username === pseudo;
+      if (onMessageReceived && !isMe) onMessageReceived();
       scrollToBottom();
     };
 
@@ -146,9 +150,9 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
         timecode: timecode, // ← NOUVEAU
     });
 
-    socket?.emit("typing", { codeRoom: roomCode, isTyping: false });
-    setText("");
-    setPickerMode('none');
+        socket?.emit("typing", { codeRoom: roomCode, isTyping: false, username: pseudo, userId });
+        setText("");
+        setPickerMode('none');
   };
 
   const sendGif = (gifUrl: string) => {
@@ -167,10 +171,10 @@ function Chat({ onClose, pseudo: initialPseudo, userId, onMessageReceived, socke
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setText(e.target.value);
     if (roomCode) {
-        socket?.emit("typing", { codeRoom: roomCode, isTyping: true });
+        socket?.emit("typing", { codeRoom: roomCode, isTyping: true, username: pseudo, userId });
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = setTimeout(() => {
-          socket?.emit("typing", { codeRoom: roomCode, isTyping: false });
+          socket?.emit("typing", { codeRoom: roomCode, isTyping: false, username: pseudo, userId });
         }, 2000);
     }
   };

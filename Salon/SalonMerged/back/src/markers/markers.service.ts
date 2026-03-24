@@ -22,6 +22,36 @@ export class MarkersService {
     });
   }
 
+  private formatTime(seconds: number): string {
+    const totalSeconds = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  private csvEscape(value: string): string {
+    const needsQuotes = /[",\n]/.test(value);
+    const safe = value.replace(/"/g, '""');
+    return needsQuotes ? `"${safe}"` : safe;
+  }
+
+  async exportCsv(roomId: number): Promise<string> {
+    const markers = await this.findByRoom(roomId);
+    const header = ['timestamp', 'auteur', 'categorie', 'annotation'];
+    const rows = markers.map((m) => {
+      const annotation = m.content ?? m.label ?? '';
+      return [
+        this.csvEscape(this.formatTime(m.timeSec ?? 0)),
+        this.csvEscape(m.createdBy?.name ?? 'Utilisateur'),
+        this.csvEscape(String(m.category ?? 'COMMENT')),
+        this.csvEscape(annotation),
+      ].join(',');
+    });
+    return [header.join(','), ...rows].join('\n');
+  }
+
   // Créer un marqueur
   async create(roomId: number, dto: CreateMarkerDto): Promise<Marker> {
     const marker = this.markersRepository.create({

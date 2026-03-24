@@ -9,10 +9,16 @@
 // ---------------------------------------------------------
 export type Marqueur = {
   id: string;
+  // Version pour la gestion des conflits (optimistic locking)
+  version?: number;
+  // Video associee (YouTube ID)
+  videoId?: string;
   // Timecode en secondes (ex: 125.5)
   timecode: number;
   // Texte de l annotation
   label: string;
+  // Commentaire long optionnel
+  content?: string | null;
   // Categorie du marqueur
   // TODO WAFA : ajuster les categories selon ce que tu definis en BDD
   categorie: "ERROR" | "COMMENT" | "HIGHLIGHT" | "QUESTION" | string;

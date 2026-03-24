@@ -22,12 +22,28 @@ type VideoTimelineProps = {
   onClicMarqueur: (marqueur: Marqueur, index: number) => void;
   // Callback appele quand l utilisateur clique sur "Poser un marqueur"
   // TODO WAFA : ce callback appellera ton API POST /markers
-  onPoserMarqueur: () => void;
+  onPoserMarqueur: (categorie: Marqueur["categorie"]) => void;
+  onModifierMarqueur?: (marqueur: Marqueur, data: { label?: string; timecode?: number; categorie?: Marqueur["categorie"]; content?: string | null }) => Promise<void>;
+  onSupprimerMarqueur?: (marqueur: Marqueur) => Promise<void>;
+  canEditMarkers?: boolean;
+  onExportCsv?: () => void;
 };
 
 // Seuil en secondes pour le clustering visuel
 // Deux marqueurs a moins de 10s l un de l autre sont groupes
 const SEUIL_CLUSTERING = 10;
+
+const CATEGORIES: { value: Marqueur["categorie"]; label: string; color: string }[] = [
+  { value: "COMMENT", label: "COMMENT", color: "#38bdf8" },
+  { value: "ERROR", label: "ERROR", color: "#ef4444" },
+  { value: "HIGHLIGHT", label: "HIGHLIGHT", color: "#f59e0b" },
+  { value: "QUESTION", label: "QUESTION", color: "#8b5cf6" },
+];
+
+const getCategoryMeta = (categorie: Marqueur["categorie"]) => {
+  const found = CATEGORIES.find((c) => c.value === categorie);
+  return found ?? CATEGORIES[0];
+};
 
 // Type pour un groupe de marqueurs
 type Groupe = {
@@ -66,10 +82,21 @@ export default function VideoTimeline({
   indexActuel,
   onClicMarqueur,
   onPoserMarqueur,
+  onModifierMarqueur,
+  onSupprimerMarqueur,
+  canEditMarkers = true,
+  onExportCsv,
 }: VideoTimelineProps) {
 
   // Groupe de marqueurs dont la liste est depliee
   const [groupeDeplie, setGroupeDeplie] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
+  const [draftTime, setDraftTime] = useState("");
+  const [draftComment, setDraftComment] = useState("");
+  const [draftCategory, setDraftCategory] = useState<Marqueur["categorie"]>("COMMENT");
+  const [selectedCategory, setSelectedCategory] = useState<Marqueur["categorie"]>("COMMENT");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Calcule la position en pourcentage sur la timeline
   // Formule validee en Etape 2 des tests
@@ -85,8 +112,64 @@ export default function VideoTimeline({
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
+  const parseTimeInput = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parts = trimmed.split(":");
+    if (parts.length === 1) {
+      const s = Number(parts[0]);
+      if (Number.isNaN(s)) return null;
+      return Math.max(0, s);
+    }
+    if (parts.length === 2) {
+      const m = Number(parts[0]);
+      const s = Number(parts[1]);
+      if (Number.isNaN(m) || Number.isNaN(s)) return null;
+      return Math.max(0, m * 60 + s);
+    }
+    return null;
+  };
+
+  const startEdit = (m: Marqueur) => {
+    setEditingId(m.id);
+    setDraftLabel(m.label);
+    setDraftTime(formatTime(m.timecode));
+    setDraftComment(m.content ?? "");
+    setDraftCategory(m.categorie ?? "COMMENT");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setDraftLabel("");
+    setDraftTime("");
+    setDraftComment("");
+    setDraftCategory("COMMENT");
+  };
+
+  const handleSave = async (m: Marqueur) => {
+    if (!onModifierMarqueur) return;
+    const nextLabel = draftLabel.trim() || m.label;
+    const parsedTime = parseTimeInput(draftTime);
+    const nextTime = parsedTime === null ? m.timecode : parsedTime;
+    const nextContent = draftComment.trim();
+    setIsSaving(true);
+    try {
+      await onModifierMarqueur(m, {
+        label: nextLabel,
+        timecode: nextTime,
+        categorie: draftCategory,
+        content: nextContent ? nextContent : null,
+      });
+      cancelEdit();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const groupes = grouperMarqueurs(marqueurs);
   const marqueursTriees = [...marqueurs].sort((a, b) => a.timecode - b.timecode);
+  const activeMarkerId = marqueursTriees[indexActuel]?.id ?? null;
+  const labelFor = (m: Marqueur, idx: number) => m.label?.trim() || `Marker ${idx + 1}`;
 
   return (
     <div>
@@ -100,8 +183,8 @@ export default function VideoTimeline({
       {/* Marker Navigation Controls - Modern Purple Design */}
       <div className={styles.markerControls}>
         <button
-          onClick={onPoserMarqueur}
-          disabled={duree === 0}
+          onClick={() => onPoserMarqueur(selectedCategory)}
+          disabled={duree === 0 || !canEditMarkers}
           className={styles.markerButton}
           title="Poser un marqueur ici"
         >
@@ -109,6 +192,25 @@ export default function VideoTimeline({
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
           </svg>
         </button>
+
+        <div className={styles.markerCategorySelectWrap}>
+          <span
+            className={styles.markerCategoryDot}
+            style={{ ["--cat-color" as any]: getCategoryMeta(selectedCategory).color }}
+          />
+          <select
+            className={styles.markerCategorySelect}
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value as Marqueur["categorie"])}
+            disabled={!canEditMarkers || duree === 0}
+          >
+            {CATEGORIES.map((cat) => (
+              <option key={cat.value} value={cat.value} style={{ color: cat.color }}>
+                {cat.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <button
           onClick={() => {
@@ -142,129 +244,209 @@ export default function VideoTimeline({
       </div>
 
 
-      {/* -------------------------------------------------- */}
-      {/* BARRE DE TIMELINE avec epingles et clustering */}
-      {/* -------------------------------------------------- */}
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "8px",
-          background: "#ccc",
-          marginTop: "30px",
-          marginBottom: "40px",
-        }}
-      >
-        {groupes.map((groupe, index) => {
-          const position = calculerPosition(groupe.timecodeRepresentant);
-          const estGroupe = groupe.marqueurs.length > 1;
-          const estDeplie = groupeDeplie === index;
+      <div className={styles.timelineWrap}>
+        <div className={styles.timelineBar}>
+          <div className={styles.timelineShine} />
+          {groupes.map((groupe, index) => {
+            const position = calculerPosition(groupe.timecodeRepresentant);
+            const estGroupe = groupe.marqueurs.length > 1;
+            const estDeplie = groupeDeplie === index;
+            const isActive = !!activeMarkerId && groupe.marqueurs.some((m) => m.id === activeMarkerId);
+            const singleMeta = !estGroupe ? getCategoryMeta(groupe.marqueurs[0].categorie ?? "COMMENT") : null;
 
-          return (
-            <div key={index}>
-
-              {/* Epingle simple ou pastille de groupe */}
-              <div
-                onClick={() => {
-                  if (estGroupe) {
-                    // Groupe : on deplie ou replie la liste
-                    setGroupeDeplie(estDeplie ? null : index);
-                  } else {
-                    // Epingle simple : on navigue directement
-                    const idx = marqueursTriees.findIndex(
-                      (m) => m.id === groupe.marqueurs[0].id
-                    );
-                    onClicMarqueur(groupe.marqueurs[0], idx);
-                  }
-                }}
-                title={
-                  estGroupe
-                    ? `${groupe.marqueurs.length} marqueurs groupes`
-                    : groupe.marqueurs[0].label
-                }
-                style={{
-                  position: "absolute",
-                  left: `${position}%`,
-                  // On centre l epingle sur sa position
-                  transform: "translateX(-50%)",
-                  top: "-10px",
-                  width: estGroupe ? "28px" : "20px",
-                  height: estGroupe ? "28px" : "20px",
-                  borderRadius: "50%",
-                  // Orange si groupe, bleu si epingle isolee
-                  background: estGroupe ? "orange" : "blue",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "white",
-                  fontSize: "11px",
-                  fontWeight: "bold",
-                }}
-              >
-                {/* Nombre de marqueurs affiché seulement si groupe */}
-                {estGroupe ? groupe.marqueurs.length : ""}
-              </div>
-
-              {/* Liste depliee quand on clique sur une pastille de groupe */}
-              {estGroupe && estDeplie && (
+            return (
+              <div key={index}>
                 <div
-                  style={{
-                    position: "absolute",
-                    left: `${position}%`,
-                    top: "20px",
-                    background: "white",
-                    border: "1px solid black",
-                    padding: "4px",
-                    zIndex: 10,
-                    minWidth: "180px",
-                    color: "black",
+                  onClick={() => {
+                    if (estGroupe) {
+                      setGroupeDeplie(estDeplie ? null : index);
+                    } else {
+                      const idx = marqueursTriees.findIndex(
+                        (m) => m.id === groupe.marqueurs[0].id
+                      );
+                      onClicMarqueur(groupe.marqueurs[0], idx);
+                    }
                   }}
+                  title={
+                    estGroupe
+                      ? `${groupe.marqueurs.length} marqueurs groupes`
+                      : groupe.marqueurs[0].label
+                  }
+                  style={{
+                    left: `${position}%`,
+                    ...(singleMeta ? { ["--marker-color" as any]: singleMeta.color } : {}),
+                  }}
+                  className={`${styles.timelineMarker} ${estGroupe ? styles.timelineMarkerCluster : styles.timelineMarkerSingle} ${isActive ? styles.timelineMarkerActive : ""}`}
                 >
-                  {groupe.marqueurs.map((m) => {
-                    const idx = marqueursTriees.findIndex(
-                      (mm) => mm.id === m.id
-                    );
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onClicMarqueur(m, idx);
-                          setGroupeDeplie(null);
-                        }}
-                        style={{ cursor: "pointer", padding: "2px" }}
-                      >
-                        Marker {idx + 1} — {formatTime(m.timecode)}
-                      </div>
-                    );
-                  })}
+                  <span className={styles.markerTooltip}>
+                    {estGroupe ? `${groupe.marqueurs.length} marqueurs` : formatTime(groupe.marqueurs[0].timecode)}
+                  </span>
+                  {estGroupe ? (
+                    <span className={styles.timelineMarkerCount}>{groupe.marqueurs.length}</span>
+                  ) : (
+                    <span className={styles.timelineMarkerDot} />
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+                {estGroupe && estDeplie && (
+                  <div
+                    className={styles.clusterPopover}
+                    style={{ left: `${position}%` }}
+                  >
+                    {groupe.marqueurs.map((m) => {
+                      const idx = marqueursTriees.findIndex(
+                        (mm) => mm.id === m.id
+                      );
+                      const label = labelFor(m, idx);
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onClicMarqueur(m, idx);
+                            setGroupeDeplie(null);
+                          }}
+                          className={styles.clusterItem}
+                        >
+                          {label} — {formatTime(m.timecode)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* -------------------------------------------------- */}
       {/* LISTE COMPLETE des marqueurs avec marqueur actuel en gras */}
       {/* -------------------------------------------------- */}
       <div className={styles.markerListContainer}>
-        <div className={styles.markerListHeader}>Marqueurs</div>
+        <div className={styles.markerListHeader}>
+          <span>Marqueurs</span>
+          {onExportCsv && (
+            <button className={styles.markerExportBtn} onClick={onExportCsv} type="button">
+              Exporter CSV
+            </button>
+          )}
+        </div>
         {marqueursTriees.length === 0 && (
           <div className={styles.markerEmpty}>Aucun marqueur pour linstant</div>
         )}
-        {marqueursTriees.map((m, index) => (
-          <button
-            key={m.id}
-            onClick={() => onClicMarqueur(m, index)}
-            className={`${styles.markerRow} ${index === indexActuel ? styles.markerRowActive : ""}`}
-            type="button"
-          >
-            <span className={styles.markerName}>Marker {index + 1}</span>
-            <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
-          </button>
-        ))}
+        {marqueursTriees.map((m, index) => {
+          const isEditing = editingId === m.id;
+          const label = labelFor(m, index);
+          const meta = getCategoryMeta(m.categorie ?? "COMMENT");
+          return (
+            <div
+              key={m.id}
+              onClick={() => {
+                if (!isEditing) onClicMarqueur(m, index);
+              }}
+              className={`${styles.markerRow} ${index === indexActuel ? styles.markerRowActive : ""}`}
+              role="button"
+              tabIndex={0}
+            >
+              {isEditing ? (
+                <div className={styles.markerEditForm} onClick={(e) => e.stopPropagation()}>
+                  <input
+                    className={styles.markerInput}
+                    value={draftLabel}
+                    onChange={(e) => setDraftLabel(e.target.value)}
+                    placeholder="Titre du marqueur"
+                    type="text"
+                  />
+                  <input
+                    className={styles.markerInputTime}
+                    value={draftTime}
+                    onChange={(e) => setDraftTime(e.target.value)}
+                    placeholder="MM:SS"
+                    type="text"
+                  />
+                  <div className={styles.markerCategorySelectWrap}>
+                    <span
+                      className={styles.markerCategoryDot}
+                      style={{ ["--cat-color" as any]: getCategoryMeta(draftCategory).color }}
+                    />
+                    <select
+                      className={styles.markerCategorySelect}
+                      value={draftCategory}
+                      onChange={(e) => setDraftCategory(e.target.value as Marqueur["categorie"])}
+                    >
+                      {CATEGORIES.map((cat) => (
+                        <option key={cat.value} value={cat.value} style={{ color: cat.color }}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <textarea
+                    className={styles.markerCommentInput}
+                    value={draftComment}
+                    onChange={(e) => setDraftComment(e.target.value)}
+                    placeholder="Commentaire (optionnel)"
+                    rows={3}
+                  />
+                  <div className={styles.markerActions}>
+                    <button
+                      className={styles.markerActionPrimary}
+                      onClick={() => handleSave(m)}
+                      disabled={isSaving}
+                      type="button"
+                    >
+                      Enregistrer
+                    </button>
+                    <button
+                      className={styles.markerActionGhost}
+                      onClick={cancelEdit}
+                      type="button"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className={styles.markerRowContent}>
+                    <span className={styles.markerCategoryBadge} style={{ ["--cat-color" as any]: meta.color }}>
+                      {meta.label}
+                    </span>
+                    <span className={styles.markerName}>{label}</span>
+                    <span className={styles.markerTime}>{formatTime(m.timecode)}</span>
+                  </div>
+                  {m.content && (
+                    <div className={styles.markerComment}>{m.content}</div>
+                  )}
+                  {canEditMarkers && (
+                    <div className={styles.markerActions} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className={styles.markerActionButton}
+                        onClick={() => startEdit(m)}
+                        type="button"
+                        title="Modifier"
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        className={styles.markerActionDelete}
+                        onClick={() => {
+                          if (onSupprimerMarqueur && window.confirm("Supprimer ce marqueur ?")) {
+                            onSupprimerMarqueur(m);
+                          }
+                        }}
+                        type="button"
+                        title="Supprimer"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

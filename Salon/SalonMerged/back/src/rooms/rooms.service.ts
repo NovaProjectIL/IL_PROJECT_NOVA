@@ -181,6 +181,50 @@ export class RoomsService {
     };
   }
 
+  async updateMemberRole(
+    codeRoom: string,
+    requesterId: number,
+    targetMemberId: number,
+    role: 'ANALYST' | 'OBSERVER',
+  ) {
+    this.logger.log(`Mise à jour du rôle ${role} pour ${targetMemberId} dans ${codeRoom}`);
+
+    const room = await this.roomsRepo.findOne({
+      where: { code: codeRoom },
+      relations: ['users'],
+    });
+
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    const requester = room.users.find((m) => m.id === requesterId);
+    if (!requester) {
+      throw new NotFoundException('Requester not found in this room');
+    }
+
+    if (requester.role !== 'CREATOR') {
+      throw new ForbiddenException('Only the room creator can update roles');
+    }
+
+    const target = room.users.find((m) => m.id === targetMemberId);
+    if (!target) {
+      throw new NotFoundException('Target member not found in this room');
+    }
+
+    target.role = role;
+    await this.usersRepo.save(target);
+
+    this.logger.log(`Rôle mis à jour: ${target.name} -> ${role}`);
+
+    return {
+      roomCode: room.code,
+      memberId: target.id,
+      memberName: target.name,
+      role: target.role,
+    };
+  }
+
   async joinRoom(memberDisplayName: string | undefined, codeRoom: string) {
     this.logger.log(`Tentative de rejoindre la salle: ${codeRoom}`);
     
@@ -207,7 +251,7 @@ export class RoomsService {
     const user = this.usersRepo.create({
       room,
       name: finalName,
-      role: 'MEMBER',
+      role: 'OBSERVER',
     });
     await this.usersRepo.save(user);
 
@@ -293,6 +337,17 @@ export class RoomsService {
 
     if (!user) {
       throw new NotFoundException('Member not found in this room');
+    }
+
+    if (user.role === 'CREATOR') {
+      await this.roomsRepo.remove(room);
+      this.logger.log(`Salle ${codeRoom} supprimÃ©e car le CREATOR a quittÃ©.`);
+      return {
+        roomDeleted: true,
+        roomId: room.id,
+        removedMemberId: user.id,
+        removedMemberName: user.name,
+      };
     }
 
     await this.usersRepo.remove(user);

@@ -21,6 +21,9 @@ export class UpdateMarkerDto {
   @IsEnum(MarkerCategory)
   category?: MarkerCategory;
 
+  @IsNumber()
+  memberId: number;
+  
   
   @IsNumber()
   version: number;
