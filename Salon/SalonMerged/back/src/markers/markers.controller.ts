@@ -1,5 +1,5 @@
 // markers.controller.ts
-import { Controller, Get, Post, Patch, Delete, Param, Body, ParseIntPipe, UseGuards, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, ParseIntPipe, UseGuards, Res, Query, DefaultValuePipe } from '@nestjs/common';
 import type { Response } from 'express';
 import { MarkersService } from './markers.service';
 import { CreateMarkerDto } from './dto/create-marker.dto';
@@ -11,9 +11,13 @@ export class MarkersController {
   constructor(private readonly markersService: MarkersService) {}
 
   // GET
-  @Get()
-  findAll(@Param('roomId', ParseIntPipe) roomId: number) {
-    return this.markersService.findByRoom(roomId);
+ @Get()
+  findAll(
+    @Param('roomId', ParseIntPipe) roomId: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  ) {
+    return this.markersService.findByRoom(roomId, page, limit);
   }
 
   @Get('export')

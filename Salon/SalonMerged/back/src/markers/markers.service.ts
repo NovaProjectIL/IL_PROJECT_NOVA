@@ -14,12 +14,16 @@ export class MarkersService {
   ) {}
 
   // Récupérer tous les marqueurs d'une room
-  async findByRoom(roomId: number): Promise<Marker[]> {
-    return this.markersRepository.find({
+  async findByRoom(roomId: number, page: number = 1, limit: number = 50): Promise<Marker[]> {
+    const [markers] = await this.markersRepository.findAndCount({
       where: { room: { id: roomId } },
       relations: ['createdBy', 'video'],
       order: { timeSec: 'ASC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
+
+    return markers;
   }
 
   private formatTime(seconds: number): string {
