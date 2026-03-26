@@ -79,20 +79,34 @@ export class RoomsService {
     return state;
   }
 
+  private async generateAndStoreQr(roomId: number, link: string, code: string) {
+    try {
+      const qrCode = await QRCode.toDataURL(link);
+      await this.roomsRepo.update(roomId, { QRcode: qrCode });
+      this.logger.log(`QR code généré pour ${code}`);
+      return qrCode;
+    } catch (error) {
+      this.logger.warn(`Échec génération QR pour ${code}: ${String(error)}`);
+      return null;
+    }
+  }
+
   async createRoom(creatorDisplayName?: string) {
     this.logger.log(`Création d'une nouvelle salle pour: ${creatorDisplayName}`);
     
     const code = this.generateCode();
     const baseUrl = process.env.FRONTEND_BASE_URL ?? 'http://localhost:4200';
     const link = `${baseUrl}/rooms/join/${code}`;
-    const QRCodeRoom = await QRCode.toDataURL(link);
 
     const room = this.roomsRepo.create({
       code,
       link,
-      QRcode: QRCodeRoom,
+      QRcode: null,
     });
     await this.roomsRepo.save(room);
+
+    // Génération QR en arrière-plan pour ne pas bloquer la création
+    void this.generateAndStoreQr(room.id, link, code);
 
     // Create playlist
     const playlist = this.playlistsRepo.create({
@@ -136,7 +150,7 @@ export class RoomsService {
       room,
       creator,
       chatSession,
-      qrCode: QRCodeRoom,
+      qrCode: null,
       inviteLink: link,
     };
   }

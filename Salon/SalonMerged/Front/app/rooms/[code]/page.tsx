@@ -41,6 +41,7 @@ export default function RoomPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const socketRef = useRef<any>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPlayToastRef = useRef(0);
 
   const [indexActuel, setIndexActuel] = useState<number>(-1);
   const { marqueurs, setMarqueurs, creer: creerMarqueur, modifier: modifierMarqueur, supprimer: supprimerMarqueur } =
@@ -51,6 +52,7 @@ export default function RoomPage() {
 
   const stateRef = useRef({ position, isPlaying });
   const currentVideoIdRef = useRef<string | null>(null);
+  const currentVideoTitleRef = useRef<string | null>(null);
 
   useEffect(() => {
     stateRef.current = { position, isPlaying };
@@ -59,6 +61,10 @@ export default function RoomPage() {
   useEffect(() => {
     currentVideoIdRef.current = currentVideo?.youtubeId ?? null;
   }, [currentVideo?.youtubeId]);
+
+  useEffect(() => {
+    currentVideoTitleRef.current = currentVideo?.title ?? null;
+  }, [currentVideo?.title]);
 
   useEffect(() => {
     if (marqueurs.length === 0) {
@@ -163,6 +169,12 @@ export default function RoomPage() {
         const targetPos = calculateAdjustedPosition(data.playback);
         setPosition(targetPos);
         setIsPlaying(true);
+        const now = Date.now();
+        if (now - lastPlayToastRef.current > 1200) {
+          lastPlayToastRef.current = now;
+          const title = currentVideoTitleRef.current ? `Lecture: ${currentVideoTitleRef.current}` : 'Lecture démarrée';
+          showToast(title);
+        }
       } else if (data.action === 'pause') {
         setPosition(data.playback.positionSec || 0);
         setIsPlaying(false);
@@ -228,6 +240,29 @@ export default function RoomPage() {
       }
     });
 
+    socket.on('playlist-added', (data: any) => {
+      if (Number(data?.addedById) === Number(memberId)) return;
+      const title = data?.video?.title || 'Une vidéo';
+      const author = data?.addedByName ? ` par ${data.addedByName}` : '';
+      showToast(`${title} ajoutée à la playlist${author}`);
+    });
+
+    socket.on('role-updated', (data: any) => {
+      const targetId = Number(data?.memberId);
+      const role = data?.role;
+      if (Number.isFinite(targetId)) {
+        setMembers((prev) =>
+          prev.map((m) => (Number(m.id) === targetId ? { ...m, role } : m))
+        );
+      }
+      if (Number(targetId) === Number(memberId)) {
+        showToast(role === 'ANALYST' ? 'Droits marqueur accordés' : 'Droits marqueur retirés');
+      } else if (data?.memberName) {
+        const roleLabel = role === 'ANALYST' ? 'Analyste' : 'Observateur';
+        showToast(`${data.memberName} est maintenant ${roleLabel}`);
+      }
+    });
+
     socket.on('room-closed', () => {
       showToast('Le principal a quitté. Salle fermée.');
       router.push('/');
@@ -250,6 +285,8 @@ export default function RoomPage() {
       socket.off('force-pause');
       socket.off('user-left');
       socket.off('room-closed');
+      socket.off('playlist-added');
+      socket.off('role-updated');
       socket.disconnect();
     };
   }, [code, memberId, roomInternalId, calculateAdjustedPosition, loadRoomData, router, setMarqueurs]);
@@ -316,14 +353,19 @@ export default function RoomPage() {
   const grantMarkerRights = async (targetMemberId: number) => {
     if (!code || !memberId) return;
     try {
-      await roomsApi.updateMemberRole({
+      const res = await roomsApi.updateMemberRole({
         codeRoom: code,
         requesterId: memberId,
         targetMemberId,
         role: 'ANALYST',
       });
-      await loadRoomData();
-      showToast('Droits marqueur accordÃ©s');
+      const updatedRole = res?.data?.role;
+      if (updatedRole) {
+        setMembers((prev) =>
+          prev.map((m) => (Number(m.id) === Number(targetMemberId) ? { ...m, role: updatedRole } : m))
+        );
+      }
+      showToast('Droits marqueur accordés');
     } catch (err: any) {
       log.error('Erreur update role', err);
       showToast('Impossible de modifier le rÃ´le');
@@ -332,13 +374,18 @@ export default function RoomPage() {
   const revokeMarkerRights = async (targetMemberId: number) => {
     if (!code || !memberId) return;
     try {
-      await roomsApi.updateMemberRole({
+      const res = await roomsApi.updateMemberRole({
         codeRoom: code,
         requesterId: memberId,
         targetMemberId,
         role: 'OBSERVER',
       });
-      await loadRoomData();
+      const updatedRole = res?.data?.role;
+      if (updatedRole) {
+        setMembers((prev) =>
+          prev.map((m) => (Number(m.id) === Number(targetMemberId) ? { ...m, role: updatedRole } : m))
+        );
+      }
       showToast('Droits marqueur retirés');
     } catch (err: any) {
       log.error('Erreur update role', err);
@@ -382,8 +429,10 @@ export default function RoomPage() {
                   type="button"
                   className={styles.roleButton}
                   onClick={() => grantMarkerRights(member.id)}
+                  aria-label="Donner droits marqueur"
+                  title="Donner droits marqueur"
                 >
-                  Donner droits marqueur
+                  +
                 </button>
               )}
               {isCreator && member.id !== memberId && member.role === 'ANALYST' && (
@@ -391,8 +440,10 @@ export default function RoomPage() {
                   type="button"
                   className={styles.roleButton}
                   onClick={() => revokeMarkerRights(member.id)}
+                  aria-label="Retirer droits marqueur"
+                  title="Retirer droits marqueur"
                 >
-                  Retirer droits marqueur
+                  -
                 </button>
               )}
             </span>
@@ -441,7 +492,7 @@ export default function RoomPage() {
               }}
               onSupprimerMarqueur={async (marqueur) => {
                 if (!roomInternalId) return;
-                await supprimerMarqueur(roomInternalId, Number(marqueur.id), memberId);
+                await supprimerMarqueur(roomInternalId, Number(marqueur.id), memberId, socketRef.current, code);
               }}
             />
           </div>
@@ -459,8 +510,11 @@ export default function RoomPage() {
                       await loadRoomData();
                     }
                   }
-                } catch (error: any) { log.error('Erreur previous video', error); }
-              }} className={`${styles.controlButton} ${styles.previousButton}`} title="Précédent">
+                } catch (error: any) {
+                  log.error('Erreur previous video', error);
+                  showToast('Aucune vidéo précédente');
+                }
+              }} className={`${styles.controlButton} ${styles.previousButton}`} title="Précédent" disabled={!playlist || playlist.currentIndex <= 0}>
                 <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
                   <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
                 </svg>
@@ -488,8 +542,11 @@ export default function RoomPage() {
                       await loadRoomData();
                     }
                   }
-                } catch (error: any) { log.error('Erreur next video', error); }
-              }} className={`${styles.controlButton} ${styles.nextButton}`} title="Suivant">
+                } catch (error: any) {
+                  log.error('Erreur next video', error);
+                  showToast('Aucune vidéo suivante');
+                }
+              }} className={`${styles.controlButton} ${styles.nextButton}`} title="Suivant" disabled={!playlist || !playlist.entries || playlist.currentIndex >= playlist.entries.length - 1}>
                 <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
                   <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
                 </svg>
@@ -529,7 +586,6 @@ export default function RoomPage() {
           } catch (err: any) { log.error('Erreur play video', err); }
         }} 
         onDeleteVideo={async (entryId) => {
-          if (!confirm('Supprimer ?')) return;
           try {
             await playlistApi.deleteFromPlaylist(memberId, code, entryId);
             await loadRoomData();
@@ -608,8 +664,16 @@ export default function RoomPage() {
       if (playDirect) {
         await roomsApi.playDirectVideo({ codeRoom: code, memberId, youtubeId: videoId, youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author, youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail });
         socketRef.current?.emit('video-change', { codeRoom: code, videoId });
+        showToast(`Lecture: ${youtubeData.title || 'vidéo'}`);
       } else {
         await playlistApi.addToPlaylist({ codeRoom: code, memberId, youtubeId: videoId, youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author, youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail });
+        socketRef.current?.emit('playlist-added', {
+          codeRoom: code,
+          video: { title: youtubeData.title, youtubeId: videoId },
+          addedByName: currentMember?.name || pseudo || 'Un membre',
+          addedById: memberId,
+        });
+        showToast(`Ajouté: ${youtubeData.title || 'vidéo'}`);
       }
       setSearchUrl('');
       await loadRoomData();

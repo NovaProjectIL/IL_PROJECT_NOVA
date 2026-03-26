@@ -96,16 +96,6 @@ export class RoomsController {
 
     const { room, creator, chatSession, qrCode, inviteLink } = serviceResult;
   
-    console.log('Service result structure:', {
-      hasRoom: !!room,
-      hasCreator: !!creator,
-      hasChatSession: !!chatSession,
-      hasQrCode: !!qrCode,
-      qrCodeLength: qrCode?.length,
-      hasInviteLink: !!inviteLink,
-      inviteLinkValue: inviteLink
-    });
-    
     // Retournez TOUTES les propriétés
     return {
       roomId: room.id,
@@ -131,12 +121,6 @@ export class RoomsController {
     const { room, user } = await this.roomsService.joinRoom(displayName, codeRoom.toUpperCase());
 
     // DEBUG
-    console.log('Room in join:', {
-      code: room.code,
-      hasQRcode: !!room.QRcode,
-      hasLink: !!room.link
-    });
-
     return {
       roomId: room.id,
       code: room.code,
@@ -185,12 +169,19 @@ export class RoomsController {
   @Post('role')
   async updateRole(@Body() body: UpdateRoleDto) {
     const { codeRoom, requesterId, targetMemberId, role } = body;
-    return this.roomsService.updateMemberRole(
+    const result = await this.roomsService.updateMemberRole(
       codeRoom.toUpperCase(),
       requesterId,
       targetMemberId,
       role,
     );
+    this.roomsGateway.server?.to(codeRoom.toUpperCase()).emit('role-updated', {
+      memberId: result.memberId,
+      memberName: result.memberName,
+      role: result.role,
+      timestamp: new Date(),
+    });
+    return result;
   }
 
   @Get('state')

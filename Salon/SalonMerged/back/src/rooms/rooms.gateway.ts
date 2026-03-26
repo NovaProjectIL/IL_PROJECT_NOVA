@@ -581,4 +581,57 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     this.logger.log(`Marqueur broadcast dans ${roomCode}: ${marker.label}`);
   }
 
+  @SubscribeMessage('marker-updated')
+  handleMarkerUpdated(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { codeRoom: string; marker: any }
+  ) {
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'marker-updated');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'marker-updated')) return;
+
+    const marker = data.marker;
+    if (!marker || typeof marker !== 'object') {
+      this.logger.warn(`[SECURITY] marker-updated rejeté (${client.id}): marker invalide`);
+      return;
+    }
+
+    client.to(roomCode).emit('marker-updated', marker);
+  }
+
+  @SubscribeMessage('marker-deleted')
+  handleMarkerDeleted(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { codeRoom: string; markerId: number }
+  ) {
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'marker-deleted');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'marker-deleted')) return;
+
+    const markerId = data?.markerId;
+    if (typeof markerId !== 'number' || !Number.isFinite(markerId)) {
+      this.logger.warn(`[SECURITY] marker-deleted rejeté (${client.id}): markerId invalide`);
+      return;
+    }
+
+    client.to(roomCode).emit('marker-deleted', { markerId });
+  }
+
+  @SubscribeMessage('playlist-added')
+  handlePlaylistAdded(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { codeRoom: string; video?: { title?: string; youtubeId?: string }; addedByName?: string; addedById?: number }
+  ) {
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'playlist-added');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'playlist-added')) return;
+
+    this.server.to(roomCode).emit('playlist-added', {
+      video: data?.video ?? null,
+      addedByName: data?.addedByName ?? null,
+      addedById: data?.addedById ?? null,
+      timestamp: new Date(),
+    });
+  }
+
 }

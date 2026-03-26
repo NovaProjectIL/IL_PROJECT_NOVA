@@ -15,12 +15,16 @@ type VideoPlayerProps = {
   syncSocket?: Socket | null;
   marqueurs: Marqueur[];
   indexActuel: number;
+  canEditMarkers?: boolean;
+  onExportCsv?: () => void;
   onProgress: (time: number) => void;
   onPlay: () => void;
   onPause: () => void;
   onSeek: (time: number) => void;
   onDuration: (duration: number) => void;
-  onNouveauMarqueur?: (timecode: number) => void;
+  onNouveauMarqueur?: (timecode: number, categorie: Marqueur['categorie']) => void;
+  onModifierMarqueur?: (marqueur: Marqueur, data: { label?: string; timecode?: number; categorie?: Marqueur['categorie']; content?: string | null }) => Promise<void>;
+  onSupprimerMarqueur?: (marqueur: Marqueur) => Promise<void>;
 };
 
 export default function VideoPlayer({
@@ -31,12 +35,16 @@ export default function VideoPlayer({
   syncSocket,
   marqueurs,
   indexActuel,
+  canEditMarkers = true,
+  onExportCsv,
   onProgress,
   onPlay,
   onPause,
   onSeek,
   onDuration,
   onNouveauMarqueur,
+  onModifierMarqueur,
+  onSupprimerMarqueur,
 }: VideoPlayerProps) {
 
   const [mounted, setMounted] = useState(false);
@@ -238,10 +246,10 @@ export default function VideoPlayer({
     onSeek(marqueur.timecode);
   };
 
-  const handlePoserMarqueur = () => {
+  const handlePoserMarqueur = (categorie: Marqueur['categorie']) => {
     if (playerRef.current && onNouveauMarqueur) {
       const timecode = playerRef.current.getCurrentTime() ?? 0;
-      onNouveauMarqueur(timecode);
+      onNouveauMarqueur(timecode, categorie);
     }
   };
 
@@ -339,6 +347,10 @@ export default function VideoPlayer({
         indexActuel={indexActuel}
         onClicMarqueur={handleClicMarqueur}
         onPoserMarqueur={handlePoserMarqueur}
+        onModifierMarqueur={onModifierMarqueur}
+        onSupprimerMarqueur={onSupprimerMarqueur}
+        canEditMarkers={canEditMarkers}
+        onExportCsv={onExportCsv}
       />
     </div>
   );

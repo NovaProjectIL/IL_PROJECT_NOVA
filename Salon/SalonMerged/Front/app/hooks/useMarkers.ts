@@ -115,10 +115,17 @@ export function useMarkers(roomInternalId: number | null, socket: any, roomCode:
     }
   }, []);
 
-  const supprimer = useCallback(async (roomId: number, markerId: number, memberId: number) => {
+  const supprimer = useCallback(async (
+    roomId: number,
+    markerId: number,
+    memberId: number,
+    socketRef?: any,
+    codeRoom?: string
+  ) => {
     try {
       await marqueursApi.supprimerMarqueur(roomId, markerId, memberId);
       setMarqueurs(prev => prev.filter(m => m.id !== String(markerId)));
+      socketRef?.emit('marker-deleted', { codeRoom, markerId });
     } catch (e) {
       console.error('[useMarkers] Erreur suppression', e);
       throw e;
