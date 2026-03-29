@@ -634,4 +634,26 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     });
   }
 
+  @SubscribeMessage('reaction')
+  handleReaction(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { codeRoom: string; emoji: string; senderId?: number }
+  ) {
+    const roomCode = this.validateRoomCode(data?.codeRoom, client.id, 'reaction');
+    if (!roomCode) return;
+    if (!this.validateMembership(roomCode, client, 'reaction')) return;
+
+    const emoji = data?.emoji;
+    if (!emoji || typeof emoji !== 'string' || emoji.trim() === '') {
+      this.logger.warn(`[SECURITY] reaction rejeté (${client.id}): emoji invalide`);
+      return;
+    }
+
+    this.server.to(roomCode).emit('reaction', {
+      emoji,
+      senderId: data?.senderId ?? null,
+      timestamp: new Date(),
+    });
+  }
+
 }

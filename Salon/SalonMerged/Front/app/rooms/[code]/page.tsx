@@ -39,9 +39,11 @@ export default function RoomPage() {
   const [roomInternalId, setRoomInternalId] = useState<number | null>(null);
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<Array<{ id: string; emoji: string; x: number; y: number; size: number; duration: number; drift: number }>>([]);
   const socketRef = useRef<any>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPlayToastRef = useRef(0);
+  const reactionIdRef = useRef(0);
 
   const [indexActuel, setIndexActuel] = useState<number>(-1);
   const { marqueurs, setMarqueurs, creer: creerMarqueur, modifier: modifierMarqueur, supprimer: supprimerMarqueur } =
@@ -182,6 +184,12 @@ export default function RoomPage() {
       // Note: seek actions are handled entirely by force-seek + all-ready flow
     });
 
+    socket.on('reaction', (data: any) => {
+      if (Number(data?.senderId) === Number(memberId)) return;
+      const emoji = String(data?.emoji || '🔥');
+      triggerReaction(emoji);
+    });
+
     socket.on('nouveau_marqueur', (marqueurBrut: any) => {
       const m = {
         id: String(marqueurBrut.id),
@@ -287,6 +295,7 @@ export default function RoomPage() {
       socket.off('room-closed');
       socket.off('playlist-added');
       socket.off('role-updated');
+      socket.off('reaction');
       socket.disconnect();
     };
   }, [code, memberId, roomInternalId, calculateAdjustedPosition, loadRoomData, router, setMarqueurs]);
@@ -370,6 +379,24 @@ export default function RoomPage() {
       log.error('Erreur update role', err);
       showToast('Impossible de modifier le rÃ´le');
     }
+  };
+
+  const triggerReaction = (emoji: string) => {
+    const id = `rx-${Date.now()}-${reactionIdRef.current++}`;
+    const x = 20 + Math.random() * 60;
+    const y = 55 + Math.random() * 25;
+    const size = 20 + Math.random() * 16;
+    const duration = 1400 + Math.random() * 900;
+    const drift = (Math.random() - 0.5) * 80;
+    setReactions((prev) => [...prev, { id, emoji, x, y, size, duration, drift }]);
+    setTimeout(() => {
+      setReactions((prev) => prev.filter((r) => r.id !== id));
+    }, duration + 200);
+  };
+
+  const sendReaction = (emoji: string) => {
+    triggerReaction(emoji);
+    socketRef.current?.emit('reaction', { codeRoom: code, emoji, senderId: memberId });
   };
   const revokeMarkerRights = async (targetMemberId: number) => {
     if (!code || !memberId) return;
@@ -455,6 +482,29 @@ export default function RoomPage() {
         <div className={styles.videoSection}>
           <h3>{currentVideo.title}</h3>
           <div className={styles.playerContainer}>
+            <div className={styles.reactionBurst} aria-hidden="true">
+              {reactions.map((r) => (
+                <span
+                  key={r.id}
+                  className={styles.reactionFloat}
+                  style={{
+                    left: `${r.x}%`,
+                    top: `${r.y}%`,
+                    ["--size" as any]: `${r.size}px`,
+                    ["--duration" as any]: `${r.duration}ms`,
+                    ["--drift" as any]: `${r.drift}px`,
+                  }}
+                >
+                  {r.emoji}
+                </span>
+              ))}
+            </div>
+            <div className={styles.reactionDock}>
+              <button className={styles.reactionButton} onClick={() => sendReaction('🔥')} type="button">🔥</button>
+              <button className={styles.reactionButton} onClick={() => sendReaction('😍')} type="button">😍</button>
+              <button className={styles.reactionButton} onClick={() => sendReaction('😂')} type="button">😂</button>
+              <button className={styles.reactionButton} onClick={() => sendReaction('👏')} type="button">👏</button>
+            </div>
             <VideoPlayer
               youtubeId={currentVideo.youtubeId}
               isPlaying={isPlaying}
