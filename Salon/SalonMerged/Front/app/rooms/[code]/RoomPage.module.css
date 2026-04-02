@@ -1,4 +1,4 @@
-/* Variables thème Salon Luxe */
+﻿/* Variables thÃ¨me Salon Luxe */
 
 .container {
   --salon-primary: #1a1a2e;
@@ -99,7 +99,7 @@
 }
 
 .quitButton::after {
-  content: '✕';
+  content: 'âœ•';
   font-size: 16px;
   font-weight: bold;
 }
@@ -344,7 +344,7 @@
   box-shadow: 0 2px 8px rgba(197, 34, 51, 0.3);
 }
 
-/* Section Vidéo */
+/* Section VidÃ©o */
 .videoSection {
   padding: 22px;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(12, 8, 16, 0.4));
@@ -488,7 +488,7 @@
   box-shadow: 0 6px 16px rgba(197, 34, 51, 0.6);
 }
 
-/* État synchronisation */
+/* Ã‰tat synchronisation */
 .syncStatus {
   padding: 10px;
   margin-bottom: 10px;
@@ -508,7 +508,7 @@
   border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
-/* Contrôles */
+/* ContrÃ´les */
 .controlsSection {
   margin-top: 20px;
 }
@@ -897,7 +897,7 @@
 }
 
 .playlistTitle::before {
-  content: '📋';
+  content: 'ðŸ“‹';
   font-size: 1.8rem;
   animation: bounce 2s ease-in-out infinite;
 }
@@ -1115,7 +1115,7 @@
 }
 
 /* ========================================
-   CONTENU DE L'ENTRÉE
+   CONTENU DE L'ENTRÃ‰E
    ======================================== */
 .entryContent {
   flex: 1;
@@ -1159,7 +1159,7 @@
 }
 
 /* ========================================
-   MÉTADONNÉES DE L'ENTRÉE
+   MÃ‰TADONNÃ‰ES DE L'ENTRÃ‰E
    ======================================== */
 .entryMeta {
   display: flex;
@@ -1321,7 +1321,7 @@
 }
 
 /* ========================================
-   ÉTATS DE CHARGEMENT ET VIDE
+   Ã‰TATS DE CHARGEMENT ET VIDE
    ======================================== */
 .loadingContainer {
   padding: 60px 20px;
@@ -1330,7 +1330,7 @@
 }
 
 .loadingContainer::before {
-  content: '⏳';
+  content: 'â³';
   display: block;
   font-size: 3rem;
   margin-bottom: 20px;
@@ -1351,7 +1351,7 @@
 }
 
 .emptyTitle::before {
-  content: '📭';
+  content: 'ðŸ“­';
   display: block;
   font-size: 3.5rem;
   margin-bottom: 15px;
@@ -1522,3 +1522,91 @@
 .quitBtn:hover {
   transform: translateY(-2px);
 }
+
+/* === UI fixes (reactions rail + members toggle + timer) === */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.timerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(12, 8, 16, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.membersHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.membersToggle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 8, 16, 0.5);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.membersToggle:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.videoStage {
+  display: grid;
+  grid-template-columns: 1fr 64px;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.reactionRail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 8px;
+  background: rgba(12, 8, 16, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.reactionDock {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .videoStage {
+    grid-template-columns: 1fr;
+  }
+
+  .reactionRail {
+    order: 2;
+    justify-content: center;
+  }
+
+  .reactionDock {
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+

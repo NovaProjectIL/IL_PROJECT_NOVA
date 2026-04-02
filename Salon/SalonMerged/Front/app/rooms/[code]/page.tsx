@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
@@ -9,6 +9,7 @@ import { useMarkers } from '@/app/hooks/useMarkers';
 import styles from './RoomPage.module.css';
 import VideoPlayer from '@/app/components/VideoPlayer';
 import { roomsApi, playlistApi, marqueursApi } from '@/app/lib/api';
+import { Users, Clock } from 'lucide-react';
 
 const log = {
   room: (msg: string, data?: any) => console.log(`[ROOM] ${msg}`, data ?? ''),
@@ -41,10 +42,13 @@ export default function RoomPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [reactions, setReactions] = useState<Array<{ id: string; emoji: string; x: number; y: number; size: number; duration: number; drift: number }>>([]);
   const socketRef = useRef<any>(null);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPlayToastRef = useRef(0);
   const reactionIdRef = useRef(0);
 
+  const roomStartRef = useRef<number>(Date.now());
   const [indexActuel, setIndexActuel] = useState<number>(-1);
   const { marqueurs, setMarqueurs, creer: creerMarqueur, modifier: modifierMarqueur, supprimer: supprimerMarqueur } =
     useMarkers(roomInternalId, socketRef.current, code, currentVideo?.youtubeId);
@@ -83,6 +87,14 @@ export default function RoomPage() {
     }
   }, [position, marqueurs, indexActuel]);
 
+
+  useEffect(() => {
+    roomStartRef.current = Date.now();
+    const timer = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - roomStartRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
   const calculateAdjustedPosition = useCallback((playbackData: any) => {
     if (!playbackData) return 0;
     let pos = Number(playbackData.positionSec || 0);
@@ -145,16 +157,16 @@ export default function RoomPage() {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      log.socket('Connecté au serveur sync', { code, memberId });
+      log.socket('ConnectÃ© au serveur sync', { code, memberId });
       socket.emit('join-room', { codeRoom: code, memberId });
     });
 
     socket.on('room-joined-confirm', (data: any) => {
-      log.socket('Confirmation de jointure de salle reçue', data);
+      log.socket('Confirmation de jointure de salle reÃ§ue', data);
     });
 
     socket.on('room-initial-state', (data: any) => {
-      log.socket('État initial reçu', data);
+      log.socket('Ã‰tat initial reÃ§u', data);
       if (data.playback?.video) {
         setCurrentVideo(data.playback.video);
         const adjusted = calculateAdjustedPosition(data.playback);
@@ -165,7 +177,7 @@ export default function RoomPage() {
     });
 
     socket.on('playback-updated', (data: any) => {
-      log.socket('Playback updated reçu', data);
+      log.socket('Playback updated reÃ§u', data);
       
       if (data.action === 'play') {
         const targetPos = calculateAdjustedPosition(data.playback);
@@ -174,7 +186,7 @@ export default function RoomPage() {
         const now = Date.now();
         if (now - lastPlayToastRef.current > 1200) {
           lastPlayToastRef.current = now;
-          const title = currentVideoTitleRef.current ? `Lecture: ${currentVideoTitleRef.current}` : 'Lecture démarrée';
+          const title = currentVideoTitleRef.current ? `Lecture: ${currentVideoTitleRef.current}` : 'Lecture dÃ©marrÃ©e';
           showToast(title);
         }
       } else if (data.action === 'pause') {
@@ -208,16 +220,18 @@ export default function RoomPage() {
         if (prev.find(x => x.id === m.id)) return prev;
         return [...prev, m];
       });
+      const catLabel = m.categorie ? ` (${m.categorie})` : "";
+      if (m.auteurNom) showToast(`${m.auteurNom} a créé un marqueur${catLabel}`);
     });
 
     socket.on('video-changed', (data: any) => {
-      log.socket('Video changed reçu', data);
+      log.socket('Video changed reÃ§u', data);
       loadRoomData();
     });
 
     // Wait-for-Ready: server orders all clients to seek to a position
     socket.on('force-seek', (data: any) => {
-      log.socket('Force-seek reçu', data);
+      log.socket('Force-seek reÃ§u', data);
       const targetPos = Number(data.timecode ?? 0);
       setPosition(targetPos);
       // Always pause during LOADING - all-ready will decide whether to resume
@@ -226,7 +240,7 @@ export default function RoomPage() {
 
     // Wait-for-Ready: all clients buffered, resume together
     socket.on('all-ready', (data: any) => {
-      log.socket('All-ready reçu', data);
+      log.socket('All-ready reÃ§u', data);
       const pos = Number(data.positionSec ?? 0);
       const shouldPlay = data.shouldPlay !== false; // default true for backward compat
       setPosition(pos);
@@ -234,12 +248,12 @@ export default function RoomPage() {
     });
 
     socket.on('user-joined', (data: any) => {
-      log.socket('User joined reçu', data);
+      log.socket('User joined reÃ§u', data);
       loadRoomData();
     });
 
     socket.on('user-left', (data: any) => {
-      log.socket('User left reçu', data);
+      log.socket('User left reÃ§u', data);
       const leftId = Number(data?.memberId);
       if (Number.isFinite(leftId)) {
         setMembers((prev) => prev.filter((m) => Number(m.id) !== leftId));
@@ -250,9 +264,9 @@ export default function RoomPage() {
 
     socket.on('playlist-added', (data: any) => {
       if (Number(data?.addedById) === Number(memberId)) return;
-      const title = data?.video?.title || 'Une vidéo';
+      const title = data?.video?.title || 'Une vidÃ©o';
       const author = data?.addedByName ? ` par ${data.addedByName}` : '';
-      showToast(`${title} ajoutée à la playlist${author}`);
+      showToast(`${title} ajoutÃ©e Ã  la playlist${author}`);
     });
 
     socket.on('role-updated', (data: any) => {
@@ -264,7 +278,7 @@ export default function RoomPage() {
         );
       }
       if (Number(targetId) === Number(memberId)) {
-        showToast(role === 'ANALYST' ? 'Droits marqueur accordés' : 'Droits marqueur retirés');
+        showToast(role === 'ANALYST' ? 'Droits marqueur accordÃ©s' : 'Droits marqueur retirÃ©s');
       } else if (data?.memberName) {
         const roleLabel = role === 'ANALYST' ? 'Analyste' : 'Observateur';
         showToast(`${data.memberName} est maintenant ${roleLabel}`);
@@ -272,13 +286,13 @@ export default function RoomPage() {
     });
 
     socket.on('room-closed', () => {
-      showToast('Le principal a quitté. Salle fermée.');
+      showToast('Le principal a quittÃ©. Salle fermÃ©e.');
       router.push('/');
     });
 
     // A remote client started buffering: server orders everyone to pause
     socket.on('force-pause', (data: any) => {
-      log.socket('Force-pause reçu', data);
+      log.socket('Force-pause reÃ§u', data);
       // If I am the client that is buffering, do NOT pause my YouTube player.
       // YouTube stops buffering when paused, which would cause a premature client-ready
       // and create a play/pause loop. Let YouTube keep loading so it can actually finish.
@@ -333,6 +347,14 @@ export default function RoomPage() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const formatElapsed = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
   const handleQuitRoom = () => {
     setShowQuitModal(true);
   };
@@ -374,10 +396,10 @@ export default function RoomPage() {
           prev.map((m) => (Number(m.id) === Number(targetMemberId) ? { ...m, role: updatedRole } : m))
         );
       }
-      showToast('Droits marqueur accordés');
+      showToast('Droits marqueur accordÃ©s');
     } catch (err: any) {
       log.error('Erreur update role', err);
-      showToast('Impossible de modifier le rÃ´le');
+      showToast('Impossible de modifier le rÃƒÂ´le');
     }
   };
 
@@ -413,10 +435,10 @@ export default function RoomPage() {
           prev.map((m) => (Number(m.id) === Number(targetMemberId) ? { ...m, role: updatedRole } : m))
         );
       }
-      showToast('Droits marqueur retirés');
+      showToast('Droits marqueur retirÃ©s');
     } catch (err: any) {
       log.error('Erreur update role', err);
-      showToast('Impossible de modifier le rôle');
+      showToast('Impossible de modifier le rÃ´le');
     }
   };
 
@@ -426,7 +448,11 @@ export default function RoomPage() {
     <div className={styles.container}>
       <div className={styles.roomHeader}>
         <h1 className={styles.roomTitle}>Salon: {code}</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className={styles.headerActions}>
+          <div className={styles.timerBadge}>
+            <Clock size={16} />
+            <span>{formatElapsed(elapsedSec)}</span>
+          </div>
           <button onClick={handleQuitRoom} className={styles.quitButton}>Quitter</button>
         </div>
       </div>
@@ -443,110 +469,126 @@ export default function RoomPage() {
       )}
 
       <div className={styles.membersSection}>
-        <h3>Membres ({members.length}):</h3>
-        <div className={styles.membersList}>
-          {members.map(member => (
-            <span key={member.id} className={`${styles.memberTag} ${member.id === memberId ? styles.currentMember : ''}`}>
-              <span className={styles.memberName}>
-                {member.name} {member.id === memberId ? '(Vous)' : ''}
-              </span>
-              <span className={styles.roleBadge}>{formatRole(member.role)}</span>
-              {isCreator && member.id !== memberId && member.role !== 'ANALYST' && (
-                <button
-                  type="button"
-                  className={styles.roleButton}
-                  onClick={() => grantMarkerRights(member.id)}
-                  aria-label="Donner droits marqueur"
-                  title="Donner droits marqueur"
-                >
-                  +
-                </button>
-              )}
-              {isCreator && member.id !== memberId && member.role === 'ANALYST' && (
-                <button
-                  type="button"
-                  className={styles.roleButton}
-                  onClick={() => revokeMarkerRights(member.id)}
-                  aria-label="Retirer droits marqueur"
-                  title="Retirer droits marqueur"
-                >
-                  -
-                </button>
-              )}
-            </span>
-          ))}
+        <div className={styles.membersHeader}>
+          <h3>Membres ({members.length})</h3>
+          <button
+            type="button"
+            className={styles.membersToggle}
+            onClick={() => setMembersOpen((prev) => !prev)}
+            aria-expanded={membersOpen}
+            aria-label="Afficher les membres"
+          >
+            <Users size={18} />
+          </button>
         </div>
+        {membersOpen && (
+          <div className={styles.membersList}>
+            {members.map(member => (
+              <span key={member.id} className={`${styles.memberTag} ${member.id === memberId ? styles.currentMember : ""}`}>
+                <span className={styles.memberName}>
+                  {member.name} {member.id === memberId ? "(Vous)" : ""}
+                </span>
+                <span className={styles.roleBadge}>{formatRole(member.role)}</span>
+                {isCreator && member.id !== memberId && member.role !== "ANALYST" && (
+                  <button
+                    type="button"
+                    className={styles.roleButton}
+                    onClick={() => grantMarkerRights(member.id)}
+                    aria-label="Donner droits marqueur"
+                    title="Donner droits marqueur"
+                  >
+                    +
+                  </button>
+                )}
+                {isCreator && member.id !== memberId && member.role === "ANALYST" && (
+                  <button
+                    type="button"
+                    className={styles.roleButton}
+                    onClick={() => revokeMarkerRights(member.id)}
+                    aria-label="Retirer droits marqueur"
+                    title="Retirer droits marqueur"
+                  >
+                    -
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {currentVideo && (
         <div className={styles.videoSection}>
           <h3>{currentVideo.title}</h3>
-          <div className={styles.playerContainer}>
-            <div className={styles.reactionBurst} aria-hidden="true">
-              {reactions.map((r) => (
-                <span
-                  key={r.id}
-                  className={styles.reactionFloat}
-                  style={{
-                    left: `${r.x}%`,
-                    top: `${r.y}%`,
-                    ["--size" as any]: `${r.size}px`,
-                    ["--duration" as any]: `${r.duration}ms`,
-                    ["--drift" as any]: `${r.drift}px`,
-                  }}
-                >
-                  {r.emoji}
-                </span>
-              ))}
+          <div className={styles.videoStage}>
+            <div className={styles.playerContainer}>
+              <div className={styles.reactionBurst} aria-hidden="true">
+                {reactions.map((r) => (
+                  <span
+                    key={r.id}
+                    className={styles.reactionFloat}
+                    style={{
+                      left: `${r.x}%`,
+                      top: `${r.y}%`,
+                      ["--size" as any]: `${r.size}px`,
+                      ["--duration" as any]: `${r.duration}ms`,
+                      ["--drift" as any]: `${r.drift}px`,
+                    }}
+                  >
+                    {r.emoji}
+                  </span>
+                ))}
+              </div>
+              <VideoPlayer
+                youtubeId={currentVideo.youtubeId}
+                isPlaying={isPlaying}
+                currentTime={position}
+                roomId={code}
+                syncSocket={socketRef.current}
+                marqueurs={marqueurs}
+                indexActuel={indexActuel}
+                canEditMarkers={canEditMarkers}
+                onExportCsv={handleExportCsv}
+                onProgress={(time) => setPosition(time)}
+                onPlay={handlePlay}
+                onPause={handlePause}
+                onSeek={handleSeek}
+                onDuration={() => {}}
+                onNouveauMarqueur={canEditMarkers ? async (timecode, categorie) => {
+                  if (!roomInternalId || !currentVideo?.youtubeId) return;
+                  await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, categorie, socketRef.current, code);
+                } : undefined}
+                onModifierMarqueur={async (marqueur, data) => {
+                  if (!roomInternalId) return;
+                  if (typeof marqueur.version !== "number") {
+                    log.error("Version du marqueur manquante, modification annulée", marqueur);
+                    return;
+                  }
+                  const version = marqueur.version;
+                  await modifierMarqueur(roomInternalId, Number(marqueur.id), {
+                    version,
+                    memberId,
+                    ...(data.label !== undefined ? { label: data.label } : {}),
+                    ...(data.timecode !== undefined ? { timeSec: data.timecode } : {}),
+                    ...(data.categorie !== undefined ? { category: data.categorie } : {}),
+                    ...(data.content !== undefined ? { content: data.content } : {}),
+                  }, socketRef.current, code);
+                }}
+                onSupprimerMarqueur={async (marqueur) => {
+                  if (!roomInternalId) return;
+                  await supprimerMarqueur(roomInternalId, Number(marqueur.id), memberId, socketRef.current, code);
+                }}
+              />
             </div>
-            <div className={styles.reactionDock}>
-              <button className={styles.reactionButton} onClick={() => sendReaction('🔥')} type="button">🔥</button>
-              <button className={styles.reactionButton} onClick={() => sendReaction('😍')} type="button">😍</button>
-              <button className={styles.reactionButton} onClick={() => sendReaction('😂')} type="button">😂</button>
-              <button className={styles.reactionButton} onClick={() => sendReaction('👏')} type="button">👏</button>
-            </div>
-            <VideoPlayer
-              youtubeId={currentVideo.youtubeId}
-              isPlaying={isPlaying}
-              currentTime={position}
-              roomId={code}
-              syncSocket={socketRef.current}
-              marqueurs={marqueurs}
-              indexActuel={indexActuel}
-              canEditMarkers={canEditMarkers}
-              onExportCsv={handleExportCsv}
-              onProgress={(time) => setPosition(time)}
-              onPlay={handlePlay}
-              onPause={handlePause}
-              onSeek={handleSeek}
-              onDuration={() => {}}
-              onNouveauMarqueur={canEditMarkers ? async (timecode, categorie) => {
-                if (!roomInternalId || !currentVideo?.youtubeId) return;
-                await creerMarqueur(roomInternalId, memberId, timecode, currentVideo.youtubeId, categorie, socketRef.current, code);
-              } : undefined}
-              onModifierMarqueur={async (marqueur, data) => {
-                if (!roomInternalId) return;
-                if (typeof marqueur.version !== 'number') {
-                  log.error('Version du marqueur manquante, modification annulée', marqueur);
-                  return;
-                }
-                const version = marqueur.version;
-                await modifierMarqueur(roomInternalId, Number(marqueur.id), {
-                  version,
-                  memberId,
-                  ...(data.label !== undefined ? { label: data.label } : {}),
-                  ...(data.timecode !== undefined ? { timeSec: data.timecode } : {}),
-                  ...(data.categorie !== undefined ? { category: data.categorie } : {}),
-                  ...(data.content !== undefined ? { content: data.content } : {}),
-                }, socketRef.current, code);
-              }}
-              onSupprimerMarqueur={async (marqueur) => {
-                if (!roomInternalId) return;
-                await supprimerMarqueur(roomInternalId, Number(marqueur.id), memberId, socketRef.current, code);
-              }}
-            />
+            <aside className={styles.reactionRail} aria-label="Réactions">
+              <div className={styles.reactionDock}>
+                <button className={styles.reactionButton} onClick={() => sendReaction("🔥")} type="button">🔥</button>
+                <button className={styles.reactionButton} onClick={() => sendReaction("😍")} type="button">😍</button>
+                <button className={styles.reactionButton} onClick={() => sendReaction("😂")} type="button">😂</button>
+                <button className={styles.reactionButton} onClick={() => sendReaction("👏")} type="button">👏</button>
+              </div>
+            </aside>
           </div>
-
           <div className={styles.controlsSection}>
             <div className={styles.controlButtons}>
 <button onClick={async () => {
@@ -562,9 +604,9 @@ export default function RoomPage() {
                   }
                 } catch (error: any) {
                   log.error('Erreur previous video', error);
-                  showToast('Aucune vidéo précédente');
+                  showToast('Aucune vidÃ©o prÃ©cÃ©dente');
                 }
-              }} className={`${styles.controlButton} ${styles.previousButton}`} title="Précédent" disabled={!playlist || playlist.currentIndex <= 0}>
+              }} className={`${styles.controlButton} ${styles.previousButton}`} title="PrÃ©cÃ©dent" disabled={!playlist || playlist.currentIndex <= 0}>
                 <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
                   <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
                 </svg>
@@ -594,7 +636,7 @@ export default function RoomPage() {
                   }
                 } catch (error: any) {
                   log.error('Erreur next video', error);
-                  showToast('Aucune vidéo suivante');
+                  showToast('Aucune vidÃ©o suivante');
                 }
               }} className={`${styles.controlButton} ${styles.nextButton}`} title="Suivant" disabled={!playlist || !playlist.entries || playlist.currentIndex >= playlist.entries.length - 1}>
                 <svg viewBox="0 0 24 24" fill="currentColor" height="24" width="24">
@@ -714,7 +756,7 @@ export default function RoomPage() {
       if (playDirect) {
         await roomsApi.playDirectVideo({ codeRoom: code, memberId, youtubeId: videoId, youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author, youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail });
         socketRef.current?.emit('video-change', { codeRoom: code, videoId });
-        showToast(`Lecture: ${youtubeData.title || 'vidéo'}`);
+        showToast(`Lecture: ${youtubeData.title || 'vidÃ©o'}`);
       } else {
         await playlistApi.addToPlaylist({ codeRoom: code, memberId, youtubeId: videoId, youtubeVTitle: youtubeData.title, youtubeVChannel: youtubeData.author, youtubeVDurationSec: youtubeData.durationSec || 180, youtubeVThumbnailUrl: youtubeData.thumbnail });
         socketRef.current?.emit('playlist-added', {
@@ -723,7 +765,7 @@ export default function RoomPage() {
           addedByName: currentMember?.name || pseudo || 'Un membre',
           addedById: memberId,
         });
-        showToast(`Ajouté: ${youtubeData.title || 'vidéo'}`);
+        showToast(`AjoutÃ©: ${youtubeData.title || 'vidÃ©o'}`);
       }
       setSearchUrl('');
       await loadRoomData();
@@ -732,6 +774,7 @@ export default function RoomPage() {
     }
   }
 }
+
 
 
 
