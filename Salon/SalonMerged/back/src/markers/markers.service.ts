@@ -1,7 +1,7 @@
 // markers.service.ts
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, OptimisticLockVersionMismatchError } from 'typeorm';
+import { Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { Marker } from '../entities/marker.entity';
 import { CreateMarkerDto } from './dto/create-marker.dto';
 import { UpdateMarkerDto } from './dto/update-marker.dto';
@@ -15,17 +15,42 @@ export class MarkersService {
   ) {}
 
   // Récupérer tous les marqueurs d'une room
-  async findByRoom(roomId: number, page: number = 1, limit: number = 50): Promise<Marker[]> {
-    const [markers] = await this.markersRepository.findAndCount({
-      where: { room: { id: roomId } },
-      relations: ['createdBy', 'video'],
-      order: { timeSec: 'ASC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+ async findByRoom(
+  roomId: number,
+  page: number = 1,
+  limit: number = 50,
+  category?: string,
+  from?: number,
+  to?: number,
+): Promise<Marker[]> {
+  const where: any = { room: { id: roomId } };
 
-    return markers;
+  // Filtre par catégorie
+  if (category) {
+    where.category = category.toUpperCase();
   }
+
+  // Filtre par timeSec
+  if (from !== undefined || to !== undefined) {
+    if (from !== undefined && to !== undefined) {
+      where.timeSec = Between(from, to);
+    } else if (from !== undefined) {
+      where.timeSec = MoreThanOrEqual(from);
+    } else if (to !== undefined) {
+      where.timeSec = LessThanOrEqual(to);
+    }
+  }
+
+  const [markers] = await this.markersRepository.findAndCount({
+    where,
+    relations: ['createdBy', 'video'],
+    order: { timeSec: 'ASC' },
+    skip: (page - 1) * limit,
+    take: limit,
+  });
+
+  return markers;
+}
 
   private formatTime(seconds: number): string {
     const totalSeconds = Math.max(0, Math.floor(seconds));

@@ -577,7 +577,7 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
       return;
     }
 
-    client.to(roomCode).emit('nouveau_marqueur', marker);
+    client.to(roomCode).emit('marker:created', { roomId: null, marker });
     this.logger.log(`Marqueur broadcast dans ${roomCode}: ${marker.label}`);
   }
 

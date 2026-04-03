@@ -16,8 +16,14 @@ export class MarkersController {
     @Param('roomId', ParseIntPipe) roomId: number,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+    @Query('category') category?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
-    return this.markersService.findByRoom(roomId, page, limit);
+    return this.markersService.findByRoom(roomId, page, limit, category, 
+      from ? parseFloat(from) : undefined,
+      to ? parseFloat(to) : undefined,
+    );
   }
 
   @Get('export')
