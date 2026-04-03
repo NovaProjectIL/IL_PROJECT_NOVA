@@ -19,13 +19,18 @@ export class MarkersController {
     @Query('category') category?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('videoId') videoId?: string,
   ) {
     return this.markersService.findByRoom(roomId, page, limit, category, 
       from ? parseFloat(from) : undefined,
       to ? parseFloat(to) : undefined,
+      videoId,
     );
   }
-
+@Get('stats')
+  getStats(@Param('roomId', ParseIntPipe) roomId: number) {
+    return this.markersService.getStats(roomId);
+  }
   @Get('export')
   async exportCsv(
     @Param('roomId', ParseIntPipe) roomId: number,

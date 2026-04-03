@@ -1,5 +1,5 @@
 // markers.service.ts
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { Marker } from '../entities/marker.entity';
@@ -13,44 +13,70 @@ export class MarkersService {
     @InjectRepository(Marker)
     private markersRepository: Repository<Marker>,
   ) {}
+async getStats(roomId: number) {
+    const markers = await this.markersRepository.find({
+      where: { room: { id: roomId } },
+    });
 
+    const stats = {
+      total: markers.length,
+      ERROR: 0,
+      COMMENT: 0,
+      HIGHLIGHT: 0,
+      QUESTION: 0,
+    };
+
+    markers.forEach((m) => {
+      if (m.category in stats) {
+        stats[m.category]++;
+      }
+    });
+
+    return stats;
+  }
   // Récupérer tous les marqueurs d'une room
  async findByRoom(
-  roomId: number,
-  page: number = 1,
-  limit: number = 50,
-  category?: string,
-  from?: number,
-  to?: number,
-): Promise<Marker[]> {
-  const where: any = { room: { id: roomId } };
+    roomId: number,
+    page: number = 1,
+    limit: number = 50,
+    category?: string,
+    from?: number,
+    to?: number,
+    videoId?: string,
+  ): Promise<Marker[]> {
+    const where: any = { room: { id: roomId } };
 
-  // Filtre par catégorie
-  if (category) {
-    where.category = category.toUpperCase();
-  }
-
-  // Filtre par timeSec
-  if (from !== undefined || to !== undefined) {
-    if (from !== undefined && to !== undefined) {
-      where.timeSec = Between(from, to);
-    } else if (from !== undefined) {
-      where.timeSec = MoreThanOrEqual(from);
-    } else if (to !== undefined) {
-      where.timeSec = LessThanOrEqual(to);
+    // Filtre par catégorie
+    if (category) {
+      where.category = category.toUpperCase();
     }
+
+    // Filtre par timeSec
+    if (from !== undefined || to !== undefined) {
+      if (from !== undefined && to !== undefined) {
+        where.timeSec = Between(from, to);
+      } else if (from !== undefined) {
+        where.timeSec = MoreThanOrEqual(from);
+      } else if (to !== undefined) {
+        where.timeSec = LessThanOrEqual(to);
+      }
+    }
+
+    // Filtre par vidéo
+    if (videoId) {
+      where.video = { youtubeId: videoId };
+    }
+
+    const [markers] = await this.markersRepository.findAndCount({
+      where,
+      relations: ['createdBy', 'video'],
+      order: { timeSec: 'ASC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return markers;
   }
-
-  const [markers] = await this.markersRepository.findAndCount({
-    where,
-    relations: ['createdBy', 'video'],
-    order: { timeSec: 'ASC' },
-    skip: (page - 1) * limit,
-    take: limit,
-  });
-
-  return markers;
-}
 
   private formatTime(seconds: number): string {
     const totalSeconds = Math.max(0, Math.floor(seconds));
@@ -84,6 +110,16 @@ export class MarkersService {
 
   // Créer un marqueur
   async create(roomId: number, dto: CreateMarkerDto): Promise<Marker> {
+    const video = await this.markersRepository.manager.findOne(
+      'youtube_videos',
+      { where: { youtubeId: dto.videoId } }
+    ) as any;
+
+    if (video && dto.timeSec > video.durationSec) {
+      throw new BadRequestException(
+        `timeSec (${dto.timeSec}s) dépasse la durée de la vidéo (${video.durationSec}s)`
+      );
+    }
     const marker = this.markersRepository.create({
       timeSec: dto.timeSec,
       label: dto.label,
@@ -121,10 +157,23 @@ export class MarkersService {
 }
 
   // Supprimer un marqueur
-  async remove(markerId: number): Promise<void> {
-    const result = await this.markersRepository.delete(markerId);
-    if (result.affected === 0) {
-      throw new NotFoundException(`Marqueur ${markerId} introuvable`);
-    }
+ async remove(markerId: number): Promise<{ message: string; deletedMarker: { id: number; label: string; timeSec: number; category: string } }> {
+    const marker = await this.markersRepository.findOne({
+      where: { id: markerId },
+    });
+
+    if (!marker) throw new NotFoundException(`Marqueur ${markerId} introuvable`);
+
+    await this.markersRepository.delete(markerId);
+
+    return {
+      message: `Marqueur supprimé avec succès`,
+      deletedMarker: {
+        id: marker.id,
+        label: marker.label,
+        timeSec: marker.timeSec,
+        category: marker.category,
+      },
+    };
   }
 }
