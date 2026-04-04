@@ -110,6 +110,9 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     // Double-check cooldown (another sync may have happened during the collection window)
     const timeSinceAllReady = Date.now() - this.roomStateService.getLastAllReadyTime(roomCode);
     if (timeSinceAllReady < 5000) return;
+    // Don't run if a play/pause/seek happened recently (prevents race with manual actions)
+    const timeSinceStateChange = Date.now() - state.lastUpdateServerTime;
+    if (timeSinceStateChange < 5000) return;
 
     const { drifted, maxDrift, positions } = this.roomStateService.getPositionDrift(roomCode);
     if (!drifted) return;
@@ -385,28 +388,29 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect, O
     }
 
     this.logger.log(`[SYNC] Seek validé dans ${roomCode} vers ${positionSec}s`);
-    
+
+    // 1. Enter LOADING state IMMEDIATELY (synchronous) — prevents race conditions
+    //    with the seeker's client-ready timeout and the periodic sync-check.
+    //    Previously, prepareForSeek ran AFTER the DB await, leaving a window
+    //    where stale client-ready events could arrive and get wiped.
+    this.roomStateService.prepareForSeek(roomCode, positionSec);
+    const wasPlaying = this.roomStateService.getStatusBeforeLoading(roomCode) === RoomGlobalStatus.PLAYING;
+    this.logger.log(`[SYNC] Room ${roomCode} -> LOADING (wasPlaying=${wasPlaying}), waiting for all clients`);
+
+    // 2. Broadcast force-seek to ALL clients immediately (don't wait for DB)
+    this.server.to(roomCode).emit('force-seek', {
+      timecode: positionSec,
+      wasPlaying,
+      serverTimeRef: new Date(),
+      timestamp: new Date(),
+    });
+
+    // 3. Persist to DB asynchronously — if this fails, the sync flow
+    //    still works correctly (in-memory state is authoritative).
     try {
-      // 1. Update DB
-      const { playback } = await this.roomsService.seek(roomCode, positionSec);
-      
-      // 2. Enter LOADING state: all clients must re-buffer
-      // prepareForSeek saves the current status (PLAYING/PAUSED) before switching to LOADING
-      this.roomStateService.prepareForSeek(roomCode, positionSec);
-      const wasPlaying = this.roomStateService.getStatusBeforeLoading(roomCode) === RoomGlobalStatus.PLAYING;
-      this.logger.log(`[SYNC] Room ${roomCode} -> LOADING (wasPlaying=${wasPlaying}), waiting for all clients`);
-      
-      // 3. Broadcast force-seek to ALL clients (including sender)
-      this.server.to(roomCode).emit('force-seek', {
-        timecode: positionSec,
-        wasPlaying,
-        serverTimeRef: playback.serverTimeRef,
-        timestamp: new Date(),
-      });
-      // Note: we do NOT emit playback-updated for seek anymore — force-seek + all-ready
-      // handle the full seek flow. Emitting both caused duplicate state transitions.
+      await this.roomsService.seek(roomCode, positionSec);
     } catch (error) {
-      this.logger.error('Error handleSeek:', error);
+      this.logger.error('Error persisting seek to DB:', error);
     }
   }
 

@@ -313,7 +313,7 @@ export class RoomStateService {
     const max = Math.max(...positions);
     const maxDrift = max - min;
 
-    return { drifted: maxDrift > 2, maxDrift, positions };
+    return { drifted: maxDrift > 3, maxDrift, positions };
   }
 
   /** Retourne les codes des rooms en PLAYING avec >1 client connecté. */

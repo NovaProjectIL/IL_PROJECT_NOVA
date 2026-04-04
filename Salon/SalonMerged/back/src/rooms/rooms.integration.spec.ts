@@ -189,11 +189,121 @@ describe('Scénario d\'intégration — Synchronisation vidéo complète', () =>
 
     // Les clients reportent des positions très différentes
     stateService.updateClientPosition(roomCode, 'c1', 50);
-    stateService.updateClientPosition(roomCode, 'c2', 55); // 5s de décalage
+    stateService.updateClientPosition(roomCode, 'c2', 55); // 5s de décalage (>3s seuil)
 
     const drift = stateService.getPositionDrift(roomCode);
 
     expect(drift.drifted).toBe(true);
     expect(drift.maxDrift).toBe(5);
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  //  TEST DE CHARGE — 50 utilisateurs dans le même salon
+  // ──────────────────────────────────────────────────────────────────
+  //
+  // Scénario réaliste : 50 personnes regardent une vidéo ensemble.
+  // On vérifie que le flux complet (play → seek → buffering → ready)
+  // ne crash pas et reste correct avec autant d'utilisateurs.
+  //
+
+  it('Charge : 50 utilisateurs — seek → all-ready → buffering → all-ready', async () => {
+    const roomCode = 'SALLE-AMPHI';
+    const NUM = 50;
+    const sockets: ReturnType<typeof createMockSocket>[] = [];
+
+    // ──────────── ÉTAPE 1 : 50 utilisateurs rejoignent ───────────────
+    for (let i = 0; i < NUM; i++) {
+      const socket = createMockSocket(`user-${i}`);
+      sockets.push(socket);
+      await gateway.handleJoinRoom(socket as any, {
+        codeRoom: roomCode,
+        memberId: i + 1,
+      });
+    }
+
+    const code = roomCode.toUpperCase();
+    expect(stateService.getConnectedMembers(code)).toHaveLength(NUM);
+
+    // ──────────── ÉTAPE 2 : Le premier lance la vidéo (play) ─────────
+    await gateway.handlePlay(sockets[0] as any, { codeRoom: roomCode, positionSec: 0 });
+    expect(stateService.getOrCreateRoomState(code).status).toBe(RoomGlobalStatus.PLAYING);
+
+    // ──────────── ÉTAPE 3 : Un utilisateur fait un seek ──────────────
+    mockServer.emit.mockClear();
+    await gateway.handleSeek(sockets[5] as any, { codeRoom: roomCode, positionSec: 300 });
+
+    expect(stateService.getOrCreateRoomState(code).status).toBe(RoomGlobalStatus.LOADING);
+    expect(mockServer.emit).toHaveBeenCalledWith('force-seek', expect.objectContaining({
+      timecode: 300,
+    }));
+
+    // ──────────── ÉTAPE 4 : Les 50 envoient client-ready ──────────────
+    mockServer.emit.mockClear();
+    for (let i = 0; i < NUM; i++) {
+      gateway.handleClientReady(sockets[i] as any, { codeRoom: roomCode });
+    }
+    await flushPromises();
+
+    // all-ready émis exactement 1 fois pour les 50 clients
+    const allReadyCalls = mockServer.emit.mock.calls.filter(
+      (call: any[]) => call[0] === 'all-ready',
+    );
+    expect(allReadyCalls.length).toBe(1);
+    expect(allReadyCalls[0][1]).toEqual(expect.objectContaining({ shouldPlay: true }));
+    expect(stateService.getOrCreateRoomState(code).status).toBe(RoomGlobalStatus.PLAYING);
+
+    // ──────────── ÉTAPE 5 : Un client parmi 50 se met à ramer ────────
+    // Il faut dépasser les cooldowns
+    const state = stateService.getOrCreateRoomState(code);
+    state.lastUpdateServerTime = Date.now() - 5000;
+    state.lastAllReadyTime = Date.now() - 5000;
+
+    mockServer.emit.mockClear();
+    gateway.handleClientBuffering(sockets[30] as any, {
+      codeRoom: roomCode,
+      positionSec: 302,
+    });
+
+    expect(stateService.getOrCreateRoomState(code).status).toBe(RoomGlobalStatus.LOADING);
+    expect(mockServer.emit).toHaveBeenCalledWith('force-pause', expect.objectContaining({
+      bufferingClientId: 'user-30',
+    }));
+
+    // ──────────── ÉTAPE 6 : Tout le monde redevient prêt ─────────────
+    mockServer.emit.mockClear();
+    for (let i = 0; i < NUM; i++) {
+      gateway.handleClientReady(sockets[i] as any, { codeRoom: roomCode });
+    }
+    await flushPromises();
+
+    expect(mockServer.emit).toHaveBeenCalledWith('all-ready', expect.any(Object));
+    expect(stateService.getOrCreateRoomState(code).status).toBe(RoomGlobalStatus.PLAYING);
+
+    // ──────────── ÉTAPE 7 : 40 clients se déconnectent ───────────────
+    stateService.updateStatus(code, RoomGlobalStatus.PLAYING, 310);
+    for (let i = 0; i < 40; i++) {
+      gateway.handleDisconnect(sockets[i] as any);
+    }
+    await flushPromises();
+
+    // 10 clients restants
+    expect(stateService.getOrCreateRoomState(code).clients.size).toBe(10);
+
+    // ──────────── ÉTAPE 8 : Les 10 restants font all-ready ───────────
+    // La déconnexion du dernier client met la room en LOADING
+    // On marque les 10 restants comme prêts
+    const currentState = stateService.getOrCreateRoomState(code);
+    if (currentState.status === RoomGlobalStatus.LOADING) {
+      mockServer.emit.mockClear();
+      for (let i = 40; i < NUM; i++) {
+        gateway.handleClientReady(sockets[i] as any, { codeRoom: roomCode });
+      }
+      await flushPromises();
+
+      expect(mockServer.emit).toHaveBeenCalledWith('all-ready', expect.any(Object));
+    }
+
+    // Le salon est toujours fonctionnel avec les 10 restants
+    expect(stateService.getConnectedMembers(code)).toHaveLength(10);
   });
 });

@@ -309,7 +309,7 @@ describe('RoomStateService', () => {
   // ──────────────────────────────────────────────────────────────────
 
   describe('Sync-check périodique (détection de drift)', () => {
-    it('devrait détecter un drift quand les positions sont trop éloignées (>2s)', () => {
+    it('devrait détecter un drift quand les positions sont trop éloignées (>3s)', () => {
       service.addClient('ROOM1', 'socket-1', 1);
       service.addClient('ROOM1', 'socket-2', 2);
 
@@ -324,18 +324,18 @@ describe('RoomStateService', () => {
       expect(result.positions).toEqual([30, 34]);
     });
 
-    it('ne devrait PAS détecter de drift si les positions sont proches (≤2s)', () => {
+    it('ne devrait PAS détecter de drift si les positions sont proches (≤3s)', () => {
       service.addClient('ROOM1', 'socket-1', 1);
       service.addClient('ROOM1', 'socket-2', 2);
 
-      // Client 1 est à 30s, Client 2 est à 31s → seulement 1s
+      // Client 1 est à 30s, Client 2 est à 32.5s → seulement 2.5s
       service.updateClientPosition('ROOM1', 'socket-1', 30);
-      service.updateClientPosition('ROOM1', 'socket-2', 31);
+      service.updateClientPosition('ROOM1', 'socket-2', 32.5);
 
       const result = service.getPositionDrift('ROOM1');
 
       expect(result.drifted).toBe(false);
-      expect(result.maxDrift).toBe(1);
+      expect(result.maxDrift).toBe(2.5);
     });
 
     it('ne devrait pas analyser avec moins de 2 clients', () => {
@@ -408,6 +408,270 @@ describe('RoomStateService', () => {
       expect(summary.connectedCount).toBe(2);
       expect(summary.readyCount).toBe(1);   // Seul socket-1 est prêt
       expect(summary.allReady).toBe(false);  // socket-2 pas encore prêt
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  //  11. TESTS DE CHARGE — Beaucoup d'utilisateurs dans un salon
+  // ──────────────────────────────────────────────────────────────────
+  //
+  // Ces tests vérifient que le service ne crash pas et reste correct
+  // quand il y a 50 ou 100 utilisateurs simultanés dans un salon.
+  // On teste : ajout/suppression en masse, ready en masse, seek avec
+  // beaucoup de clients, drift-check avec beaucoup de positions, etc.
+  //
+
+  describe('Charge — 50 utilisateurs dans un salon', () => {
+    const ROOM = 'BIG-ROOM';
+    const NUM_CLIENTS = 50;
+
+    // Ajouter 50 clients au salon avant chaque test de charge
+    beforeEach(() => {
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        service.addClient(ROOM, `socket-${i}`, i + 1);
+      }
+    });
+
+    it('devrait supporter 50 clients connectés sans erreur', () => {
+      const state = service.getOrCreateRoomState(ROOM);
+      expect(state.clients.size).toBe(NUM_CLIENTS);
+
+      // Vérifier que chaque client est bien là
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        expect(service.isClientInRoom(ROOM, `socket-${i}`)).toBe(true);
+      }
+    });
+
+    it('devrait lister correctement les 50 membres connectés', () => {
+      const members = service.getConnectedMembers(ROOM);
+      expect(members.length).toBe(NUM_CLIENTS);
+
+      // Vérifier qu'on a bien les IDs de 1 à 50
+      for (let i = 1; i <= NUM_CLIENTS; i++) {
+        expect(members).toContain(i);
+      }
+    });
+
+    it('areAllClientsReady devrait être false si un seul client n\'est pas prêt', () => {
+      // On marque 49 clients comme prêts
+      for (let i = 0; i < NUM_CLIENTS - 1; i++) {
+        service.setClientReady(ROOM, `socket-${i}`, true);
+      }
+      // Le dernier n'est PAS prêt → résultat = false
+      expect(service.areAllClientsReady(ROOM)).toBe(false);
+
+      // On marque le dernier comme prêt → résultat = true
+      service.setClientReady(ROOM, `socket-${NUM_CLIENTS - 1}`, true);
+      expect(service.areAllClientsReady(ROOM)).toBe(true);
+    });
+
+    it('prepareForSeek devrait remettre les 50 clients en not-ready', () => {
+      // D'abord, marquer tout le monde comme prêt
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        service.setClientReady(ROOM, `socket-${i}`, true);
+      }
+      expect(service.areAllClientsReady(ROOM)).toBe(true);
+
+      // Un seek remet tout le monde en not-ready
+      service.prepareForSeek(ROOM, 300);
+
+      expect(service.areAllClientsReady(ROOM)).toBe(false);
+      const state = service.getOrCreateRoomState(ROOM);
+      for (const client of state.clients.values()) {
+        expect(client.isReady).toBe(false);
+      }
+    });
+
+    it('resetRoomState devrait fonctionner avec 50 clients', () => {
+      service.updateStatus(ROOM, RoomGlobalStatus.PLAYING, 500);
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        service.setClientReady(ROOM, `socket-${i}`, true);
+      }
+
+      service.resetRoomState(ROOM);
+
+      const state = service.getOrCreateRoomState(ROOM);
+      expect(state.status).toBe(RoomGlobalStatus.PAUSED);
+      expect(state.currentTimestamp).toBe(0);
+      // Tous les clients sont toujours là, mais plus prêts
+      expect(state.clients.size).toBe(NUM_CLIENTS);
+      for (const client of state.clients.values()) {
+        expect(client.isReady).toBe(false);
+      }
+    });
+
+    it('devrait supporter la suppression de clients un par un', () => {
+      // Retirer la moitié des clients
+      for (let i = 0; i < 25; i++) {
+        const roomCode = service.removeClient(`socket-${i}`);
+        expect(roomCode).toBe(ROOM);
+      }
+
+      const state = service.getOrCreateRoomState(ROOM);
+      expect(state.clients.size).toBe(25);
+
+      // Les clients restants sont toujours bien là
+      for (let i = 25; i < NUM_CLIENTS; i++) {
+        expect(service.isClientInRoom(ROOM, `socket-${i}`)).toBe(true);
+      }
+    });
+
+    it('getFullState devrait être correct avec 50 clients (30 prêts)', () => {
+      service.updateStatus(ROOM, RoomGlobalStatus.LOADING, 60);
+      // 30 clients prêts, 20 pas prêts
+      for (let i = 0; i < 30; i++) {
+        service.setClientReady(ROOM, `socket-${i}`, true);
+      }
+
+      const summary = service.getFullState(ROOM);
+
+      expect(summary.connectedCount).toBe(50);
+      expect(summary.readyCount).toBe(30);
+      expect(summary.allReady).toBe(false);
+    });
+
+    it('getPositionDrift devrait fonctionner avec 50 positions proches', () => {
+      // Tous les clients reportent une position similaire (±0.5s autour de 100s)
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        const position = 100 + (i % 10) * 0.1; // entre 100.0 et 100.9
+        service.updateClientPosition(ROOM, `socket-${i}`, position);
+      }
+
+      const result = service.getPositionDrift(ROOM);
+
+      // Drift max ≈ 0.9s → pas de problème (seuil = 3s)
+      expect(result.drifted).toBe(false);
+      expect(result.maxDrift).toBeLessThan(3);
+      expect(result.positions.length).toBe(NUM_CLIENTS);
+    });
+
+    it('getPositionDrift devrait détecter un drift parmi 50 clients', () => {
+      // 49 clients sont à 100s, 1 client est à 106s → drift de 6s
+      for (let i = 0; i < NUM_CLIENTS - 1; i++) {
+        service.updateClientPosition(ROOM, `socket-${i}`, 100);
+      }
+      service.updateClientPosition(ROOM, `socket-${NUM_CLIENTS - 1}`, 106);
+
+      const result = service.getPositionDrift(ROOM);
+
+      expect(result.drifted).toBe(true);
+      expect(result.maxDrift).toBe(6);
+    });
+
+    it('getPlayingRooms devrait inclure une room PLAYING avec 50 clients', () => {
+      service.updateStatus(ROOM, RoomGlobalStatus.PLAYING, 10);
+
+      const rooms = service.getPlayingRooms();
+      expect(rooms).toContain(ROOM);
+    });
+  });
+
+  describe('Charge — 100 utilisateurs, transitions rapides', () => {
+    const ROOM = 'HUGE-ROOM';
+    const NUM_CLIENTS = 100;
+
+    it('devrait supporter 100 clients qui font seek → ready en séquence rapide', () => {
+      // Ajouter 100 clients
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        service.addClient(ROOM, `s-${i}`, i + 1);
+      }
+      service.updateStatus(ROOM, RoomGlobalStatus.PLAYING, 50);
+
+      // Un seek met tout le monde en LOADING
+      service.prepareForSeek(ROOM, 200);
+      expect(service.getOrCreateRoomState(ROOM).status).toBe(RoomGlobalStatus.LOADING);
+
+      // Tous les 100 clients deviennent prêts un par un
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        service.setClientReady(ROOM, `s-${i}`, true);
+
+        if (i < NUM_CLIENTS - 1) {
+          // Pas encore tout le monde → areAllClientsReady = false
+          expect(service.areAllClientsReady(ROOM)).toBe(false);
+        }
+      }
+
+      // Maintenant tout le monde est prêt
+      expect(service.areAllClientsReady(ROOM)).toBe(true);
+    });
+
+    it('devrait supporter des seeks répétés avec 100 clients', () => {
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        service.addClient(ROOM, `s-${i}`, i + 1);
+      }
+
+      // Simuler 10 seeks rapides d'affilée
+      for (let seekNum = 1; seekNum <= 10; seekNum++) {
+        const seekTo = seekNum * 30;
+        service.prepareForSeek(ROOM, seekTo);
+
+        // Vérifier que l'état est cohérent à chaque seek
+        const state = service.getOrCreateRoomState(ROOM);
+        expect(state.status).toBe(RoomGlobalStatus.LOADING);
+        expect(state.currentTimestamp).toBe(seekTo);
+
+        // Tous les clients doivent être not-ready
+        for (const client of state.clients.values()) {
+          expect(client.isReady).toBe(false);
+        }
+
+        // Remettre tout le monde prêt pour le seek suivant
+        for (let i = 0; i < NUM_CLIENTS; i++) {
+          service.setClientReady(ROOM, `s-${i}`, true);
+        }
+        service.updateStatus(ROOM, RoomGlobalStatus.PLAYING, seekTo);
+      }
+    });
+
+    it('devrait supporter des déconnexions massives sans crash', () => {
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        service.addClient(ROOM, `s-${i}`, i + 1);
+      }
+
+      // 80 clients se déconnectent d'un coup
+      for (let i = 0; i < 80; i++) {
+        const code = service.removeClient(`s-${i}`);
+        expect(code).toBe(ROOM);
+      }
+
+      // 20 clients restants
+      const state = service.getOrCreateRoomState(ROOM);
+      expect(state.clients.size).toBe(20);
+
+      // Le salon doit toujours fonctionner normalement
+      service.prepareForSeek(ROOM, 100);
+      for (let i = 80; i < NUM_CLIENTS; i++) {
+        service.setClientReady(ROOM, `s-${i}`, true);
+      }
+      expect(service.areAllClientsReady(ROOM)).toBe(true);
+    });
+
+    it('devrait supporter des reconnexions (même memberId, nouveau socket)', () => {
+      // 50 clients rejoignent
+      for (let i = 0; i < 50; i++) {
+        service.addClient(ROOM, `old-${i}`, i + 1);
+      }
+
+      // 50 clients se déconnectent
+      for (let i = 0; i < 50; i++) {
+        service.removeClient(`old-${i}`);
+      }
+      expect(service.getOrCreateRoomState(ROOM).clients.size).toBe(0);
+
+      // 50 clients se reconnectent avec de nouveaux sockets
+      for (let i = 0; i < 50; i++) {
+        service.addClient(ROOM, `new-${i}`, i + 1);
+      }
+
+      const state = service.getOrCreateRoomState(ROOM);
+      expect(state.clients.size).toBe(50);
+
+      // Seek + all-ready fonctionne avec les nouveaux sockets
+      service.prepareForSeek(ROOM, 60);
+      for (let i = 0; i < 50; i++) {
+        service.setClientReady(ROOM, `new-${i}`, true);
+      }
+      expect(service.areAllClientsReady(ROOM)).toBe(true);
     });
   });
 });

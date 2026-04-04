@@ -490,4 +490,152 @@ describe('RoomsGateway', () => {
       expect(socket.emit).toHaveBeenCalledWith('error', expect.any(Object));
     });
   });
+
+  // ──────────────────────────────────────────────────────────────────
+  //  9. CHARGE — Beaucoup d'utilisateurs dans un salon
+  // ──────────────────────────────────────────────────────────────────
+  //
+  // Ces tests vérifient que le gateway ne crash pas et reste
+  // fonctionnel quand il y a beaucoup de clients dans un même salon.
+  // On simule 50 clients qui font des actions simultanées.
+  //
+
+  describe('Charge — 50 clients dans un salon', () => {
+    const ROOM = 'BIG-ROOM';
+    const NUM_CLIENTS = 50;
+    let sockets: ReturnType<typeof createMockSocket>[];
+
+    beforeEach(() => {
+      // Créer et enregistrer 50 clients dans la room
+      sockets = [];
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        const socket = createMockSocket(`client-${i}`);
+        sockets.push(socket);
+        stateService.addClient(ROOM, `client-${i}`, i + 1);
+      }
+    });
+
+    it('devrait gérer un seek suivi de 50 client-ready sans crash', async () => {
+      stateService.updateStatus(ROOM, RoomGlobalStatus.PLAYING, 10);
+
+      // Un client fait un seek
+      await gateway.handleSeek(sockets[0] as any, {
+        codeRoom: ROOM,
+        positionSec: 120,
+      });
+
+      // La room est en LOADING
+      expect(stateService.getOrCreateRoomState(ROOM).status).toBe(RoomGlobalStatus.LOADING);
+
+      mockServer.emit.mockClear();
+
+      // Les 50 clients envoient client-ready un par un
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        gateway.handleClientReady(sockets[i] as any, { codeRoom: ROOM });
+      }
+      await flushPromises();
+
+      // Tout le monde est prêt → all-ready doit être émis exactement 1 fois
+      const allReadyCalls = mockServer.emit.mock.calls.filter(
+        (call: any[]) => call[0] === 'all-ready',
+      );
+      expect(allReadyCalls.length).toBe(1);
+      expect(allReadyCalls[0][1]).toEqual(expect.objectContaining({
+        shouldPlay: true,
+        positionSec: expect.any(Number),
+      }));
+    });
+
+    it('devrait supporter 50 position-reports simultanés', () => {
+      stateService.updateStatus(ROOM, RoomGlobalStatus.PLAYING, 50);
+
+      // Les 50 clients envoient leur position
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        gateway.handlePositionReport(sockets[i] as any, {
+          codeRoom: ROOM,
+          positionSec: 50 + i * 0.1, // positions très proches
+        });
+      }
+
+      // Vérifier que toutes les positions ont été enregistrées
+      const drift = stateService.getPositionDrift(ROOM);
+      expect(drift.positions.length).toBe(NUM_CLIENTS);
+      // Drift max ≈ 4.9s → drifted = true (seuil 3s)
+      expect(drift.drifted).toBe(true);
+    });
+
+    it('devrait gérer le buffering d\'un client parmi 50 sans crash', () => {
+      stateService.updateStatus(ROOM, RoomGlobalStatus.PLAYING, 100);
+      // Faire passer le cooldown
+      const state = stateService.getOrCreateRoomState(ROOM);
+      state.lastUpdateServerTime = Date.now() - 5000;
+      state.lastAllReadyTime = Date.now() - 5000;
+
+      // Un client commence à ramer
+      gateway.handleClientBuffering(sockets[25] as any, {
+        codeRoom: ROOM,
+        positionSec: 100,
+      });
+
+      // La room doit passer en LOADING
+      expect(stateService.getOrCreateRoomState(ROOM).status).toBe(RoomGlobalStatus.LOADING);
+
+      // force-pause doit être envoyé avec le bon bufferingClientId
+      expect(mockServer.emit).toHaveBeenCalledWith('force-pause', expect.objectContaining({
+        bufferingClientId: 'client-25',
+      }));
+    });
+
+    it('devrait gérer des déconnexions en série pendant un LOADING', async () => {
+      stateService.updateStatus(ROOM, RoomGlobalStatus.PLAYING, 10);
+      stateService.prepareForSeek(ROOM, 60);
+
+      // 45 clients se déconnectent pendant le LOADING
+      for (let i = 0; i < 45; i++) {
+        gateway.handleDisconnect(sockets[i] as any);
+      }
+      await flushPromises();
+
+      // 5 clients restants
+      const state = stateService.getOrCreateRoomState(ROOM);
+      expect(state.clients.size).toBe(5);
+
+      // Les 5 clients restants disent qu'ils sont prêts
+      mockServer.emit.mockClear();
+      for (let i = 45; i < NUM_CLIENTS; i++) {
+        gateway.handleClientReady(sockets[i] as any, { codeRoom: ROOM });
+      }
+      await flushPromises();
+
+      // all-ready doit être émis pour les 5 restants
+      expect(mockServer.emit).toHaveBeenCalledWith('all-ready', expect.any(Object));
+    });
+
+    it('devrait ignorer les play/pause de 50 clients si la room est en LOADING', async () => {
+      stateService.prepareForSeek(ROOM, 30);
+
+      // 50 clients essaient de faire play et pause en même temps
+      for (let i = 0; i < NUM_CLIENTS; i++) {
+        await gateway.handlePlay(sockets[i] as any, { codeRoom: ROOM, positionSec: 30 });
+        await gateway.handlePause(sockets[i] as any, { codeRoom: ROOM, positionSec: 30 });
+      }
+
+      // Aucun appel à roomsService.play ou roomsService.pause ne doit avoir eu lieu
+      expect(roomsService.play).not.toHaveBeenCalled();
+      expect(roomsService.pause).not.toHaveBeenCalled();
+    });
+
+    it('devrait rejeter les actions des non-membres même avec 50 membres existants', async () => {
+      const intrus = createMockSocket('hacker');
+
+      await gateway.handlePlay(intrus as any, { codeRoom: ROOM, positionSec: 0 });
+      await gateway.handlePause(intrus as any, { codeRoom: ROOM, positionSec: 0 });
+      await gateway.handleSeek(intrus as any, { codeRoom: ROOM, positionSec: 100 });
+
+      // L'intrus reçoit des erreurs
+      expect(intrus.emit).toHaveBeenCalledWith('error', expect.any(Object));
+      // play et pause du service NE sont PAS appelés
+      expect(roomsService.play).not.toHaveBeenCalled();
+    });
+  });
 });
