@@ -125,9 +125,11 @@ export default function RoomPage() {
   const [roomInternalId, setRoomInternalId] = useState<number | null>(null);
   const socketRef = useRef<any>(null);
   const isSyncingRef = useRef(false);
+  const markerNotifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // === NOUVEAUX ETATS : MARQUEURS ===
   const [marqueurs, setMarqueurs] = useState<Marqueur[]>([]);
+  const [markerNotification, setMarkerNotification] = useState<string | null>(null);
 
   const normaliserMarqueur = useCallback((raw: any): Marqueur => {
     return {
@@ -191,10 +193,16 @@ export default function RoomPage() {
 
       const nouveauMarqueur = normaliserMarqueur(response.data);
       log.marqueurs('Marqueur cree avec succes', nouveauMarqueur);
-      setMarqueurs((prev) => [...prev, nouveauMarqueur]);
+      setMarqueurs((prev) =>
+        prev.some((m) => m.id === nouveauMarqueur.id) ? prev : [...prev, nouveauMarqueur]
+      );
 
-      // TODO NADJIB: si vous ajoutez un event WS marker-created, on le branchera ici.
-      // socketRef.current?.emit('marker-created', { roomId: roomInternalId, marker: nouveauMarqueur });
+      socketRef.current?.emit('marker-created', {
+        codeRoom: code,
+        marker: response.data,
+        createdById: memberId,
+        createdByName: pseudo || members.find((m) => m.id === memberId)?.name || `Membre ${memberId}`,
+      });
     } catch (err) {
       log.error('Erreur creation marqueur', err);
     }
@@ -313,11 +321,23 @@ export default function RoomPage() {
       }
     });
 
-    // TODO NADJIB : ecouter l evenement Socket.io quand un autre user pose un marqueur
-    // socketRef.current.on('nouveau_marqueur', (marqueur: Marqueur) => {
-    //   log.marqueurs('Nouveau marqueur recu via Socket.io', marqueur);
-    //   setMarqueurs((prev) => [...prev, marqueur]);
-    // });
+    socketRef.current.on('marker-created', (payload: any) => {
+      log.marqueurs('Evenement marker-created recu', payload);
+      const marqueurNormalise = normaliserMarqueur(payload?.marker || {});
+
+      setMarqueurs((prev) =>
+        prev.some((m) => m.id === marqueurNormalise.id) ? prev : [...prev, marqueurNormalise]
+      );
+
+      const auteur = payload?.createdByName || 'Un utilisateur';
+      const mins = Math.floor(marqueurNormalise.timecode / 60);
+      const secs = Math.floor(marqueurNormalise.timecode % 60);
+      const notif = `${auteur} a posé un marqueur à ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      setMarkerNotification(notif);
+
+      if (markerNotifTimerRef.current) clearTimeout(markerNotifTimerRef.current);
+      markerNotifTimerRef.current = setTimeout(() => setMarkerNotification(null), 3500);
+    });
 
     socketRef.current.on('error', (error: any) => {
       log.error('Erreur Socket', error);
@@ -325,9 +345,10 @@ export default function RoomPage() {
 
     return () => {
       log.socket('Deconnexion Socket.io');
+      if (markerNotifTimerRef.current) clearTimeout(markerNotifTimerRef.current);
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [code, memberId]);
+  }, [code, memberId, members, normaliserMarqueur, pseudo]);
 
   const handlePlay = () => {
     log.player('Bouton Play clique - position actuelle : ' + position);
@@ -518,6 +539,22 @@ export default function RoomPage() {
           </button>
         </div>
       </div>
+
+      {markerNotification && (
+        <div
+          style={{
+            marginBottom: '12px',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            background: 'rgba(37, 99, 235, 0.15)',
+            border: '1px solid rgba(37, 99, 235, 0.35)',
+            color: '#dbeafe',
+            fontWeight: 600,
+          }}
+        >
+          {markerNotification}
+        </div>
+      )}
 
       {/* Recherche */}
       <div className={styles.searchSection}>

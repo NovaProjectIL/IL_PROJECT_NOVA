@@ -257,6 +257,31 @@ export class RoomsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { success: true };
   }
 
+  @SubscribeMessage('marker-created')
+  handleMarkerCreated(
+    client: Socket,
+    data: {
+      codeRoom: string;
+      marker: any;
+      createdById?: number;
+      createdByName?: string;
+    },
+  ) {
+    const { codeRoom, marker, createdById, createdByName } = data;
+    const roomCode = codeRoom.toUpperCase();
+
+    this.logger.log(`Nouveau marqueur dans ${roomCode} par ${createdByName || createdById || 'inconnu'}`);
+
+    this.server.to(roomCode).emit('marker-created', {
+      marker,
+      createdById: createdById ?? null,
+      createdByName: createdByName ?? 'Utilisateur',
+      timestamp: new Date(),
+    });
+
+    return { success: true };
+  }
+
   @SubscribeMessage('request-sync')
   async handleRequestSync(client: Socket, data: { codeRoom: string }) {
     const { codeRoom } = data;
